@@ -1,4 +1,4 @@
-#include "../../../include/core/Graph.hpp"
+#include "core/Graph.hpp"
 #include <iostream>
 
 Graph::Graph() {

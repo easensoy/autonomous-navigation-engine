@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/Dijkstra.hpp"
+#include "pathfinding_algorithms/Dijkstra.hpp"
 #include <iostream>
 #include <limits>
 

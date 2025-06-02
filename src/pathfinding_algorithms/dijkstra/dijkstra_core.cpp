@@ -1,133 +1,84 @@
-#include "../../../include/pathfinding_algorithms/Dijkstra.hpp"
-#include <queue>
+#pragma once
+#include "core/Graph.hpp"
+#include <vector>
 #include <unordered_map>
-#include <iostream>
-#include <limits>
-#include <unordered_set>
+#include <memory>
 
-Dijkstra::Dijkstra(const Graph* environment) : graph(environment) {}
+class Dijkstra
+{
+    private:
+        const Graph* graph;
+        
+        class DistanceRelaxationManager;
+        class PriorityQueueManager;
+        class ShortestPathTreeManager;
+        
+        std::unique_ptr<DistanceRelaxationManager> relaxationManager;
+        std::unique_ptr<PriorityQueueManager> pqManager;
+        std::unique_ptr<ShortestPathTreeManager> treeManager;
 
-Dijkstra::DijkstraNode::DijkstraNode(int id, double dist, int prev)
-    : nodeId(id), distance(dist), previous(prev) {}
+        struct DijkstraNode
+        {
+            int nodeId;
+            double distance;
+            int previous;
 
-bool Dijkstra::DijkstraNode::operator>(const DijkstraNode& other) const {
-    return distance > other.distance;
-}
-
-std::vector<int> Dijkstra::findShortestPath(int startId, int goalId) {
-    std::cout << "Dijkstra's Algorithm: Finding shortest path from " << startId << " to " << goalId << std::endl;
-    
-    std::unordered_map<int, double> distances;
-    std::unordered_map<int, int> previousNodes;
-    std::unordered_set<int> visited;
-    
-    for (int nodeId : graph->getAllNodeIds()) {
-        distances[nodeId] = std::numeric_limits<double>::infinity();
-        visited[nodeId] = false;
-    }
-    
-    distances[startId] = 0.0;
-    
-    std::priority_queue<DijkstraNode, std::vector<DijkstraNode>, std::greater<DijkstraNode>> pq;
-    pq.emplace(startId, 0.0, -1);
-    
-    while (!pq.empty()) {
-        DijkstraNode current = pq.top();
-        pq.pop();
-        
-        if (visited[current.nodeId]) {
-            continue;
-        }
-        
-        visited[current.nodeId] = true;
-        
-        if (current.nodeId == goalId) {
-            std::cout << "Dijkstra's Algorithm: Goal reached!" << std::endl;
-            return reconstructPath(previousNodes, startId, goalId);
-        }
-        
-        for (const Edge& edge : graph->getEdgesFrom(current.nodeId)) {
-            int neighborId = edge.getToNode();
-            double newDistance = current.distance + edge.getWeight();
+            DijkstraNode(int id, double dist, int prev = -1) 
+                : nodeId(id), distance(dist), previous(prev) {}
             
-            if (newDistance < distances[neighborId]) {
-                distances[neighborId] = newDistance;
-                previousNodes[neighborId] = current.nodeId;
-                pq.emplace(neighborId, newDistance);
+            bool operator>(const DijkstraNode& other) const {
+                return distance > other.distance;
             }
-        }
-    }
-    
-    std::cout << "Dijkstra's Algorithm: No path found" << std::endl;
-    return {};
-}
-
-std::vector<int> Dijkstra::reconstructPath(const std::unordered_map<int, int>& previousNodes, int startId, int goalId) const {
-    std::vector<int> path;
-    int current = goalId;
-    
-    while (current != -1) {
-        path.push_back(current);
-        if (current == startId) break;
-        
-        auto it = previousNodes.find(current);
-        if (it != previousNodes.end()) {
-            current = it->second;
-        } else {
-            return {};
-        }
-    }
-    
-    std::reverse(path.begin(), path.end());
-    return path;
-}
-
-std::unordered_map<int, double> Dijkstra::findShortestDistances(int startId) {
-    std::unordered_map<int, double> distances;
-    std::unordered_set<int> visited;
-    
-    for (int nodeId : graph->getAllNodeIds()) {
-        distances[nodeId] = std::numeric_limits<double>::infinity();
-    }
-    
-    distances[startId] = 0.0;
-    
-    std::priority_queue<DijkstraNode, std::vector<DijkstraNode>, std::greater<DijkstraNode>> pq;
-    pq.emplace(startId, 0.0);
-    
-    while (!pq.empty()) {
-        DijkstraNode current = pq.top();
-        pq.pop();
-        
-        if (visited.find(current.nodeId) != visited.end()) {
-            continue;
-        }
-        
-        visited.insert(current.nodeId);
-        
-        for (const Edge& edge : graph->getEdgesFrom(current.nodeId)) {
-            int neighborId = edge.getToNode();
-            double newDistance = current.distance + edge.getWeight();
             
-            if (newDistance < distances[neighborId]) {
-                distances[neighborId] = newDistance;
-                pq.emplace(neighborId, newDistance);
+            bool operator<(const DijkstraNode& other) const {
+                return distance < other.distance;
             }
-        }
-    }
+        };
+
+        std::vector<int> reconstructPath(const std::unordered_map<int, int>& previousNodes, int startId, int goalId) const;
+        
+        void initializeDistanceRelaxation(const std::vector<int>& nodeIds, int startId);
+        bool relaxEdge(int fromNode, int toNode, double edgeWeight);
+        double getCurrentDistance(int nodeId) const;
+        int getPredecessor(int nodeId) const;
+        std::unordered_map<int, double> getAllCurrentDistances() const;
+        std::unordered_map<int, int> getAllPredecessors() const;
+        bool isNodeReachable(int nodeId) const;
+        size_t getReachableNodeCount() const;
+        void setDistanceLogging(bool enabled);
+        
+        void initializePriorityQueue();
+        void addToPriorityQueue(const DijkstraNode& node);
+        DijkstraNode getNextFromPriorityQueue();
+        bool isPriorityQueueEmpty() const;
+        size_t getPriorityQueueSize() const;
+        void clearPriorityQueue();
+        bool shouldUpdateDistance(int nodeId, double newDistance) const;
+        
+        void buildShortestPathTree(int startNode);
+        std::vector<int> getShortestPathInTree(int targetNode) const;
+        std::vector<int> getTreeChildren(int nodeId) const;
+        bool isNodeInTree(int nodeId) const;
+        size_t getShortestPathTreeSize() const;
+        void printShortestPathTree() const;
+        void clearShortestPathTree();
     
-    return distances;
-}
+    public:
+        explicit Dijkstra(const Graph& environment);
+        explicit Dijkstra(const Graph *environment);
+        
+        ~Dijkstra() = default;
+        
+        Dijkstra(const Dijkstra& other) = delete;
+        Dijkstra& operator=(const Dijkstra& other) = delete;
+        Dijkstra(Dijkstra&& other) noexcept = default;
+        Dijkstra& operator=(Dijkstra&& other) noexcept = default;
 
-double Dijkstra::getShortestDistance(int startId, int goalId) {
-    auto distances = findShortestDistances(startId);
-    return distances[goalId];
-}
+        std::vector<int> findShortestPath(int startId, int goalId);
+        std::unordered_map<int, double> findShortestDistances(int startId);
+        std::vector<std::vector<int>> findAllShortestPaths(int startId);
 
-bool Dijkstra::hasPath(int startId, int goalId) {
-    return getShortestDistance(startId, goalId) != std::numeric_limits<double>::infinity();
-}
-
-void Dijkstra::printAlgorithmSteps(bool enable) {
-    std::cout << "Dijkstra step printing " << (enable ? "enabled" : "disabled") << std::endl;
-}
+        double getShortestDistance(int startId, int goalId);
+        bool hasPath(int startId, int goalId);
+        void printAlgorithmSteps(bool enable);
+};

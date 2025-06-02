@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/Dijkstra.hpp"
+#include "pathfinding_algorithms/Dijkstra.hpp"
 #include <iostream>
 #include <algorithm>
 
@@ -58,12 +58,12 @@ public:
             if (it != predecessors.end()) {
                 current = it->second;
             } else {
-                return {}; // No path exists
+                return {}; 
             }
         }
         
         if (path.empty() || path.back() != rootNode) {
-            return {}; // Invalid path
+            return {}; 
         }
         
         std::reverse(path.begin(), path.end());

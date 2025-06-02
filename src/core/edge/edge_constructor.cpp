@@ -1,4 +1,4 @@
-#include "../../../include/core/Edge.hpp"
+#include "core/Edge.hpp"
 #include <stdexcept>
 
 Edge::Edge(int from, int to, double edgeWeight, bool isBidirectional)

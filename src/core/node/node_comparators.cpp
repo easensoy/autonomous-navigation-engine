@@ -1,4 +1,4 @@
-#include "../../../include/core/Node.hpp"
+#include "core/Node.hpp"
 
 bool Node::operator==(const Node& other) const {
     return id == other.id;

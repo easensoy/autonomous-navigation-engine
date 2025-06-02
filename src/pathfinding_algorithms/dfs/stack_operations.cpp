@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/DFS.hpp"
+#include "pathfinding_algorithms/DFS.hpp"
 #include <stack>
 #include <iostream>
 

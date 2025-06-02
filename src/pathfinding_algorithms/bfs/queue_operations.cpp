@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/BFS.hpp"
+#include "pathfinding_algorithms/BFS.hpp"
 #include <queue>
 #include <iostream>
 #include <stdexcept>
