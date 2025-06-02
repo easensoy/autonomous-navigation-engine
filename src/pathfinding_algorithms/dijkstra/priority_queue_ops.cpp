@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/Dijkstra.hpp"
+#include "pathfinding_algorithms/Dijkstra.hpp"
 #include <queue>
 #include <unordered_map>
 #include <iostream>

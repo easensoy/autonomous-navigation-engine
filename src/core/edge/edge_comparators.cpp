@@ -1,4 +1,4 @@
-#include "../../../include/core/Edge.hpp"
+#include "core/Edge.hpp"
 
 std::ostream& operator<<(std::ostream& os, const Edge& edge) {
     os << "Edge[" << edge.fromNodeId;

@@ -1,4 +1,4 @@
-#include "../../../include/core/Graph.hpp"
+#include "core/Graph.hpp"
 
 size_t Graph::getNodeCount() const {
     return nodes.size();

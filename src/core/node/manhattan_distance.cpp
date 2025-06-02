@@ -1,4 +1,4 @@
-#include "../../../include/core/Node.hpp"
+#include "core/Node.hpp"
 #include <cmath>
 
 double Node::manhattanDistance(const Node& other) const {

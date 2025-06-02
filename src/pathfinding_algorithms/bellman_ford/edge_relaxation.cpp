@@ -1,6 +1,7 @@
-#include "../../../include/pathfinding_algorithms/BellmanFord.hpp"
+#include "pathfinding_algorithms/BellmanFord.hpp"
 #include <iostream>
 #include <limits>
+#include <algorithm>
 
 class BellmanFord::EdgeRelaxationManager {
 private:

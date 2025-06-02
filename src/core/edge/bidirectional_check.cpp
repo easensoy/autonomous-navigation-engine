@@ -1,4 +1,4 @@
-#include "../../../include/core/Edge.hpp"
+#include "core/Edge.hpp"
 
 bool Edge::operator==(const Edge& other) const {
     return fromNodeId == other.fromNodeId && 

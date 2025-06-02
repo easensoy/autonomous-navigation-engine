@@ -1,4 +1,4 @@
-#include "../../../include/core/Edge.hpp"
+#include "core/Edge.hpp"
 #include <stdexcept>
 
 bool Edge::connectsNodes(int nodeA, int nodeB) const {

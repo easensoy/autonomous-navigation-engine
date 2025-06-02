@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/AStar.hpp"
+#include "pathfinding_algorithms/AStar.hpp"
 #include <unordered_set>
 
 class AStar::ClosedListManager {

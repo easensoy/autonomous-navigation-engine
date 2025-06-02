@@ -1,4 +1,4 @@
-#include "../../../include/pathfinding_algorithms/JumpPointSearch.hpp"
+#include "pathfinding_algorithms/JumpPointSearch.hpp"
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
