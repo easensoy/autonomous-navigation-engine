@@ -6,7 +6,13 @@
 #include <atomic>
 #include <algorithm>
 #include <unordered_set>
+#include <unordered_map>
 #include <cmath>
+#include <chrono>
+#include <memory>
+#include <vector>
+#include <string>
+#include <functional>
 
 class SensorDataIntegrationManager {
 private:
@@ -32,7 +38,7 @@ private:
     };
     
     std::queue<SensorReading> sensorQueue;
-    std::mutex sensorQueueMutex;
+    mutable std::mutex sensorQueueMutex;
     std::atomic<bool> processingActive;
     std::thread processingThread;
     

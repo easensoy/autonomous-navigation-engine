@@ -7,6 +7,13 @@
 #include <queue>
 #include <fstream>
 #include <chrono>
+#include <functional>
+#include <memory>
+#include <vector>
+#include <unordered_map>
+#include <string>
+#include <algorithm>
+#include <numeric>
 
 class MapSynchronizationManager {
 private:
@@ -29,7 +36,7 @@ private:
     
     std::priority_queue<SynchronizationJob, std::vector<SynchronizationJob>, 
                        std::function<bool(const SynchronizationJob&, const SynchronizationJob&)>> jobQueue;
-    std::mutex jobQueueMutex;
+    mutable std::mutex jobQueueMutex;
     
     struct SynchronizationMetrics {
         size_t totalSyncOperations;

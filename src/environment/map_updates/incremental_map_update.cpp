@@ -11,7 +11,7 @@ private:
     MapUpdater* mapUpdater;
     Graph* environment;
     std::queue<MapUpdate> updateQueue;
-    std::mutex updateQueueMutex;
+    mutable std::mutex updateQueueMutex;
     std::atomic<bool> processingActive;
     std::thread processingThread;
     
