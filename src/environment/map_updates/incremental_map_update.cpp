@@ -3,6 +3,8 @@
 #include <queue>
 #include <unordered_set>
 #include <algorithm>
+#include <mutex>
+#include <numeric>
 
 class IncrementalMapUpdateManager {
 private:
