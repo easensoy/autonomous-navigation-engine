@@ -1,8 +1,8 @@
 #pragma once
-#include "../pathfinding_algorithms/AStar.hpp"
-#include "../pathfinding_algorithms/Dijkstra.hpp"
-#include "../pathfinding_algorithms/BFS.hpp"
-#include "../pathfinding_algorithms/BellmanFord.hpp"
+#include "pathfinding_algorithms/AStar.hpp"
+#include "pathfinding_algorithms/Dijkstra.hpp"
+#include "pathfinding_algorithms/BFS.hpp"
+#include "pathfinding_algorithms/BellmanFord.hpp"
 #include <memory>
 
 enum class AlgorithmType {
@@ -31,7 +31,6 @@ private:
     
     AlgorithmType analyzeEnvironmentCharacteristics() const;
     AlgorithmType selectBasedOnPerformance(int startId, int goalId) const;
-    void updatePerformanceMetrics(AlgorithmType algorithm, const AlgorithmPerformanceMetrics& metrics);
 
 public:
     explicit AlgorithmSelector(const Graph* graph);
@@ -44,6 +43,7 @@ public:
     void benchmarkAlgorithms(int startId, int goalId);
     
     void setPerformancePriority(const std::string& priority);
+    void updatePerformanceMetrics(AlgorithmType algorithm, const AlgorithmPerformanceMetrics& metrics);
     AlgorithmPerformanceMetrics getAlgorithmMetrics(AlgorithmType algorithm) const;
     void clearPerformanceHistory();
     

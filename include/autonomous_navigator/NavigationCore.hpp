@@ -1,8 +1,8 @@
 #pragma once
-#include "../core/Graph.hpp"
-#include "../navigation_strategies/GlobalPathPlanner.hpp"
-#include "../navigation_strategies/LocalPathPlanner.hpp"
-#include "../navigation_strategies/DynamicReplanner.hpp"
+#include "core/Graph.hpp"
+#include "navigation_strategies/GlobalPathPlanner.hpp"
+#include "navigation_strategies/LocalPathPlanner.hpp"
+#include "navigation_strategies/DynamicReplanner.hpp"
 #include <memory>
 #include <string>
 
@@ -47,4 +47,7 @@ public:
     bool executeNavigationStep();
     std::string getNavigationStatus() const;
     void emergencyStop();
+    
+    // Add this method to fix the compilation error
+    const Graph* getCurrentEnvironment() const;
 };

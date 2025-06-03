@@ -1,7 +1,7 @@
 #pragma once
-#include "../core/Graph.hpp"
-#include "../pathfinding_algorithms/AStar.hpp"
-#include "../pathfinding_algorithms/Dijkstra.hpp"
+#include "core/Graph.hpp"
+#include "pathfinding_algorithms/AStar.hpp"
+#include "pathfinding_algorithms/Dijkstra.hpp"
 #include <vector>
 #include <memory>
 

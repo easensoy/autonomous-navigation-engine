@@ -1,5 +1,5 @@
 #pragma once
-#include "../core/Graph.hpp"
+#include "core/Graph.hpp"
 #include <vector>
 #include <stack>
 #include <unordered_set>

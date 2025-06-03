@@ -1,5 +1,5 @@
 #pragma once
-#include "../core/Graph.hpp"
+#include "core/Graph.hpp"
 #include <vector>
 #include <unordered_map>
 #include <functional>
@@ -8,20 +8,11 @@
 #include <queue>
 #include <unordered_set>
 
-/**
- * Advanced A* pathfinding algorithm implementation with comprehensive
- * functionality including configurable heuristics, detailed search
- * state management, and performance optimization features.
- */
 class AStar {
 private:
     const Graph* graph;
     std::function<double(int, int)> heuristicFunction;
     
-    /**
-     * Internal node representation for A* algorithm processing.
-     * Contains all necessary scoring and parent tracking information.
-     */
     struct AStarNode {
         int nodeId;
         double gScore;
@@ -31,10 +22,7 @@ private:
         AStarNode(int id, double g, double f, int p = -1);
         bool operator>(const AStarNode& other) const;
     };
-    
-    /**
-     * Manages the open list (frontier) for A* algorithm using priority queue.
-     */
+
     class OpenListManager {
     private:
         std::priority_queue<AStarNode, std::vector<AStarNode>, std::greater<AStarNode>> openQueue;
@@ -50,9 +38,6 @@ private:
         void clear();
     };
     
-    /**
-     * Manages the closed list (visited nodes) for A* algorithm.
-     */
     class ClosedListManager {
     private:
         std::unordered_set<int> closedSet;
@@ -70,20 +55,16 @@ private:
         std::vector<int> getAllNodes() const;
     };
     
-    // Smart pointers to internal managers for advanced functionality
     std::unique_ptr<OpenListManager> openListManager;
     std::unique_ptr<ClosedListManager> closedListManager;
     
-    // Search state tracking
     mutable size_t nodesExplored;
     mutable double lastSearchTime;
     mutable bool searchStatisticsEnabled;
     
-    // Core algorithm methods
     double calculateHeuristic(int nodeId, int goalId) const;
     std::vector<int> reconstructPath(const std::unordered_map<int, int>& cameFrom, int current) const;
     
-    // Open list management methods
     void initializeOpenList();
     void addToOpenList(const AStarNode& node);
     AStarNode getNextFromOpenList();
@@ -92,7 +73,6 @@ private:
     void removeFromOpenList(int nodeId);
     size_t getOpenListSize() const;
     
-    // Closed list management methods
     void initializeClosedList();
     void addToClosedList(int nodeId, double gScore, double fScore);
     bool isInClosedList(int nodeId) const;
@@ -101,7 +81,6 @@ private:
     size_t getClosedListSize() const;
     std::vector<int> getExploredNodes() const;
     
-    // Search state management
     void clearSearchState();
     void updateSearchStatistics() const;
 
@@ -113,12 +92,8 @@ public:
      */
     explicit AStar(const Graph* environment);
     
-    /**
-     * Destructor ensures proper cleanup of internal management resources.
-     */
     ~AStar() = default;
     
-    // Copy and move operations
     AStar(const AStar& other) = delete;
     AStar& operator=(const AStar& other) = delete;
     AStar(AStar&& other) noexcept = default;
@@ -159,12 +134,8 @@ public:
      */
     double getPathCost(const std::vector<int>& path) const;
     
-    /**
-     * Displays detailed statistics about the most recent search operation.
-     */
     void printSearchStatistics() const;
     
-    // Heuristic function variants
     double manhattanHeuristic(int nodeId, int goalId) const;
     double euclideanHeuristic(int nodeId, int goalId) const;
     double chebyshevHeuristic(int nodeId, int goalId) const;
@@ -177,7 +148,6 @@ public:
      */
     bool isHeuristicAdmissible(int startId, int goalId) const;
     
-    // Performance and analysis methods
     size_t getLastSearchNodesExplored() const;
     double getLastSearchExecutionTime() const;
     void enableSearchStatistics(bool enable);
@@ -194,8 +164,5 @@ public:
      */
     size_t estimateMemoryUsage() const;
     
-    /**
-     * Resets all internal search state and statistics.
-     */
     void resetSearchState();
 };

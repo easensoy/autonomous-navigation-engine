@@ -1,5 +1,5 @@
 #pragma once
-#include "../core/Graph.hpp"
+#include "core/Graph.hpp"
 #include <vector>
 #include <functional>
 #include <chrono>
@@ -48,6 +48,7 @@ public:
     
     bool executeNextStep();
     void setExecutionSpeed(double speed);
+    double getExecutionSpeed() const; 
     std::chrono::duration<double> getExecutionTime() const;
     
     void skipToWaypoint(size_t waypointIndex);
