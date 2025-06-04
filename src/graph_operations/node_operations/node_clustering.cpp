@@ -9,6 +9,7 @@
 #include <queue>
 #include <cmath>
 #include <memory>
+#include <functional>
 
 class NodeClusteringAnalyzer {
 private:
