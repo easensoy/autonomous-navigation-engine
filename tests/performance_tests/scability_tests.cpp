@@ -13,6 +13,9 @@
 #include <fstream>
 #include <cmath>
 #include <memory>
+#include <map>
+#include <numeric>
+#include <corecrt_math_defines.h>
 
 /**
  * ScalabilityTester: Comprehensive performance scaling analysis
