@@ -1,9 +1,13 @@
 #include "autonomous_navigator/AlgorithmSelector.hpp"
+#include "pathfinding_algorithms/DFS.hpp"
 #include <iostream>
 #include <chrono>
 #include <queue>
 #include <cmath>
 #include <algorithm>
+#include <exception>
+#include <memory>
+#include <string>
 
 class HybridAlgorithmManager {
 private:
@@ -382,9 +386,42 @@ std::vector<int> AlgorithmSelector::executeSelectedAlgorithm(AlgorithmType algor
     std::vector<int> path;
     
     try {
-        // This would execute the actual algorithm
-        // For now, we'll simulate execution and return an empty path
-        std::cout << "[ALGORITHM_SELECTOR] Algorithm execution completed" << std::endl;
+        AlgorithmType toRun = algorithm;
+        if (toRun == AlgorithmType::AUTO_SELECT) {
+            toRun = selectOptimalAlgorithm(startId, goalId);
+        }
+        switch (toRun) {
+            case AlgorithmType::DIJKSTRA: {
+                Dijkstra dijkstra(environment);
+                path = dijkstra.findShortestPath(startId, goalId);
+                break;
+            }
+            case AlgorithmType::BFS: {
+                BFS bfs(environment);
+                path = bfs.findPath(startId, goalId);
+                break;
+            }
+            case AlgorithmType::DFS: {
+                DFS dfs(environment);
+                path = dfs.findPath(startId, goalId);
+                break;
+            }
+            case AlgorithmType::BELLMAN_FORD: {
+                BellmanFord bellmanFord(environment);
+                path = bellmanFord.findShortestPath(startId, goalId);
+                break;
+            }
+            case AlgorithmType::JUMP_POINT_SEARCH:
+                std::cout << "[ALGORITHM_SELECTOR] Jump Point Search needs grid dimensions; running A* instead"
+                          << std::endl;
+                [[fallthrough]];
+            default: {
+                AStar astar(environment);
+                path = astar.findPath(startId, goalId);
+                break;
+            }
+        }
+        std::cout << "[ALGORITHM_SELECTOR] Algorithm execution completed: " << path.size() << " nodes" << std::endl;
         
         auto endTime = std::chrono::steady_clock::now();
         double executionTime = std::chrono::duration<double>(endTime - startTime).count();
