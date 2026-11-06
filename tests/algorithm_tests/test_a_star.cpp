@@ -3,6 +3,10 @@
 #include <iostream>
 #include <cassert>
 #include <chrono>
+#include <exception>
+#include <functional>
+#include <string>
+#include <utility>
 
 class AStarTester {
 private:
@@ -117,7 +121,7 @@ public:
             AStar astar(&testGraph);
             
             std::vector<int> path = astar.findPathWithHeuristic(0, 8, 
-                [this](int nodeId, int goalId) {
+                [&astar](int nodeId, int goalId) {
                     return astar.manhattanHeuristic(nodeId, goalId);
                 });
             
@@ -128,7 +132,7 @@ public:
             AStar astar(&testGraph);
             
             std::vector<int> path = astar.findPathWithHeuristic(0, 8,
-                [this](int nodeId, int goalId) {
+                [&astar](int nodeId, int goalId) {
                     return astar.euclideanHeuristic(nodeId, goalId);
                 });
             
