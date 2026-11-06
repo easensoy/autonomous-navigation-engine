@@ -85,12 +85,12 @@ class Dijkstra
         explicit Dijkstra(const Graph& environment);
         explicit Dijkstra(const Graph *environment);
         
-        ~Dijkstra() = default;
+        ~Dijkstra();  // defined in the .cpp, where the helper classes are complete
         
         Dijkstra(const Dijkstra& other) = delete;
         Dijkstra& operator=(const Dijkstra& other) = delete;
-        Dijkstra(Dijkstra&& other) noexcept = default;
-        Dijkstra& operator=(Dijkstra&& other) noexcept = default;
+        Dijkstra(Dijkstra&& other) noexcept;
+        Dijkstra& operator=(Dijkstra&& other) noexcept;
 
         std::vector<int> findShortestPath(int startId, int goalId);
         std::unordered_map<int, double> findShortestDistances(int startId);

@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <utility>
 
 class DFS
 {
@@ -51,12 +52,12 @@ class DFS
     public:
         explicit DFS(const Graph* environment);
         
-        ~DFS() = default;
+        ~DFS();  // defined in the .cpp, where the helper classes are complete
         
         DFS(const DFS& other) = delete;
         DFS& operator=(const DFS& other) = delete;
-        DFS(DFS&& other) noexcept = default;
-        DFS& operator=(DFS&& other) noexcept = default;
+        DFS(DFS&& other) noexcept;
+        DFS& operator=(DFS&& other) noexcept;
 
         std::vector<int> findPath(int startId, int goalId);
         std::vector<int> findPathIterative(int startId, int goalId);

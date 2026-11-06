@@ -4,6 +4,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <string>
+#include <utility>
 
 class JumpPointSearch
 {
@@ -63,6 +65,7 @@ class JumpPointSearch
 
     public:
         JumpPointSearch(const Graph* environment, int width, int height);
+        ~JumpPointSearch();  // defined in jps_core.cpp, where the helper classes are complete
 
         std::vector<int> findPath(int startId, int goalId);
         void setGridDimensions(int width, int height);
