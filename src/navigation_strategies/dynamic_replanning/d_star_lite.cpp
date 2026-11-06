@@ -6,6 +6,9 @@
 #include <iostream>
 #include <limits>
 #include <algorithm>
+#include <functional>
+#include <stdexcept>
+#include <utility>
 
 class DStarLite {
 private:
@@ -29,8 +32,14 @@ private:
     const Graph* graph;
     std::unordered_map<int, DStarNode> nodes;
     std::priority_queue<DStarNode, std::vector<DStarNode>, std::greater<DStarNode>> priorityQueue;
-    std::unordered_map<std::pair<int, int>, double, std::hash<std::pair<int, int>>> edgeCosts;
-    std::unordered_set<std::pair<int, int>, std::hash<std::pair<int, int>>> changedEdges;
+    struct EdgeKeyHash {
+        size_t operator()(const std::pair<int, int>& key) const noexcept {
+            return std::hash<long long>()((static_cast<long long>(key.first) << 32) ^
+                                          static_cast<unsigned int>(key.second));
+        }
+    };
+    std::unordered_map<std::pair<int, int>, double, EdgeKeyHash> edgeCosts;
+    std::unordered_set<std::pair<int, int>, EdgeKeyHash> changedEdges;
     
     int startNode;
     int goalNode;

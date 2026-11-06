@@ -7,6 +7,10 @@
 #include <iostream>
 #include <chrono>
 #include <algorithm>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 
 class IncrementalSearch {
 private:

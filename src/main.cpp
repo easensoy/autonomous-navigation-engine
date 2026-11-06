@@ -51,6 +51,9 @@
 #include "reporting/NavigationLogger.hpp"
 #include "reporting/PerformanceProfiler.hpp"
 #include "reporting/PathVisualiser.hpp"
+#include <thread>
+#include <exception>
+#include <string>
 
 void createSampleGraph(Graph& graph) {
     std::cout << "\n=== Creating Sample Graph ===" << std::endl;
