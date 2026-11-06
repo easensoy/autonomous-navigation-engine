@@ -1,6 +1,7 @@
 #include "core/Node.hpp"
 #include <stdexcept>
 #include <iostream>
+#include <string>
 
 Node::Node(int nodeId, const std::string& nodeName, double xPos, double yPos)
     : id(nodeId), name(nodeName), x(xPos), y(yPos) {

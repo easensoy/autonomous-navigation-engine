@@ -1,6 +1,9 @@
 #include "core/Graph.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <algorithm>
+#include <memory>
+#include <string>
 
 void Graph::addNode(int id, const std::string& name, double x, double y) {
     if (hasNode(id)) {

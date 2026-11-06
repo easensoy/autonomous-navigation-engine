@@ -1,4 +1,7 @@
 #include "core/Graph.hpp"
+#include <iostream>
+#include <stdexcept>
+#include <string>
 
 size_t Graph::getNodeCount() const {
     return nodes.size();
