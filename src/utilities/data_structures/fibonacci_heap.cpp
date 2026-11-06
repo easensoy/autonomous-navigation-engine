@@ -4,6 +4,10 @@
 #include <cmath>
 #include <limits>
 #include <functional>
+#include <algorithm>
+#include <chrono>
+#include <stdexcept>
+#include <utility>
 
 template<typename T, typename Compare = std::less<T>>
 class FibonacciHeap {
