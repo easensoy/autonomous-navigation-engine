@@ -10,6 +10,9 @@
 #include <cmath>
 #include <memory>
 #include <functional>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 class NodeClusteringAnalyzer {
 private:

@@ -1,4 +1,4 @@
-#include "graph_operations/GraphAnalysis.hpp"
+#include "core/Graph.hpp"
 #include <iostream>
 #include <algorithm>
 #include <chrono>
@@ -9,6 +9,11 @@
 #include <memory>
 #include <queue>
 #include <numeric>
+#include <exception>
+#include <functional>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class NodeRemovalAnalyzer {
 private:

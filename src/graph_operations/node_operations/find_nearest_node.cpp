@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <queue>
 #include <cmath>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 
 class NearestNodeFinder {
 private:
