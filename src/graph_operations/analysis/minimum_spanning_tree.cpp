@@ -1,4 +1,4 @@
-#include "graph_operations/GraphAnalysis.hpp"
+#include "core/Graph.hpp"
 #include <iostream>
 #include <algorithm>
 #include <chrono>
@@ -9,6 +9,10 @@
 #include <unordered_set>
 #include <memory>
 #include <numeric>
+#include <functional>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 class MinimumSpanningTreeCalculator {
 private:

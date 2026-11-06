@@ -1,4 +1,4 @@
-#include "graph_operations/GraphAnalysis.hpp"
+#include "core/Graph.hpp"
 #include <iostream>
 #include <limits>
 #include <algorithm>
@@ -10,6 +10,11 @@
 #include <unordered_set>
 #include <vector>
 #include <memory>
+#include <cmath>
+#include <functional>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class GraphDiameterCalculator {
 private:
