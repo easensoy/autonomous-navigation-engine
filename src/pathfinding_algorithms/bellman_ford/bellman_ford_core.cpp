@@ -1,8 +1,11 @@
 #include "pathfinding_algorithms/BellmanFord.hpp"
+#include "bellman_ford_internals.hpp"
 #include <iostream>
 #include <limits>
 #include <algorithm>
 #include <unordered_set>
+#include <stdexcept>
+#include <unordered_map>
 
 BellmanFord::BellmanFord(const Graph* environment) : graph(environment) {
     if (!graph) {
@@ -14,7 +17,7 @@ std::vector<int> BellmanFord::findShortestPath(int startId, int goalId) {
     std::cout << "[BELLMAN-FORD] Finding shortest path from " << startId << " to " << goalId << std::endl;
     
     if (!graph->hasNode(startId) || !graph->hasNode(goalId)) {
-        throw std::invalid_argument("Start or goal node does not exist");
+        return {};  // unknown start or goal: no path
     }
     
     BellmanFordResult result = computeShortestPaths(startId);
@@ -281,3 +284,8 @@ std::vector<int> BellmanFord::findNegativeCycle(const std::unordered_map<int, in
     
     return cycle;
 }
+
+// Special members defined here, where bellman_ford_internals.hpp makes the helper classes complete.
+BellmanFord::~BellmanFord() = default;
+BellmanFord::BellmanFord(BellmanFord&& other) noexcept = default;
+BellmanFord& BellmanFord::operator=(BellmanFord&& other) noexcept = default;
