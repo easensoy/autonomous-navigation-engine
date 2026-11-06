@@ -4,6 +4,13 @@
 #include <sstream>
 #include <stdexcept>
 #include <regex>
+#include <any>
+#include <exception>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 class YAMLConfigLoader {
 private:

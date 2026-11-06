@@ -4,6 +4,12 @@
 #include <limits>
 #include <cmath>
 #include <functional>
+#include <algorithm>
+#include <any>
+#include <exception>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 class ParameterValidator {
 private:
@@ -34,7 +40,7 @@ public:
         ValidationRule rule(paramName);
         rule.dataType = type;
         rule.required = required;
-        validationRules[paramName] = rule;
+        validationRules.insert_or_assign(paramName, rule);
         
         std::cout << "[PARAM_VALIDATOR] Added rule for " << paramName 
                   << " (type: " << type << ", required: " << (required ? "yes" : "no") << ")" << std::endl;
