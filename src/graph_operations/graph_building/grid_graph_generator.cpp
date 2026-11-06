@@ -1,6 +1,10 @@
 #include "graph_operations/GraphBuilder.hpp"
+#include <random>
 #include <iostream>
 #include <cmath>
+#include <string>
+#include <utility>
+#include <algorithm>
 
 class GridGraphGenerator {
 private:
@@ -191,7 +195,8 @@ public:
         }
         
         // Shuffle and remove first N nodes
-        std::random_shuffle(nodeIds.begin(), nodeIds.end());
+        std::mt19937 shuffleEngine(1u);  // fixed seed keeps generated layouts reproducible
+        std::shuffle(nodeIds.begin(), nodeIds.end(), shuffleEngine);
         
         for (int i = 0; i < obstaclesToAdd && i < totalNodes; ++i) {
             graph->removeNode(nodeIds[i]);

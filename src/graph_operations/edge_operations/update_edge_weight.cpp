@@ -2,6 +2,9 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <limits>
+#include <tuple>
 
 bool updateEdgeWeight(Graph* graph, int fromId, int toId, double newWeight) {
     if (!graph) {

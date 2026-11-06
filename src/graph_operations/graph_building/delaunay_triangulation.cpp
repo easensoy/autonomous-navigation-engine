@@ -4,6 +4,8 @@
 #include <cmath>
 #include <vector>
 #include <set>
+#include <string>
+#include <utility>
 
 struct Triangle {
     int a, b, c;
