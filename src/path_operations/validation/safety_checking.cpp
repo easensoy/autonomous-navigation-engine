@@ -4,6 +4,10 @@
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class SafetyChecker {
 private:
@@ -36,13 +40,13 @@ private:
     
     SafetyZones safetyZones;
     double minimumSafetyScore;
-    bool enableEmergencyPlanning;
+    bool emergencyPlanningEnabled;
     double hazardProximityThreshold;
     
 public:
     SafetyChecker(const Graph* environment) 
         : graph(environment), minimumSafetyScore(0.6), 
-          enableEmergencyPlanning(true), hazardProximityThreshold(5.0) {
+          emergencyPlanningEnabled(true), hazardProximityThreshold(5.0) {
         
         if (!graph) {
             throw std::invalid_argument("Graph pointer cannot be null");
@@ -78,7 +82,7 @@ public:
         assessNavigationSafety(path, metrics);
         
         // Plan emergency exits if enabled
-        if (enableEmergencyPlanning) {
+        if (emergencyPlanningEnabled) {
             planEmergencyExits(path, metrics);
         }
         
@@ -413,7 +417,7 @@ public:
     }
     
     void enableEmergencyPlanning(bool enable) {
-        enableEmergencyPlanning = enable;
+        emergencyPlanningEnabled = enable;
         std::cout << "[SAFETY_CHECK] Emergency planning " << (enable ? "enabled" : "disabled") << std::endl;
     }
 };

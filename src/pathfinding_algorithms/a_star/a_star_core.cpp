@@ -1,69 +1,151 @@
-#include "core/Graph.hpp"
+#include "pathfinding_algorithms/AStar.hpp"
+#include <algorithm>
+#include <chrono>
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
-size_t Graph::getNodeCount() const {
-    return nodes.size();
-}
+// A* search core: construction, the search loop, path reconstruction and search statistics.
+// The open/closed list helpers live in open_list_management.cpp / closed_list_management.cpp
+// and the heuristics in heuristic_functions.cpp.
 
-size_t Graph::getEdgeCount() const {
-    size_t count = 0;
-    for (const auto& pair : adjacencyList) {
-        count += pair.second.size();
+AStar::AStarNode::AStarNode(int id, double g, double f, int p)
+    : nodeId(id), gScore(g), fScore(f), parent(p) {}
+
+bool AStar::AStarNode::operator>(const AStarNode& other) const {
+    if (fScore != other.fScore) {
+        return fScore > other.fScore;
     }
-    return count / 2;
+    return gScore < other.gScore;  // on equal f, prefer the node further from the start
 }
 
-void Graph::clear() {
-    nodes.clear();
-    adjacencyList.clear();
-}
-
-bool Graph::isEmpty() const {
-    return nodes.empty();
-}
-
-std::vector<int> Graph::getAllNodeIds() const {
-    std::vector<int> ids;
-    for (const auto& pair : nodes) {
-        ids.push_back(pair.first);
+AStar::AStar(const Graph* environment)
+    : graph(environment),
+      openListManager(std::make_unique<OpenListManager>()),
+      closedListManager(std::make_unique<ClosedListManager>()),
+      nodesExplored(0),
+      lastSearchTime(0.0),
+      searchStatisticsEnabled(false) {
+    if (!graph) {
+        throw std::invalid_argument("Graph pointer cannot be null");
     }
-    return ids;
 }
 
-double Graph::getEdgeWeight(int fromId, int toId) const {
-    const auto& edges = getEdgesFrom(fromId);
-    for (const auto& edge : edges) {
-        if (edge.getToNode() == toId) {
-            return edge.getWeight();
+std::vector<int> AStar::findPath(int startId, int goalId) const {
+    if (!graph->hasNode(startId) || !graph->hasNode(goalId)) {
+        return {};  // unknown start or goal: no path (the test suite's contract)
+    }
+
+    const auto searchStart = std::chrono::steady_clock::now();
+    openListManager->clear();
+    closedListManager->clear();
+    nodesExplored = 0;
+
+    auto heuristic = [this](int nodeId, int goal) {
+        return heuristicFunction ? heuristicFunction(nodeId, goal) : calculateHeuristic(nodeId, goal);
+    };
+
+    std::unordered_map<int, double> gScore;
+    std::unordered_map<int, int> cameFrom;
+    gScore[startId] = 0.0;
+    openListManager->push(AStarNode(startId, 0.0, heuristic(startId, goalId), -1));
+
+    std::vector<int> path;
+    while (!openListManager->empty()) {
+        AStarNode current = openListManager->pop();
+        if (closedListManager->contains(current.nodeId)) {
+            continue;
         }
-    }
-    return -1.0;
-}
+        closedListManager->add(current.nodeId, current.gScore, current.fScore);
+        ++nodesExplored;
 
-void Graph::validateNodeExists(int nodeId) const {
-    if (!hasNode(nodeId)) {
-        throw std::invalid_argument("Node with ID " + std::to_string(nodeId) + " does not exist");
-    }
-}
+        if (current.nodeId == goalId) {
+            path = reconstructPath(cameFrom, goalId);
+            break;
+        }
 
-void Graph::printGraphStructure() const {
-    std::cout << "\n=== GRAPH STRUCTURE ===" << std::endl;
-    std::cout << "Nodes: " << getNodeCount() << ", Edges: " << getEdgeCount() << std::endl;
-    
-    for (const auto& pair : nodes) {
-        const Node& node = *pair.second;
-        std::cout << "\n" << node << std::endl;
-        
-        const auto& edges = getEdgesFrom(node.getId());
-        if (!edges.empty()) {
-            std::cout << "  Connections:" << std::endl;
-            for (const auto& edge : edges) {
-                const Node& neighbor = getNode(edge.getToNode());
-                std::cout << "    -> " << neighbor.getName() 
-                          << " (weight: " << edge.getWeight() << ")" << std::endl;
+        for (const Edge& edge : graph->getEdgesFrom(current.nodeId)) {
+            const int neighbor = edge.getToNode();
+            if (closedListManager->contains(neighbor)) {
+                continue;
             }
-        } else {
-            std::cout << "  No connections." << std::endl;
+            const double tentative = current.gScore + edge.getWeight();
+            auto known = gScore.find(neighbor);
+            if (known == gScore.end() || tentative < known->second) {
+                gScore[neighbor] = tentative;
+                cameFrom[neighbor] = current.nodeId;
+                openListManager->push(AStarNode(neighbor, tentative, tentative + heuristic(neighbor, goalId),
+                                                current.nodeId));
+            }
         }
     }
-    std::cout << "========================\n" << std::endl;
+
+    lastSearchTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - searchStart).count();
+    updateSearchStatistics();
+    return path;
+}
+
+std::vector<int> AStar::reconstructPath(const std::unordered_map<int, int>& cameFrom, int current) const {
+    std::vector<int> path{current};
+    auto it = cameFrom.find(current);
+    while (it != cameFrom.end()) {
+        current = it->second;
+        path.push_back(current);
+        it = cameFrom.find(current);
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+double AStar::getPathCost(const std::vector<int>& path) const {
+    double cost = 0.0;
+    for (size_t i = 1; i < path.size(); ++i) {
+        if (!graph->hasEdge(path[i - 1], path[i])) {
+            throw std::runtime_error("Path contains an invalid edge: " + std::to_string(path[i - 1]) + " -> " +
+                                     std::to_string(path[i]));
+        }
+        cost += graph->getEdgeWeight(path[i - 1], path[i]);
+    }
+    return cost;
+}
+
+void AStar::updateSearchStatistics() const {
+    if (searchStatisticsEnabled) {
+        printSearchStatistics();
+    }
+}
+
+void AStar::printSearchStatistics() const {
+    std::cout << "[A*] Last search: " << nodesExplored << " nodes explored in " << lastSearchTime * 1000.0
+              << " ms" << std::endl;
+}
+
+size_t AStar::getLastSearchNodesExplored() const {
+    return nodesExplored;
+}
+
+double AStar::getLastSearchExecutionTime() const {
+    return lastSearchTime;
+}
+
+void AStar::enableSearchStatistics(bool enable) {
+    searchStatisticsEnabled = enable;
+}
+
+std::vector<int> AStar::getLastSearchExploredNodes() const {
+    return getExploredNodes();
+}
+
+size_t AStar::estimateMemoryUsage() const {
+    const size_t perNode = sizeof(AStarNode) + 4 * sizeof(int) + 2 * sizeof(double);
+    return sizeof(AStar) + (getOpenListSize() + getClosedListSize()) * perNode;
+}
+
+void AStar::resetSearchState() {
+    clearSearchState();
+    nodesExplored = 0;
+    lastSearchTime = 0.0;
 }

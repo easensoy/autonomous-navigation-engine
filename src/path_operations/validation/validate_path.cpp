@@ -3,6 +3,9 @@
 #include <sstream>
 #include <algorithm>
 #include <chrono>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 // Forward declarations for the validation modules
 bool verifyPathConstraints(const Graph* graph, const std::vector<int>& path, 
