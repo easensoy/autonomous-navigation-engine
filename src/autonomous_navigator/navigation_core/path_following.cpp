@@ -4,6 +4,9 @@
 #include <cmath>
 #include <thread>
 #include <numeric>
+#include <chrono>
+#include <iterator>
+#include <unordered_set>
 
 class PathFollowingController {
 private:

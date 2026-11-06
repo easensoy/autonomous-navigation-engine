@@ -1,5 +1,7 @@
 #include "core/Graph.hpp"
 #include <iostream>
+#include <memory>
+#include <utility>
 
 Graph::Graph() {
 }

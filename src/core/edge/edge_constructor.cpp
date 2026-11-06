@@ -1,4 +1,5 @@
 #include "core/Edge.hpp"
+#include <cmath>
 #include <stdexcept>
 
 Edge::Edge(int from, int to, double edgeWeight, bool isBidirectional)
@@ -7,8 +8,8 @@ Edge::Edge(int from, int to, double edgeWeight, bool isBidirectional)
     if (from == to) {
         throw std::invalid_argument("Cannot create edge from node to itself");
     }
-    if (edgeWeight < 0) {
-        throw std::invalid_argument("Edge weight cannot be negative");
+    if (!std::isfinite(edgeWeight)) {
+        throw std::invalid_argument("Edge weight must be a finite number");
     }
 }
 
