@@ -1,6 +1,10 @@
 #pragma once
 #include <vector>
 #include <functional>
+#include <algorithm>
+#include <cstddef>
+#include <stdexcept>
+#include <utility>
 
 template<typename T, typename Compare = std::greater<T>>
 class PriorityQueue {
@@ -121,4 +125,65 @@ void PriorityQueue<T, Compare>::heapifyDown(size_t index) {
         std::swap(heap[index], heap[smallest]);
         index = smallest;
     }
+}
+
+template<typename T, typename Compare>
+size_t PriorityQueue<T, Compare>::getParentIndex(size_t index) const {
+    return (index - 1) / 2;
+}
+
+template<typename T, typename Compare>
+size_t PriorityQueue<T, Compare>::getLeftChildIndex(size_t index) const {
+    return 2 * index + 1;
+}
+
+template<typename T, typename Compare>
+size_t PriorityQueue<T, Compare>::getRightChildIndex(size_t index) const {
+    return 2 * index + 2;
+}
+
+template<typename T, typename Compare>
+void PriorityQueue<T, Compare>::clear() {
+    heap.clear();
+}
+
+template<typename T, typename Compare>
+void PriorityQueue<T, Compare>::reserve(size_t capacity) {
+    heap.reserve(capacity);
+}
+
+template<typename T, typename Compare>
+std::vector<T> PriorityQueue<T, Compare>::extractAll() {
+    std::vector<T> items;
+    items.reserve(heap.size());
+    while (!empty()) {
+        items.push_back(top());
+        pop();
+    }
+    return items;
+}
+
+template<typename T, typename Compare>
+template<typename Iterator>
+void PriorityQueue<T, Compare>::pushRange(Iterator begin, Iterator end) {
+    for (; begin != end; ++begin) {
+        push(*begin);
+    }
+}
+
+template<typename T, typename Compare>
+bool PriorityQueue<T, Compare>::contains(const T& item) const {
+    return std::find(heap.begin(), heap.end(), item) != heap.end();
+}
+
+template<typename T, typename Compare>
+void PriorityQueue<T, Compare>::updatePriority(const T& oldItem, const T& newItem) {
+    auto it = std::find(heap.begin(), heap.end(), oldItem);
+    if (it == heap.end()) {
+        return;
+    }
+    size_t index = static_cast<size_t>(it - heap.begin());
+    heap[index] = newItem;
+    heapifyUp(index);
+    heapifyDown(index);
 }
