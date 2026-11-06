@@ -1,6 +1,9 @@
 #include "pathfinding_algorithms/AStar.hpp"
 #include <cmath>
 #include <algorithm>
+#include <functional>
+#include <limits>
+#include <stdexcept>
 
 double AStar::calculateHeuristic(int nodeId, int goalId) const {
     if (!graph->hasNode(nodeId) || !graph->hasNode(goalId)) {
