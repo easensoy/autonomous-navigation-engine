@@ -5,6 +5,11 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
+#include <ctime>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 enum class NavigationEventType {
     NAVIGATION_START,

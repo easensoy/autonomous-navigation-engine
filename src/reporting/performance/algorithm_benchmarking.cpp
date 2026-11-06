@@ -9,12 +9,19 @@
 #include <algorithm>
 #include <fstream>
 #include <random>
+#include <iomanip>
+#include <limits>
+#include <memory>
+#include <numeric>
+#include <stdexcept>
+#include <string>
 
 class AlgorithmBenchmarker {
 private:
     const Graph* graph;
     std::unique_ptr<PerformanceProfiler> profiler;
     
+public:
     struct BenchmarkResult {
         std::string algorithm;
         double avgExecutionTime;
@@ -28,6 +35,8 @@ private:
         BenchmarkResult() : avgExecutionTime(0), minExecutionTime(0), maxExecutionTime(0),
                            avgPathLength(0), successRate(0), avgNodesExplored(0), avgMemoryUsage(0) {}
     };
+
+private:
     
     struct TestCase {
         int startNode;
