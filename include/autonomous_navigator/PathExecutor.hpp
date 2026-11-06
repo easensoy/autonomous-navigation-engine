@@ -3,6 +3,7 @@
 #include <vector>
 #include <functional>
 #include <chrono>
+#include <string>
 
 enum class ExecutionState {
     IDLE,
@@ -29,6 +30,7 @@ private:
 
 public:
     explicit PathExecutor(const Graph* graph);
+    ~PathExecutor();  // detaches this executor from the shared emergency-stop manager
     
     bool loadPath(const std::vector<int>& path);
     bool startExecution();

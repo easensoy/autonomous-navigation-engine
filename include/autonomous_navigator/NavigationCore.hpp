@@ -24,6 +24,10 @@ private:
     std::vector<int> activePath;
     int currentPosition;
     bool navigationActive;
+    bool navigationPaused;  // set by pause/emergency stop, cleared by resume or a new start
+
+    std::vector<int> planRoute(int startId, int goalId);
+    bool activatePath(std::vector<int> path);
 
 public:
     explicit NavigationCore(const Graph* graph);

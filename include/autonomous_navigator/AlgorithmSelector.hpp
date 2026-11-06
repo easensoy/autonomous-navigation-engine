@@ -4,6 +4,8 @@
 #include "pathfinding_algorithms/BFS.hpp"
 #include "pathfinding_algorithms/BellmanFord.hpp"
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 enum class AlgorithmType {
     ASTAR,
@@ -26,7 +28,7 @@ struct AlgorithmPerformanceMetrics {
 class AlgorithmSelector {
 private:
     const Graph* environment;
-    std::unordered_map<AlgorithmType, std::unique_ptr<void>> algorithms;
+    std::unordered_map<AlgorithmType, std::shared_ptr<void>> algorithms;  // shared_ptr<void> keeps a type-erased deleter
     std::unordered_map<AlgorithmType, AlgorithmPerformanceMetrics> performanceHistory;
     
     AlgorithmType analyzeEnvironmentCharacteristics() const;
