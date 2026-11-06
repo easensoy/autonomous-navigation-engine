@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <utility>
 
 struct PerformanceMetrics {
     std::chrono::duration<double> executionTime;
@@ -19,6 +20,7 @@ private:
     std::chrono::steady_clock::time_point currentStartTime;
     std::string currentOperation;
     bool profilingActive;
+    std::unordered_map<std::string, std::pair<double, size_t>> timingTotals;  // seconds, runs
 
 public:
     PerformanceProfiler();

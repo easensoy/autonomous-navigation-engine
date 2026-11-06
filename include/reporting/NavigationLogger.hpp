@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <chrono>
+#include <unordered_map>
 
 enum class LogLevel {
     DEBUG,
