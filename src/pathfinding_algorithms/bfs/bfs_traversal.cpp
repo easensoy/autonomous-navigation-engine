@@ -1,9 +1,12 @@
 #include "pathfinding_algorithms/BFS.hpp"
+#include "bfs_internals.hpp"
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
 #include <iostream>
 #include <algorithm>
+#include <stdexcept>
+#include <utility>
 
 BFS::BFS(const Graph* environment) : graph(environment) {
     if (!graph) {
@@ -17,7 +20,7 @@ std::vector<int> BFS::findPath(int startId, int goalId) {
     std::cout << "[BFS] Finding path from node " << startId << " to node " << goalId << std::endl;
     
     if (!graph->hasNode(startId) || !graph->hasNode(goalId)) {
-        throw std::invalid_argument("Start or goal node does not exist in graph");
+        return {};  // unknown start or goal: no path
     }
     
     if (startId == goalId) {
@@ -108,7 +111,7 @@ std::vector<std::vector<int>> BFS::findAllPaths(int startId, int goalId, int max
     std::cout << std::endl;
     
     if (!graph->hasNode(startId) || !graph->hasNode(goalId)) {
-        throw std::invalid_argument("Start or goal node does not exist");
+        return {};  // unknown start or goal: no paths
     }
     
     std::vector<std::vector<int>> allPaths;
@@ -191,7 +194,7 @@ std::vector<int> BFS::getNodesAtDistance(int startId, int distance) {
               << " from node " << startId << std::endl;
     
     if (!graph->hasNode(startId)) {
-        throw std::invalid_argument("Start node does not exist");
+        return {};  // unknown start: no nodes at any distance
     }
     
     if (distance < 0) {
@@ -271,3 +274,8 @@ std::vector<int> BFS::reconstructPath(const std::unordered_map<int, int>& parent
     std::cout << "[BFS] Successfully reconstructed path of length " << path.size() << std::endl;
     return path;
 }
+
+// Special members defined here, where bfs_internals.hpp makes the helper classes complete.
+BFS::~BFS() = default;
+BFS::BFS(BFS&& other) noexcept = default;
+BFS& BFS::operator=(BFS&& other) noexcept = default;
