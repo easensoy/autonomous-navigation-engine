@@ -2,6 +2,9 @@
 #include "core/Graph.hpp"
 #include <vector>
 #include <unordered_map>
+#include <functional>
+#include <string>
+#include <utility>
 
 enum class CostType {
     DISTANCE,
@@ -26,7 +29,13 @@ private:
     const Graph* environment;
     std::unordered_map<CostType, double> costWeights;
     std::unordered_map<int, double> nodeCosts;
-    std::unordered_map<std::pair<int, int>, double> edgeCosts;
+    struct EdgeKeyHash {
+        size_t operator()(const std::pair<int, int>& key) const noexcept {
+            return std::hash<long long>()((static_cast<long long>(key.first) << 32) ^
+                                          static_cast<unsigned int>(key.second));
+        }
+    };
+    std::unordered_map<std::pair<int, int>, double, EdgeKeyHash> edgeCosts;
 
 public:
     explicit CostCalculator(const Graph* graph);

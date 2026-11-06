@@ -3,6 +3,7 @@
 #include "GlobalPathPlanner.hpp"
 #include <vector>
 #include <utility>
+#include <memory>
 
 enum class MultiGoalStrategy
 {

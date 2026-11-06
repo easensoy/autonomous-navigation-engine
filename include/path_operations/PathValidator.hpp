@@ -13,6 +13,8 @@ private:
     bool validatePathConnectivity(const std::vector<int>& path) const;
     bool validatePathSafety(const std::vector<int>& path) const;
     std::string generateValidationReport(const std::vector<int>& path) const;
+    double calculatePathLength(const std::vector<int>& path) const;
+    double calculateDirectDistance(int startId, int endId) const;
 
 public:
     explicit PathValidator(const Graph* graph);
