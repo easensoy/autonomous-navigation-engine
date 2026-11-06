@@ -3,6 +3,9 @@
 #include "utilities/ConfigManager.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <exception>
+#include <memory>
+#include <string>
 
 class NavigationInitializationManager {
 private:

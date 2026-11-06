@@ -6,6 +6,9 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <algorithm>
+#include <exception>
+#include <string>
 
 class RealTimeNavigationManager {
 private:
@@ -25,7 +28,6 @@ private:
     };
     
     std::queue<NavigationUpdate> updateQueue;
-    std::mutex updateQueueMutex;
     double updateFrequency;
     double replanningThreshold;
     std::chrono::steady_clock::time_point lastUpdateTime;

@@ -7,12 +7,16 @@
 #include <iostream>
 #include <chrono>
 #include <memory>
+#include <algorithm>
+#include <exception>
+#include <string>
+#include <unordered_map>
 
 class AlgorithmExecutionManager {
 private:
     const Graph* environment;
     std::unique_ptr<AlgorithmSelector> algorithmSelector;
-    std::unordered_map<AlgorithmType, std::unique_ptr<void>> algorithmInstances;
+    std::unordered_map<AlgorithmType, std::shared_ptr<void>> algorithmInstances;  // shared_ptr<void> deletes the real type
     AlgorithmType currentAlgorithm;
     
     struct ExecutionContext {
@@ -256,13 +260,13 @@ private:
         // Initialize algorithm instances for reuse
         try {
             algorithmInstances[AlgorithmType::ASTAR] = 
-                std::unique_ptr<void>(static_cast<void*>(new AStar(environment)));
+                std::make_shared<AStar>(environment);
             algorithmInstances[AlgorithmType::DIJKSTRA] = 
-                std::unique_ptr<void>(static_cast<void*>(new Dijkstra(environment)));
+                std::make_shared<Dijkstra>(environment);
             algorithmInstances[AlgorithmType::BFS] = 
-                std::unique_ptr<void>(static_cast<void*>(new BFS(environment)));
+                std::make_shared<BFS>(environment);
             algorithmInstances[AlgorithmType::BELLMAN_FORD] = 
-                std::unique_ptr<void>(static_cast<void*>(new BellmanFord(environment)));
+                std::make_shared<BellmanFord>(environment);
             
             std::cout << "[ALGORITHM_EXEC] Algorithm instances initialized successfully" << std::endl;
         } catch (const std::exception& e) {
