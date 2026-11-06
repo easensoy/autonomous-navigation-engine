@@ -6,6 +6,11 @@
 #include <chrono>
 #include <unordered_set>
 #include <queue>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
 
 class MultiDestinationRouter {
 private:
@@ -49,7 +54,7 @@ private:
     };
     
     std::vector<DestinationNode> destinations;
-    std::unordered_map<int, std::vector<int>> precomputedPaths;
+    std::unordered_map<std::string, std::vector<int>> precomputedPaths;
     double defaultTravelSpeed;
     bool enablePathCaching;
     bool optimizeForTime;

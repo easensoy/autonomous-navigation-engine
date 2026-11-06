@@ -6,6 +6,10 @@
 #include <queue>
 #include <chrono>
 #include <unordered_map>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <string>
 
 class PriorityBasedPlanner {
 private:
@@ -68,7 +72,7 @@ private:
     double availableTime;
     double availableResources;
     bool enforceDeadlines;
-    bool allowPartialCompletion;
+    bool partialCompletionAllowed;
     
     std::priority_queue<PriorityDestination> createPriorityQueue() {
         std::priority_queue<PriorityDestination> pq;
@@ -155,7 +159,7 @@ private:
                 double totalTimeRequired = travelTime + candidate.serviceTime.count();
                 
                 if (currentTime + totalTimeRequired > availableTime) {
-                    if (!allowPartialCompletion) {
+                    if (!partialCompletionAllowed) {
                         continue;
                     }
                 }
@@ -361,7 +365,7 @@ private:
 public:
     PriorityBasedPlanner(const Graph* environment) 
         : graph(environment), availableTime(480.0), availableResources(100.0),
-          enforceDeadlines(true), allowPartialCompletion(true) {
+          enforceDeadlines(true), partialCompletionAllowed(true) {
         
         if (!graph) {
             throw std::invalid_argument("Graph pointer cannot be null");
@@ -486,7 +490,7 @@ public:
     }
     
     void allowPartialCompletion(bool allow) {
-        allowPartialCompletion = allow;
+        partialCompletionAllowed = allow;
         std::cout << "[PRIORITY_PLANNER] Partial completion " 
                   << (allow ? "allowed" : "not allowed") << std::endl;
     }
