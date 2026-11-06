@@ -1,13 +1,19 @@
 #include "pathfinding_algorithms/JumpPointSearch.hpp"
+#include "jps_internals.hpp"
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
 #include <iostream>
 #include <cmath>
 #include <algorithm>
+#include <functional>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 JumpPointSearch::JumpPointSearch(const Graph* environment, int width, int height)
-    : graph(environment), gridWidth(width), gridHeight(height) {
+    : graph(environment), gridWidth(width), gridHeight(height), diagonalMovement(true) {
     
     if (!graph) {
         throw std::invalid_argument("Graph pointer cannot be null");
@@ -61,7 +67,7 @@ std::vector<int> JumpPointSearch::findPath(int startId, int goalId) {
     startGridNode.fScore = heuristic(startX, startY, goalX, goalY);
     
     openSet.push(startGridNode);
-    allNodes[std::to_string(startX) + "," + std::to_string(startY)] = startGridNode;
+    allNodes.insert_or_assign(std::to_string(startX) + "," + std::to_string(startY), startGridNode);
     
     while (!openSet.empty()) {
         GridNode current = openSet.top();
@@ -102,7 +108,7 @@ std::vector<int> JumpPointSearch::findPath(int startId, int goalId) {
                 jumpNode.parentX = current.x;
                 jumpNode.parentY = current.y;
                 
-                allNodes[jumpKey] = jumpNode;
+                allNodes.insert_or_assign(jumpKey, jumpNode);
                 openSet.push(jumpNode);
                 
                 std::cout << "[JPS] Added jump point (" << jumpX << "," << jumpY 
@@ -316,3 +322,6 @@ std::vector<int> JumpPointSearch::reconstructGridPath(const std::unordered_map<s
     std::cout << "[JPS] Reconstructed path with " << nodePath.size() << " nodes" << std::endl;
     return nodePath;
 }
+
+// Special members defined here, where jps_internals.hpp makes the helper classes complete.
+JumpPointSearch::~JumpPointSearch() = default;
