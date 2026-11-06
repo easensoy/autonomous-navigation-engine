@@ -4,6 +4,8 @@
 #include <cmath>
 #include <unordered_map>
 #include <limits>
+#include <stdexcept>
+#include <string>
 
 class PathCostCalculator {
 private:
@@ -48,7 +50,7 @@ private:
     double timeWeightFactor;
     double energyWeightFactor;
     double riskWeightFactor;
-    bool enableDetailedAnalysis;
+    bool detailedAnalysisEnabled;
     bool cacheCalculations;
     
     // Cost modifiers and tables
@@ -261,7 +263,7 @@ private:
 public:
     PathCostCalculator(const Graph* environment) 
         : graph(environment), distanceWeightFactor(1.0), timeWeightFactor(1.0),
-          energyWeightFactor(1.0), riskWeightFactor(0.5), enableDetailedAnalysis(true),
+          energyWeightFactor(1.0), riskWeightFactor(0.5), detailedAnalysisEnabled(true),
           cacheCalculations(true) {
         
         if (!graph) {
@@ -299,7 +301,7 @@ public:
         
         double totalCost = 0.0;
         
-        if (enableDetailedAnalysis) {
+        if (detailedAnalysisEnabled) {
             CostProfile profile = generateCostProfile(path);
             totalCost = profile.totalCost;
             
@@ -363,7 +365,7 @@ public:
             return std::numeric_limits<double>::infinity();
         }
         
-        if (enableDetailedAnalysis) {
+        if (detailedAnalysisEnabled) {
             CostComponents components = calculateDetailedSegmentCost(fromNodeId, toNodeId);
             return components.getTotalCost();
         } else {
@@ -433,7 +435,7 @@ public:
     }
     
     void enableDetailedAnalysis(bool enable) {
-        enableDetailedAnalysis = enable;
+        detailedAnalysisEnabled = enable;
         std::cout << "[COST_CALC] Detailed analysis " << (enable ? "enabled" : "disabled") << std::endl;
     }
     
@@ -456,7 +458,7 @@ public:
         std::cout << "[COST_CALC]   Edge modifiers: " << edgeCostModifiers.size() << std::endl;
         std::cout << "[COST_CALC]   Terrain factors: " << terrainCostFactors.size() << std::endl;
         std::cout << "[COST_CALC]   Cached calculations: " << costCache.size() << std::endl;
-        std::cout << "[COST_CALC]   Detailed analysis: " << (enableDetailedAnalysis ? "On" : "Off") << std::endl;
+        std::cout << "[COST_CALC]   Detailed analysis: " << (detailedAnalysisEnabled ? "On" : "Off") << std::endl;
     }
     
 private:

@@ -6,6 +6,11 @@
 #include <unordered_set>
 #include <mutex>
 #include <thread>
+#include <atomic>
+#include <cmath>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
 
 class DynamicCostUpdater {
 private:
@@ -37,9 +42,10 @@ private:
         std::chrono::duration<double> duration;
         bool isActive;
         double impactRadius;
+        double severity;
         
         CongestionData() : congestionLevel(0.0), lastUpdate(std::chrono::steady_clock::now()),
-                          duration(std::chrono::minutes(30)), isActive(false), impactRadius(5.0) {}
+                          duration(std::chrono::minutes(30)), isActive(false), impactRadius(5.0), severity(1.0) {}
     };
     
     struct DynamicCostState {

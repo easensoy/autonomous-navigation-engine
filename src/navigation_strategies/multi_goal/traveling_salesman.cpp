@@ -7,6 +7,11 @@
 #include <unordered_map>
 #include <limits>
 #include <cmath>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
+#include <utility>
 
 class TravelingSalesmanSolver {
 private:
@@ -60,7 +65,7 @@ private:
     };
     
     DistanceMatrix distanceMatrix;
-    bool enableSymmetryOptimization;
+    bool symmetryOptimizationEnabled;
     bool requireRoundTrip;
     int maxIterationsGA;
     double mutationRate;
@@ -85,7 +90,7 @@ private:
                     distanceMatrix.setPath(fromNode, toNode, path);
                     
                     // If symmetric optimization is enabled, set reverse distance
-                    if (enableSymmetryOptimization && i < j) {
+                    if (symmetryOptimizationEnabled && i < j) {
                         distanceMatrix.setDistance(toNode, fromNode, distance);
                         std::vector<int> reversePath = path;
                         std::reverse(reversePath.begin(), reversePath.end());
@@ -537,7 +542,7 @@ private:
     
 public:
     TravelingSalesmanSolver(const Graph* environment) 
-        : graph(environment), enableSymmetryOptimization(true), requireRoundTrip(true),
+        : graph(environment), symmetryOptimizationEnabled(true), requireRoundTrip(true),
           maxIterationsGA(1000), mutationRate(0.05), coolingRate(0.995) {
         
         if (!graph) {
@@ -595,7 +600,7 @@ public:
     }
     
     void enableSymmetryOptimization(bool enable) {
-        enableSymmetryOptimization = enable;
+        symmetryOptimizationEnabled = enable;
         std::cout << "[TSP_SOLVER] Symmetry optimization " 
                   << (enable ? "enabled" : "disabled") << std::endl;
     }
@@ -621,7 +626,7 @@ public:
     void printSolverConfiguration() const {
         std::cout << "[TSP_SOLVER] Configuration:" << std::endl;
         std::cout << "[TSP_SOLVER]   Round trip required: " << requireRoundTrip << std::endl;
-        std::cout << "[TSP_SOLVER]   Symmetry optimization: " << enableSymmetryOptimization << std::endl;
+        std::cout << "[TSP_SOLVER]   Symmetry optimization: " << symmetryOptimizationEnabled << std::endl;
         std::cout << "[TSP_SOLVER]   GA max iterations: " << maxIterationsGA << std::endl;
         std::cout << "[TSP_SOLVER]   Mutation rate: " << mutationRate << std::endl;
         std::cout << "[TSP_SOLVER]   SA cooling rate: " << coolingRate << std::endl;
