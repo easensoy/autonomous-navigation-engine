@@ -9,8 +9,16 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+# GCC/Clang-style flags; MSVC keeps CMake's defaults (/O2 /DNDEBUG in Release),
+# because cl.exe ignores -O3 (warning D9002) and would build unoptimised.
+if(NOT MSVC)
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+endif()
+
+# The sources use M_PI, which <cmath> only exposes with this macro on MSVC
+# and on MinGW in strict -std=c++17 mode.
+add_compile_definitions(_USE_MATH_DEFINES)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -66,6 +74,9 @@ set(NAVIGATION_SOURCES
     src/navigation_strategies/multi_goal/multi_destination_routing.cpp
     src/navigation_strategies/multi_goal/priority_based_planning.cpp
     src/navigation_strategies/multi_goal/traveling_salesman.cpp
+    src/navigation_strategies/global_planning/global_path_planner.cpp
+    src/navigation_strategies/dynamic_replanning/dynamic_replanner.cpp
+    src/navigation_strategies/multi_goal/multi_goal_planner.cpp
 )
 
 set(GRAPH_OPERATIONS_SOURCES
@@ -84,6 +95,9 @@ set(GRAPH_OPERATIONS_SOURCES
     src/graph_operations/analysis/graph_diameter_calculation.cpp
     src/graph_operations/analysis/minimum_spanning_tree.cpp
     src/graph_operations/analysis/strongly_connected_components.cpp
+    src/graph_operations/node_operations/node_manager.cpp
+    src/graph_operations/edge_operations/edge_manager.cpp
+    src/graph_operations/analysis/connectivity_analyzer.cpp
 )
 
 set(PATH_OPERATIONS_SOURCES
@@ -100,6 +114,9 @@ set(PATH_OPERATIONS_SOURCES
     src/path_operations/cost_calculation/calculate_path_cost.cpp
     src/path_operations/cost_calculation/multi_criteria_costing.cpp
     src/path_operations/cost_calculation/dynamic_cost_updates.cpp
+    src/path_operations/optimization/path_optimizer.cpp
+    src/path_operations/smoothing/path_smoother.cpp
+    src/path_operations/cost_calculation/cost_calculator.cpp
 )
 
 set(ENVIRONMENT_SOURCES
@@ -108,10 +125,13 @@ set(ENVIRONMENT_SOURCES
     src/environment/environment_management/environment_switching.cpp
     src/environment/map_updates/incremental_map_update.cpp
     src/environment/map_updates/map_synchronization.cpp
-    src/environment/map_updates/sensor_data_integrationc.cpp
+    src/environment/map_updates/sensor_data_integration.cpp
     src/environment/obstacle_detection/static_obstacle_detection.cpp
     src/environment/obstacle_detection/dynamic_obstacle_tracking.cpp
     src/environment/obstacle_detection/collision_prediction.cpp
+    src/environment/environment_management/environment_manager.cpp
+    src/environment/map_updates/map_updater.cpp
+    src/environment/obstacle_detection/obstacle_detector.cpp
 )
 
 set(AUTONOMOUS_NAVIGATOR_SOURCES
@@ -124,6 +144,9 @@ set(AUTONOMOUS_NAVIGATOR_SOURCES
     src/autonomous_navigator/execution/path_execution_controller.cpp
     src/autonomous_navigator/execution/real_time_navigation.cpp
     src/autonomous_navigator/execution/emergency_stop_handler.cpp
+    src/autonomous_navigator/navigation_core/navigation_core.cpp
+    src/autonomous_navigator/algorithm_selection/algorithm_selector.cpp
+    src/autonomous_navigator/execution/path_executor.cpp
 )
 
 set(UTILITIES_SOURCES
@@ -136,6 +159,7 @@ set(UTILITIES_SOURCES
     src/utilities/data_structures/binary_heap.cpp
     src/utilities/data_structures/fibonacci_heap.cpp
     src/utilities/data_structures/disjoint_set.cpp
+    src/utilities/configuration/config_manager.cpp
 )
 
 set(REPORTING_SOURCES
@@ -148,6 +172,9 @@ set(REPORTING_SOURCES
     src/reporting/visualization/ascii_graph_renderer.cpp
     src/reporting/visualization/console_path_printer.cpp
     src/reporting/visualization/svg_export.cpp
+    src/reporting/logging/navigation_logger.cpp
+    src/reporting/performance/performance_profiler.cpp
+    src/reporting/visualization/path_visualizer.cpp
 )
 
 set(ALL_SOURCES

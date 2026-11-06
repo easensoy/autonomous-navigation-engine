@@ -15,7 +15,11 @@
 #include <memory>
 #include <map>
 #include <numeric>
-#include <corecrt_math_defines.h>
+#include <exception>
+#include <functional>
+#include <string>
+#include <tuple>
+#include <utility>
 
 /**
  * ScalabilityTester: Comprehensive performance scaling analysis
