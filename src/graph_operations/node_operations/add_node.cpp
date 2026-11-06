@@ -2,6 +2,12 @@
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
+#include <cmath>
+#include <exception>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
 
 class NodeAdditionManager {
 private:

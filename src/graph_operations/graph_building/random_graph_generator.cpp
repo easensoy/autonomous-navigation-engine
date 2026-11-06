@@ -3,6 +3,9 @@
 #include <random>
 #include <algorithm>
 #include <cmath>
+#include <numeric>
+#include <string>
+#include <utility>
 
 class RandomGraphGenerator {
 private:

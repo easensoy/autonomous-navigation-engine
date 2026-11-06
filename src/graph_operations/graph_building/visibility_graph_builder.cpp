@@ -2,6 +2,8 @@
 #include <iostream>
 #include <cmath>
 #include <algorithm>
+#include <string>
+#include <utility>
 
 struct Point {
     double x, y;
@@ -204,7 +206,7 @@ private:
     
     bool lineSegmentsIntersect(const Point& p1, const Point& q1, 
                               const Point& p2, const Point& q2) {
-        auto orientation = [](const Point& p, const Point& q, const Point& r) {
+        auto orientation = [this](const Point& p, const Point& q, const Point& r) {
             double val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
             if (std::abs(val) < epsilon) return 0;  // collinear
             return (val > 0) ? 1 : 2;  // clockwise or counterclockwise
