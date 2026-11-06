@@ -1,7 +1,11 @@
 #include "pathfinding_algorithms/DFS.hpp"
+#include "dfs_internals.hpp"
 #include <stack>
 #include <iostream>
 #include <algorithm>
+#include <stdexcept>
+#include <unordered_set>
+#include <utility>
 
 DFS::DFS(const Graph* environment) : graph(environment) {
     if (!graph) {
@@ -229,3 +233,8 @@ void DFS::printSearchProcess(bool enable) {
     searchLogging = enable;
     std::cout << "[DFS] Search process logging " << (enable ? "enabled" : "disabled") << std::endl;
 }
+
+// Special members defined here, where dfs_internals.hpp makes the helper classes complete.
+DFS::~DFS() = default;
+DFS::DFS(DFS&& other) noexcept = default;
+DFS& DFS::operator=(DFS&& other) noexcept = default;
