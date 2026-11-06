@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <mutex>
 #include <numeric>
+#include <atomic>
+#include <chrono>
+#include <exception>
+#include <string>
+#include <thread>
 
 class IncrementalMapUpdateManager {
 private:

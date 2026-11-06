@@ -13,6 +13,9 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <exception>
+#include <stdexcept>
+#include <utility>
 
 class SensorDataIntegrationManager {
 private:

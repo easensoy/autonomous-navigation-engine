@@ -14,6 +14,9 @@
 #include <string>
 #include <algorithm>
 #include <numeric>
+#include <cmath>
+#include <exception>
+#include <stdexcept>
 
 class MapSynchronizationManager {
 private:
