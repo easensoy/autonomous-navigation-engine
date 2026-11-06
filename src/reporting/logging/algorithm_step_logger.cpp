@@ -5,6 +5,9 @@
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
+#include <ctime>
+#include <memory>
+#include <string>
 
 class AlgorithmStepLogger {
 private:

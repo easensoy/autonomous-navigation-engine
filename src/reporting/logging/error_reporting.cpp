@@ -5,6 +5,13 @@
 #include <iomanip>
 #include <sstream>
 #include <stack>
+#include <algorithm>
+#include <cmath>
+#include <ctime>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 enum class ErrorSeverity {
     LOW,
