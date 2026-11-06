@@ -3,6 +3,9 @@
 #include <iostream>
 #include <cassert>
 #include <chrono>
+#include <exception>
+#include <functional>
+#include <string>
 
 class BellmanFordTester {
 private:
@@ -11,6 +14,7 @@ private:
     int testsPassed = 0;
     
     void createSimpleGraph() {
+        testGraph.clear();
         for (int i = 0; i < 5; ++i) {
             testGraph.addNode(i, "Node" + std::to_string(i), i * 10.0, 0.0);
         }
@@ -29,10 +33,10 @@ private:
             testGraph.addNode(i, "Node" + std::to_string(i), i * 10.0, 0.0);
         }
         
-        testGraph.addEdge(0, 1, 5.0);
-        testGraph.addEdge(1, 2, -3.0);  // Negative weight
-        testGraph.addEdge(2, 3, 2.0);
-        testGraph.addEdge(0, 2, 8.0);   // Alternative path
+        testGraph.addEdge(0, 1, 5.0, false);
+        testGraph.addEdge(1, 2, -3.0, false);  // Negative weight (one-way)
+        testGraph.addEdge(2, 3, 2.0, false);
+        testGraph.addEdge(0, 2, 8.0, false);   // Alternative path
     }
     
     void runTest(const std::string& testName, std::function<bool()> test) {
@@ -134,9 +138,9 @@ public:
                 cycleGraph.addNode(i, "Node" + std::to_string(i), i * 10.0, 0.0);
             }
             
-            cycleGraph.addEdge(0, 1, 1.0);
-            cycleGraph.addEdge(1, 2, -3.0);
-            cycleGraph.addEdge(2, 0, 1.0); // Creates negative cycle: 1-3+1 = -1
+            cycleGraph.addEdge(0, 1, 1.0, false);
+            cycleGraph.addEdge(1, 2, -3.0, false);
+            cycleGraph.addEdge(2, 0, 1.0, false); // Creates negative cycle: 1-3+1 = -1
             
             BellmanFord bf(&cycleGraph);
             bool hasNegativeCycle = bf.detectNegativeCycle();

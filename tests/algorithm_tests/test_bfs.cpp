@@ -3,6 +3,10 @@
 #include <iostream>
 #include <cassert>
 #include <chrono>
+#include <exception>
+#include <functional>
+#include <string>
+#include <utility>
 
 class BFSTester {
 private:
@@ -11,6 +15,7 @@ private:
     int testsPassed = 0;
     
     void createSimpleGraph() {
+        testGraph.clear();
         // 3x3 grid for unweighted testing
         for (int i = 0; i < 9; ++i) {
             testGraph.addNode(i, "Node" + std::to_string(i), i % 3 * 10.0, (i / 3) * 10.0);
