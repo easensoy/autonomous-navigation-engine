@@ -11,8 +11,13 @@
 #include <mutex>
 #include <memory>
 #include <fstream>
+#include <atomic>
+#include <string>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX  // stop <windows.h> defining min/max macros
+#endif
 #include <windows.h>
 #include <psapi.h>
 #elif __APPLE__
@@ -151,7 +156,7 @@ public:
         MemoryOperation operation(operationName);
         operation.startSnapshot = takeMemorySnapshot(operationName + "_start");
         
-        activeOperations[operationName] = operation;
+        activeOperations.insert_or_assign(operationName, operation);
         
         if (enableDetailedTracking) {
             std::cout << "[MEMORY_PROF] Started memory tracking for: " << operationName 
@@ -222,7 +227,7 @@ public:
             allocation.stackTrace = captureStackTrace();
         }
         
-        allocations[address] = allocation;
+        allocations.insert_or_assign(address, allocation);
         totalAllocations++;
         currentAllocations++;
         totalMemoryAllocated += size;

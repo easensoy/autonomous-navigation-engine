@@ -9,6 +9,12 @@
 #include <cmath>
 #include <thread>
 #include <mutex>
+#include <exception>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <string>
+#include <utility>
 
 class ExecutionTimeAnalyzer {
 private:
@@ -68,7 +74,7 @@ private:
     size_t maxHistorySize;
     size_t rollingWindowSize;
     double performanceThreshold;
-    bool enableAutomaticReporting;
+    bool automaticReportingEnabled;
     
     // Thread safety
     mutable std::mutex analysisMutex;
@@ -81,7 +87,7 @@ public:
     ExecutionTimeAnalyzer() 
         : enableDetailedProfiling(true), enableRealTimeTracking(true), 
           maxHistorySize(10000), rollingWindowSize(100), performanceThreshold(1.0),
-          enableAutomaticReporting(false), reportingInterval(std::chrono::seconds(60)),
+          automaticReportingEnabled(false), reportingInterval(std::chrono::seconds(60)),
           lastReportTime(std::chrono::steady_clock::now()) {
         
         std::cout << "[EXEC_TIME] Execution time analyzer initialized" << std::endl;
@@ -94,7 +100,7 @@ public:
         result.startTime = std::chrono::steady_clock::now();
         result.inputSize = inputSize;
         
-        activeOperations[operationName] = result;
+        activeOperations.insert_or_assign(operationName, result);
         
         if (enableDetailedProfiling) {
             std::cout << "[EXEC_TIME] Started timing operation: " << operationName 
@@ -144,7 +150,7 @@ public:
         }
         
         // Automatic reporting
-        if (enableAutomaticReporting) {
+        if (automaticReportingEnabled) {
             auto currentTime = std::chrono::steady_clock::now();
             if (currentTime - lastReportTime > reportingInterval) {
                 generatePerformanceReport();
@@ -202,7 +208,7 @@ public:
         
         // Calculate benchmark statistics
         calculateBenchmarkStatistics(benchmark);
-        benchmarks[benchmarkName] = benchmark;
+        benchmarks.insert_or_assign(benchmarkName, benchmark);
         
         std::cout << "[EXEC_TIME] Benchmark completed: " << benchmarkName 
                   << " - Average: " << benchmark.averageTime << "s, "
@@ -218,7 +224,7 @@ public:
         
         for (const auto& [name, operation] : operations) {
             runBenchmark(name, operation, iterations);
-            results.push_back(benchmarks[name]);
+            results.push_back(benchmarks.at(name));  // runBenchmark just stored it
         }
         
         // Generate comparison report
@@ -383,7 +389,7 @@ public:
     }
     
     void enableAutomaticReporting(bool enable, std::chrono::duration<double> interval = std::chrono::seconds(60)) {
-        enableAutomaticReporting = enable;
+        automaticReportingEnabled = enable;
         reportingInterval = interval;
         std::cout << "[EXEC_TIME] Automatic reporting " << (enable ? "enabled" : "disabled") 
                   << " (interval: " << interval.count() << "s)" << std::endl;
@@ -555,7 +561,7 @@ public:
     }
     
     ~ScopedTimer() {
-        stopTimingOperation(operationName);
+        stopTimingOperation(operationName, {});
     }
 };
 
