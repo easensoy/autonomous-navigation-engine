@@ -3,6 +3,10 @@
 #include <vector>
 #include <functional>
 #include <stdexcept>
+#include <algorithm>
+#include <initializer_list>
+#include <iterator>
+#include <utility>
 
 template<typename T, typename Compare = std::greater<T>>
 class BinaryHeap {
