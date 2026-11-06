@@ -1,10 +1,15 @@
 #include "reporting/PathVisualiser.hpp"
+#include "renderers.hpp"
 #include <iostream>
 #include <sstream>
 #include <vector>
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class ASCIIGraphRenderer {
 private:

@@ -1,9 +1,14 @@
 #include "reporting/PathVisualiser.hpp"
+#include "renderers.hpp"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <string>
 
 class ConsolePathPrinter {
 private:
