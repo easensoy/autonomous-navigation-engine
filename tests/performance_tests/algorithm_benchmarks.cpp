@@ -13,6 +13,14 @@
 #include <iomanip>
 #include <fstream>
 #include <numeric>
+#include <cmath>
+#include <exception>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 /**
  * AlgorithmBenchmarker: Comprehensive Performance Analysis Suite

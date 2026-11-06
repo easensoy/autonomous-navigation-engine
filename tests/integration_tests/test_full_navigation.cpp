@@ -15,6 +15,12 @@
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <algorithm>
+#include <exception>
+#include <functional>
+#include <string>
+#include <tuple>
+#include <utility>
 
 class FullNavigationTester {
 private:
@@ -253,7 +259,7 @@ public:
             int stepCount = 0;
             bool allStepsSuccessful = true;
             
-            while (!executor.getExecutionState() == ExecutionState::COMPLETED && stepCount < maxSteps) {
+            while (executor.getExecutionState() != ExecutionState::COMPLETED && stepCount < maxSteps) {
                 bool stepResult = executor.executeNextStep();
                 if (!stepResult) {
                     allStepsSuccessful = false;
