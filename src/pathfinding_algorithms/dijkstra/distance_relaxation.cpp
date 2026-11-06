@@ -1,93 +1,90 @@
 #include "pathfinding_algorithms/Dijkstra.hpp"
 #include <iostream>
 #include <limits>
+#include <stdexcept>
+#include <memory>
+#include <unordered_map>
 
-class Dijkstra::DistanceRelaxationManager {
-private:
-    std::unordered_map<int, double> distances;
-    std::unordered_map<int, int> predecessors;
-    bool enableDetailedLogging;
-    
-public:
-    DistanceRelaxationManager() : enableDetailedLogging(false) {}
-    
-    void initializeDistances(const std::vector<int>& nodeIds, int startId) {
-        distances.clear();
-        predecessors.clear();
-        
-        for (int nodeId : nodeIds) {
-            distances[nodeId] = (nodeId == startId) ? 0.0 : std::numeric_limits<double>::infinity();
-            predecessors[nodeId] = -1;
-        }
-        
-        if (enableDetailedLogging) {
-            std::cout << "[DIJKSTRA] Initialized distances for " << nodeIds.size() << " nodes" << std::endl;
-            std::cout << "[DIJKSTRA] Start node " << startId << " distance set to 0" << std::endl;
-        }
+// Dijkstra::DistanceRelaxationManager is declared in Dijkstra.hpp; its members are defined here.
+
+Dijkstra::DistanceRelaxationManager::DistanceRelaxationManager() : enableDetailedLogging(false) {}
+
+void Dijkstra::DistanceRelaxationManager::initializeDistances(const std::vector<int>& nodeIds, int startId) {
+    distances.clear();
+    predecessors.clear();
+
+    for (int nodeId : nodeIds) {
+        distances[nodeId] = (nodeId == startId) ? 0.0 : std::numeric_limits<double>::infinity();
+        predecessors[nodeId] = -1;
     }
-    
-    bool relaxEdge(int fromNode, int toNode, double edgeWeight) {
-        if (distances.find(fromNode) == distances.end() || 
-            distances.find(toNode) == distances.end()) {
-            return false;
-        }
-        
-        double currentFromDistance = distances[fromNode];
-        double currentToDistance = distances[toNode];
-        double newDistance = currentFromDistance + edgeWeight;
-        
-        if (newDistance < currentToDistance) {
-            distances[toNode] = newDistance;
-            predecessors[toNode] = fromNode;
-            
-            if (enableDetailedLogging) {
-                std::cout << "[DIJKSTRA] Relaxed edge " << fromNode << " -> " << toNode 
-                          << ": " << currentToDistance << " -> " << newDistance << std::endl;
-            }
-            
-            return true;
-        }
-        
+
+    if (enableDetailedLogging) {
+        std::cout << "[DIJKSTRA] Initialized distances for " << nodeIds.size() << " nodes" << std::endl;
+        std::cout << "[DIJKSTRA] Start node " << startId << " distance set to 0" << std::endl;
+    }
+}
+
+bool Dijkstra::DistanceRelaxationManager::relaxEdge(int fromNode, int toNode, double edgeWeight) {
+    if (distances.find(fromNode) == distances.end() ||
+        distances.find(toNode) == distances.end()) {
         return false;
     }
-    
-    double getDistance(int nodeId) const {
-        auto it = distances.find(nodeId);
-        return (it != distances.end()) ? it->second : std::numeric_limits<double>::infinity();
-    }
-    
-    int getPredecessor(int nodeId) const {
-        auto it = predecessors.find(nodeId);
-        return (it != predecessors.end()) ? it->second : -1;
-    }
-    
-    std::unordered_map<int, double> getAllDistances() const {
-        return distances;
-    }
-    
-    std::unordered_map<int, int> getAllPredecessors() const {
-        return predecessors;
-    }
-    
-    void setLogging(bool enabled) {
-        enableDetailedLogging = enabled;
-    }
-    
-    bool isReachable(int nodeId) const {
-        auto it = distances.find(nodeId);
-        return it != distances.end() && it->second != std::numeric_limits<double>::infinity();
-    }
-    
-    size_t getReachableNodeCount() const {
-        size_t count = 0;
-        for (const auto& pair : distances) {
-            if (pair.second != std::numeric_limits<double>::infinity()) {
-                count++;
-            }
+
+    double currentFromDistance = distances[fromNode];
+    double currentToDistance = distances[toNode];
+    double newDistance = currentFromDistance + edgeWeight;
+
+    if (newDistance < currentToDistance) {
+        distances[toNode] = newDistance;
+        predecessors[toNode] = fromNode;
+
+        if (enableDetailedLogging) {
+            std::cout << "[DIJKSTRA] Relaxed edge " << fromNode << " -> " << toNode
+                      << ": " << currentToDistance << " -> " << newDistance << std::endl;
         }
-        return count;
+
+        return true;
     }
-};
+
+    return false;
+}
+
+double Dijkstra::DistanceRelaxationManager::getDistance(int nodeId) const {
+    auto it = distances.find(nodeId);
+    return (it != distances.end()) ? it->second : std::numeric_limits<double>::infinity();
+}
+
+int Dijkstra::DistanceRelaxationManager::getPredecessor(int nodeId) const {
+    auto it = predecessors.find(nodeId);
+    return (it != predecessors.end()) ? it->second : -1;
+}
+
+std::unordered_map<int, double> Dijkstra::DistanceRelaxationManager::getAllDistances() const {
+    return distances;
+}
+
+std::unordered_map<int, int> Dijkstra::DistanceRelaxationManager::getAllPredecessors() const {
+    return predecessors;
+}
+
+void Dijkstra::DistanceRelaxationManager::setLogging(bool enabled) {
+    enableDetailedLogging = enabled;
+}
+
+bool Dijkstra::DistanceRelaxationManager::isReachable(int nodeId) const {
+    auto it = distances.find(nodeId);
+    return it != distances.end() && it->second != std::numeric_limits<double>::infinity();
+}
+
+size_t Dijkstra::DistanceRelaxationManager::getReachableNodeCount() const {
+    size_t count = 0;
+    for (const auto& pair : distances) {
+        if (pair.second != std::numeric_limits<double>::infinity()) {
+            count++;
+        }
+    }
+    return count;
+}
 
 void Dijkstra::initializeDistanceRelaxation(const std::vector<int>& nodeIds, int startId) {
     if (!relaxationManager) {
