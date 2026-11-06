@@ -4,6 +4,10 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <exception>
+#include <functional>
+#include <string>
+#include <unordered_map>
 
 class DijkstraTester {
 private:
@@ -12,6 +16,7 @@ private:
     int testsPassed = 0;
     
     void createWeightedGraph() {
+        testGraph.clear();
         // Create a weighted graph for testing
         for (int i = 0; i < 6; ++i) {
             testGraph.addNode(i, "Node" + std::to_string(i), i * 10.0, 0.0);

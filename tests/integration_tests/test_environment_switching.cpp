@@ -8,6 +8,10 @@
 #include <cassert>
 #include <chrono>
 #include <memory>
+#include <cmath>
+#include <exception>
+#include <functional>
+#include <string>
 
 class EnvironmentSwitchingTester {
 private:
