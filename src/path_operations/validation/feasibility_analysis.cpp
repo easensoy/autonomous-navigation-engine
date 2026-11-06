@@ -4,6 +4,11 @@
 #include <cmath>
 #include <chrono>
 #include <unordered_set>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 class FeasibilityAnalyzer {
 private:

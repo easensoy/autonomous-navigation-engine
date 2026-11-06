@@ -3,6 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
 
 class ConstraintVerifier {
 private:
@@ -13,6 +17,7 @@ private:
     double maxDeviationAngle;
     size_t maxPathLength;
     
+public:
     struct ConstraintViolation {
         std::string type;
         std::string description;

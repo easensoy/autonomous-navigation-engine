@@ -6,6 +6,9 @@
 #include <vector>
 #include <queue>
 #include <unordered_set>
+#include <limits>
+#include <stdexcept>
+#include <utility>
 
 class SplineInterpolationSmoother {
 private:
