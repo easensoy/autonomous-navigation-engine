@@ -6,8 +6,11 @@
 #include <cmath>
 #include <random>
 #include <chrono>
-#include <corecrt_math_defines.h>
 #include <numeric>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class GlobalOptimizer {
 private:

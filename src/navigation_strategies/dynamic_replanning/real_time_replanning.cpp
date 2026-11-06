@@ -9,6 +9,12 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <algorithm>
+#include <exception>
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <stdexcept>
 
 class RealTimeReplanner {
 private:
@@ -46,9 +52,9 @@ private:
     // Threading and synchronization
     std::atomic<bool> isRunning;
     std::atomic<bool> replanningInProgress;
-    std::mutex pathMutex;
-    std::mutex obstacleMutex;
-    std::mutex taskMutex;
+    mutable std::mutex pathMutex;
+    mutable std::mutex obstacleMutex;
+    mutable std::mutex taskMutex;
     
     // Current state
     std::vector<int> currentPath;
@@ -292,7 +298,7 @@ public:
         {
             std::lock_guard<std::mutex> lock(obstacleMutex);
             for (int obstacle : obstacles) {
-                activeObstacles[obstacle] = TimedObstacle(obstacle, 1.0, false);
+                activeObstacles.insert_or_assign(obstacle, TimedObstacle(obstacle, 1.0, false));
             }
         }
         
@@ -354,7 +360,7 @@ public:
     
     void addPersistentObstacle(int nodeId) {
         std::lock_guard<std::mutex> lock(obstacleMutex);
-        activeObstacles[nodeId] = TimedObstacle(nodeId, 1.0, true);
+        activeObstacles.insert_or_assign(nodeId, TimedObstacle(nodeId, 1.0, true));
         std::cout << "[REALTIME] Added persistent obstacle at node " << nodeId << std::endl;
     }
     

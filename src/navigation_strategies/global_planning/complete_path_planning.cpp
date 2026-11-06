@@ -7,6 +7,13 @@
 #include <chrono>
 #include <algorithm>
 #include <unordered_set>
+#include <exception>
+#include <limits>
+#include <memory>
+#include <queue>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
 
 class CompletePathPlanner {
 private:
