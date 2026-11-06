@@ -6,6 +6,7 @@
 #include <memory>
 #include <chrono>
 #include <iomanip>
+#include <utility>
 
 class BellmanFord
 {
@@ -56,12 +57,12 @@ class BellmanFord
     public:
         explicit BellmanFord(const Graph* environment);
 
-        ~BellmanFord() = default;
+        ~BellmanFord();  // defined in the .cpp, where the helper classes are complete
 
         BellmanFord(const BellmanFord& other) = delete;
         BellmanFord& operator=(const BellmanFord& other) = delete;
-        BellmanFord(BellmanFord&& other) noexcept = default;
-        BellmanFord& operator=(BellmanFord&& other) noexcept = default;
+        BellmanFord(BellmanFord&& other) noexcept;
+        BellmanFord& operator=(BellmanFord&& other) noexcept;
 
         std::vector<int> findShortestPath(int startId, int goalId);
         BellmanFordResult computeShortestPaths(int startId);

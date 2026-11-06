@@ -110,8 +110,8 @@ public:
      * Finds optimal path between specified start and goal nodes using A* algorithm.
      * @param startId Identifier of the starting node
      * @param goalId Identifier of the destination node
-     * @return Vector of node identifiers representing the optimal path
-     * @throws std::invalid_argument if start or goal nodes do not exist
+     * @return Vector of node identifiers representing the optimal path; empty if either node
+     *         does not exist or the goal is unreachable
      */
     std::vector<int> findPath(int startId, int goalId) const;
     

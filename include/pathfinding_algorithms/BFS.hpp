@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <utility>
 
 class BFS
 {
@@ -44,12 +45,12 @@ class BFS
     public:
         explicit BFS(const Graph* environment);
         
-        ~BFS() = default;
+        ~BFS();  // defined in the .cpp, where the helper classes are complete
         
         BFS(const BFS& other) = delete;
         BFS& operator=(const BFS& other) = delete;
-        BFS(BFS&& other) noexcept = default;
-        BFS& operator=(BFS&& other) noexcept = default;
+        BFS(BFS&& other) noexcept;
+        BFS& operator=(BFS&& other) noexcept;
         
         std::vector<int> findPath(int startId, int goalId);
         std::vector<int> findShortestUnweightedPath(int startId, int goalId);
