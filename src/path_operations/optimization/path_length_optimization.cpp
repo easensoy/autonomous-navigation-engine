@@ -6,6 +6,9 @@
 #include <vector>
 #include <queue>
 #include <unordered_set>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class PathLengthOptimizer {
 private:

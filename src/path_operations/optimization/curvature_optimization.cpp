@@ -5,6 +5,10 @@
 #include <cmath>
 #include <vector>
 #include <queue>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class CurvatureOptimizer {
 private:

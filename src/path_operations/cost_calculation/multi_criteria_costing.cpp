@@ -5,6 +5,9 @@
 #include <numeric>
 #include <unordered_map>
 #include <vector>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 class MultiCriteriaCostAnalyzer {
 private:
