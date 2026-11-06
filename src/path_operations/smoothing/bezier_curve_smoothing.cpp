@@ -4,6 +4,11 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <limits>
+#include <queue>
+#include <stdexcept>
+#include <unordered_set>
+#include <utility>
 
 class BezierCurveSmoother {
 private:

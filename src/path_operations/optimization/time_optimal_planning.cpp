@@ -7,6 +7,10 @@
 #include <queue>
 #include <chrono>
 #include <unordered_map>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
+#include <utility>
 
 class TimeOptimalPlanner {
 private:
@@ -83,7 +87,7 @@ private:
     VelocityProfile defaultProfile;
     double timeHorizon;
     bool enableDynamicObstacles;
-    bool enableTrafficModel;
+    bool trafficModelEnabled;
     bool enableWeatherEffects;
     double congestionThreshold;
     int maxPlanningIterations;
@@ -152,7 +156,7 @@ private:
     }
     
     double getCongestionFactor(int fromNode, int toNode) const {
-        if (!enableTrafficModel) return 1.0;
+        if (!trafficModelEnabled) return 1.0;
         
         // Check node congestion levels
         double avgCongestion = 0.0;
@@ -249,7 +253,7 @@ private:
         result.method = "Congestion Avoidance";
         result.optimizedPath = originalPath;
         
-        if (!enableTrafficModel) {
+        if (!trafficModelEnabled) {
             std::cout << "[TIME_OPTIMAL] Traffic model disabled, returning original path" << std::endl;
             return optimizeWithVelocityPlanning(originalPath);
         }
@@ -471,7 +475,7 @@ private:
 public:
     TimeOptimalPlanner(const Graph* environment) 
         : graph(environment), timeHorizon(300.0), enableDynamicObstacles(false),
-          enableTrafficModel(false), enableWeatherEffects(false), congestionThreshold(0.3),
+          trafficModelEnabled(false), enableWeatherEffects(false), congestionThreshold(0.3),
           maxPlanningIterations(50) {
         
         if (!graph) {
@@ -557,7 +561,7 @@ public:
     }
     
     void enableTrafficModel(bool enable) {
-        enableTrafficModel = enable;
+        trafficModelEnabled = enable;
         if (!enable) {
             trafficModel.nodeCongestionLevels.clear();
             trafficModel.edgeTrafficFactors.clear();
@@ -602,7 +606,7 @@ public:
         std::cout << "[TIME_OPTIMAL]   Cruise velocity: " << defaultProfile.cruiseVelocity << std::endl;
         std::cout << "[TIME_OPTIMAL]   Max acceleration: " << defaultProfile.maxAcceleration << std::endl;
         std::cout << "[TIME_OPTIMAL]   Max deceleration: " << defaultProfile.maxDeceleration << std::endl;
-        std::cout << "[TIME_OPTIMAL]   Traffic model: " << (enableTrafficModel ? "Enabled" : "Disabled") << std::endl;
+        std::cout << "[TIME_OPTIMAL]   Traffic model: " << (trafficModelEnabled ? "Enabled" : "Disabled") << std::endl;
         std::cout << "[TIME_OPTIMAL]   Dynamic obstacles: " << (enableDynamicObstacles ? "Enabled" : "Disabled") << std::endl;
         std::cout << "[TIME_OPTIMAL]   Weather effects: " << (enableWeatherEffects ? "Enabled" : "Disabled") << std::endl;
         std::cout << "[TIME_OPTIMAL]   Active obstacles: " << dynamicObstacles.size() << std::endl;

@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <queue>
+#include <stdexcept>
+#include <unordered_set>
 
 class CornerCuttingSmoother {
 private:
