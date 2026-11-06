@@ -4,6 +4,10 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
+#include <exception>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 class EnvironmentSetter {
 private:
@@ -130,7 +134,7 @@ public:
         }
         
         try {
-            environmentManager->setEnvironment(lastTransition.sourceEnvironment, lastTransition.sourceName);
+            environmentManager->applyEnvironment(lastTransition.sourceEnvironment, lastTransition.sourceName);
             
             std::cout << "[SET_ENVIRONMENT] Successfully rolled back to environment: " 
                       << lastTransition.sourceName << std::endl;
@@ -269,8 +273,8 @@ private:
                 environmentManager->backupCurrentEnvironment();
             }
             
-            // Set the new environment
-            environmentManager->setEnvironment(newEnv, name);
+            // Commit the new environment (setEnvironment() would re-enter this setter)
+            environmentManager->applyEnvironment(newEnv, name);
             
             // Validate the transition was successful
             if (!environmentManager->validateCurrentEnvironment()) {
@@ -449,8 +453,21 @@ private:
     }
 };
 
-// Global environment setter instance
-static std::unique_ptr<EnvironmentSetter> g_environmentSetter;
+// One setter per EnvironmentManager. A single global setter kept a pointer to the first manager
+// and was used, dangling, by every later one; the manager's destructor releases its entry.
+static std::unordered_map<const EnvironmentManager*, std::unique_ptr<EnvironmentSetter>> g_environmentSetters;
+
+static EnvironmentSetter& setterFor(EnvironmentManager* manager) {
+    auto& setter = g_environmentSetters[manager];
+    if (!setter) {
+        setter = std::make_unique<EnvironmentSetter>(manager);
+    }
+    return *setter;
+}
+
+void releaseEnvironmentSetter(const EnvironmentManager* manager) {
+    g_environmentSetters.erase(manager);
+}
 
 // Implementation methods for EnvironmentManager
 void EnvironmentManager::setEnvironment(std::shared_ptr<Graph> newEnvironment) {
@@ -459,53 +476,21 @@ void EnvironmentManager::setEnvironment(std::shared_ptr<Graph> newEnvironment) {
 
 void EnvironmentManager::setEnvironment(std::shared_ptr<Graph> newEnvironment, const std::string& name) {
     std::cout << "[ENV_MANAGER] Setting environment: " << name << std::endl;
-    
-    if (!g_environmentSetter) {
-        g_environmentSetter = std::make_unique<EnvironmentSetter>(this);
-    }
-    
-    if (!g_environmentSetter->setEnvironmentWithValidation(newEnvironment, name)) {
+
+    // The setter validates the environment, commits it through applyEnvironment() and checks the
+    // result, so this manager's state is already updated when it returns true.
+    if (!setterFor(this).setEnvironmentWithValidation(newEnvironment, name)) {
         throw std::runtime_error("Failed to set environment: " + name);
     }
-    
-    // Update internal state
-    currentEnvironment = newEnvironment;
-    environmentName = name;
-    isEnvironmentValid = true;
-    
-    // Add to history
-    environmentHistory.push_back(newEnvironment);
-    if (environmentHistory.size() > 5) {
-        environmentHistory.erase(environmentHistory.begin());
-    }
-    
-    logEnvironmentChange("", name);
-    validateEnvironmentIntegrity();
 }
 
 bool EnvironmentManager::trySetEnvironment(std::shared_ptr<Graph> newEnvironment) {
     std::cout << "[ENV_MANAGER] Attempting to set environment safely" << std::endl;
     
     try {
-        if (!g_environmentSetter) {
-            g_environmentSetter = std::make_unique<EnvironmentSetter>(this);
-        }
-        
-        bool success = g_environmentSetter->setEnvironmentSafely(newEnvironment, "TrialEnvironment");
-        
-        if (success) {
-            currentEnvironment = newEnvironment;
-            environmentName = "TrialEnvironment";
-            isEnvironmentValid = true;
-            
-            environmentHistory.push_back(newEnvironment);
-            if (environmentHistory.size() > 5) {
-                environmentHistory.erase(environmentHistory.begin());
-            }
-        }
-        
-        return success;
-        
+        // On success the setter has already committed the environment through applyEnvironment().
+        return setterFor(this).setEnvironmentSafely(newEnvironment, "TrialEnvironment");
+                
     } catch (const std::exception& e) {
         std::cout << "[ENV_MANAGER] Exception in trySetEnvironment: " << e.what() << std::endl;
         return false;

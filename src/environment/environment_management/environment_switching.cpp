@@ -2,6 +2,12 @@
 #include <iostream>
 #include <unordered_set>
 #include <algorithm>
+#include <numeric>
+#include <chrono>
+#include <exception>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 class EnvironmentSwitchingManager {
 private:

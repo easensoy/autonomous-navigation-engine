@@ -4,6 +4,13 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <exception>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 class EnvironmentPersistenceManager {
 private:
@@ -86,11 +93,12 @@ public:
             }
             
             // Validate file format
-            if (!validateFileFormat(file)) {
+            std::string storedName;
+            if (!validateFileFormat(file) || !readEnvironmentHeaderFields(file, storedName)) {
                 std::cout << "[ENV_PERSISTENCE] Invalid file format: " << fullPath << std::endl;
                 return false;
             }
-            
+                        
             // Create new environment
             auto newEnvironment = std::make_shared<Graph>();
             
@@ -304,19 +312,23 @@ private:
                 return false;
             }
             
-            if (!validateFileFormat(file)) {
+            std::string storedName;
+            if (!validateFileFormat(file) || !readEnvironmentHeaderFields(file, storedName)) {
                 return false;
             }
-            
+
             auto newEnvironment = std::make_shared<Graph>();
-            
-            readNodeData(file, newEnvironment.get());
-            readEdgeData(file, newEnvironment.get());
+
+            if (!readNodeData(file, newEnvironment.get()) || !readEdgeData(file, newEnvironment.get())) {
+                return false;
+            }
             readEnvironmentProperties(file);
-            
+
             file.close();
-            
-            std::string environmentName = std::filesystem::path(fullPath).stem().string();
+
+            // A restored backup keeps the name it was saved under.
+            std::string environmentName = storedName.empty() ? std::filesystem::path(fullPath).stem().string()
+                                                             : storedName;
             environmentManager->setEnvironment(newEnvironment, environmentName);
             
             return true;
@@ -371,19 +383,28 @@ private:
     }
     
     bool writeEdgeData(std::ofstream& file, const Graph* environment) const {
-        // Count total edges
-        uint32_t totalEdges = 0;
+        // Each two-way edge is stored in both adjacency lists; write it once (from < to), because
+        // reading it back with addEdge(..., true) recreates both directions.
         std::vector<int> nodeIds = environment->getAllNodeIds();
+        auto writtenOnce = [](const Edge& edge) {
+            return !edge.isBidirectional() || edge.getFromNode() < edge.getToNode();
+        };
+        uint32_t totalEdges = 0;
         for (int nodeId : nodeIds) {
-            totalEdges += static_cast<uint32_t>(environment->getEdgesFrom(nodeId).size());
+            for (const Edge& edge : environment->getEdgesFrom(nodeId)) {
+                totalEdges += writtenOnce(edge) ? 1u : 0u;
+            }
         }
-        
+
         file.write(reinterpret_cast<const char*>(&totalEdges), sizeof(totalEdges));
-        
+
         // Write edge data
         for (int nodeId : nodeIds) {
             const std::vector<Edge>& edges = environment->getEdgesFrom(nodeId);
             for (const Edge& edge : edges) {
+                if (!writtenOnce(edge)) {
+                    continue;
+                }
                 int fromNode = edge.getFromNode();
                 int toNode = edge.getToNode();
                 double weight = edge.getWeight();
@@ -412,10 +433,26 @@ private:
     bool validateFileFormat(std::ifstream& file) const {
         const std::string expectedHeader = "NAVENV_V1.0";
         std::string fileHeader(expectedHeader.length(), '\0');
-        
+
         file.read(&fileHeader[0], expectedHeader.length());
-        
+
         return fileHeader == expectedHeader;
+    }
+
+    // Reads the rest of the header written by writeEnvironmentHeader: timestamp, then the name.
+    bool readEnvironmentHeaderFields(std::ifstream& file, std::string& environmentName) const {
+        std::time_t timestamp{};
+        file.read(reinterpret_cast<char*>(&timestamp), sizeof(timestamp));
+        uint32_t nameLength = 0;
+        file.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
+        if (!file || nameLength > 4096) {
+            return false;
+        }
+        environmentName.assign(nameLength, '\0');
+        if (nameLength > 0) {
+            file.read(&environmentName[0], nameLength);
+        }
+        return static_cast<bool>(file);
     }
     
     bool readNodeData(std::ifstream& file, Graph* environment) const {
@@ -562,25 +599,38 @@ private:
     }
 };
 
+// One persistence helper per EnvironmentManager. The previous function-local statics each kept a
+// pointer to the first manager that called them; the manager's destructor releases its entry.
+static std::unordered_map<const EnvironmentManager*, std::unique_ptr<EnvironmentPersistenceManager>> g_persistenceManagers;
+
+static EnvironmentPersistenceManager& persistenceFor(const EnvironmentManager* manager) {
+    auto& helper = g_persistenceManagers[manager];
+    if (!helper) {
+        helper = std::make_unique<EnvironmentPersistenceManager>(const_cast<EnvironmentManager*>(manager));
+    }
+    return *helper;
+}
+
+void releaseEnvironmentPersistence(const EnvironmentManager* manager) {
+    g_persistenceManagers.erase(manager);
+}
+
 // Implementation methods for EnvironmentManager
 void EnvironmentManager::saveEnvironment(const std::string& filename) const {
-    static EnvironmentPersistenceManager persistenceManager(const_cast<EnvironmentManager*>(this));
-    persistenceManager.saveEnvironmentToFile(filename);
+    persistenceFor(this).saveEnvironmentToFile(filename);
 }
 
 bool EnvironmentManager::loadEnvironment(const std::string& filename) {
-    static EnvironmentPersistenceManager persistenceManager(this);
-    return persistenceManager.loadEnvironmentFromFile(filename);
+    return persistenceFor(this).loadEnvironmentFromFile(filename);
 }
 
 void EnvironmentManager::backupCurrentEnvironment() {
-    static EnvironmentPersistenceManager persistenceManager(this);
-    persistenceManager.createEnvironmentBackup();
+    persistenceFor(this).createEnvironmentBackup();
 }
 
 bool EnvironmentManager::restorePreviousEnvironment() {
-    static EnvironmentPersistenceManager persistenceManager(this);
-    
+    EnvironmentPersistenceManager& persistenceManager = persistenceFor(this);
+        
     std::vector<std::string> backups = persistenceManager.listAvailableBackups();
     if (!backups.empty()) {
         return persistenceManager.restoreFromBackup(backups[0]); // Restore most recent
