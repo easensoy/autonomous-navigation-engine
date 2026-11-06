@@ -1,4 +1,4 @@
-#include "environment/ObstacleDetection.hpp"
+#include "environment/ObstacleDetector.hpp"
 #include <iostream>
 #include <cmath>
 #include <algorithm>
@@ -12,6 +12,11 @@
 #include <memory>
 #include <fstream>
 #include <queue>
+#include <exception>
+#include <functional>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class StaticObstacleDetector {
 private:

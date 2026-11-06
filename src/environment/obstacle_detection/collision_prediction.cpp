@@ -1,4 +1,4 @@
-#include "environment/ObstacleDetection.hpp"
+#include "environment/ObstacleDetector.hpp"
 #include <iostream>
 #include <cmath>
 #include <algorithm>
@@ -9,6 +9,11 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <functional>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class CollisionPredictionManager {
 private:

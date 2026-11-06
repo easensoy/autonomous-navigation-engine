@@ -1,4 +1,4 @@
-#include "environment/ObstacleDetection.hpp"
+#include "environment/ObstacleDetector.hpp"
 #include <iostream>
 #include <cmath>
 #include <algorithm>
@@ -11,6 +11,13 @@
 #include <vector>
 #include <memory>
 #include <numeric>
+#include <exception>
+#include <functional>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <utility>
 
 class DynamicObstacleTracker {
 private:
