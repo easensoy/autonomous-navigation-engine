@@ -3,6 +3,7 @@
 #include "GlobalPathPlanner.hpp"
 #include <vector>
 #include <chrono>
+#include <memory>
 
 class DynamicReplanner
 {
@@ -13,6 +14,10 @@ class DynamicReplanner
         std::vector<int> knownObstacles;
         std::chrono::steady_clock::time_point lastReplanTime;
         double replanningInterval;
+        size_t replanningCount;
+        std::chrono::steady_clock::time_point creationTime;
+
+        std::vector<int> planAvoidingObstacles(int startId, int goalId) const;
 
         bool requiresReplanning(const std::vector<int>& newObstacles) const;
         void updateObstacleMap(const std::vector<int>& newObstacles);

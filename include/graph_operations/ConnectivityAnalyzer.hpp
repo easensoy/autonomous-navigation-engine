@@ -2,6 +2,7 @@
 #include "core/Graph.hpp"
 #include <vector>
 #include <unordered_set>
+#include <utility>
 
 struct ConnectivityMetrics {
     bool isConnected;

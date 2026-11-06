@@ -2,6 +2,8 @@
 #include "core/Graph.hpp"
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <utility>
 
 enum class GraphType {
     GRID,
