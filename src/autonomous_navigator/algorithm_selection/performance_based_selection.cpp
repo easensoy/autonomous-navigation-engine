@@ -4,6 +4,8 @@
 #include <numeric>
 #include <chrono>
 #include <cmath>
+#include <string>
+#include <unordered_map>
 
 class PerformanceTracker {
 private:

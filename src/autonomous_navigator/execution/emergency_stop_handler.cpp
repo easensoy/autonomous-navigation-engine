@@ -1,16 +1,20 @@
 #include "autonomous_navigator/PathExecutor.hpp"
+#include <algorithm>
 #include <iostream>
 #include <thread>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <chrono>
+#include <functional>
+#include <memory>
+#include <string>
 
 class EmergencyStopManager {
 private:
     std::atomic<bool> emergencyStopTriggered;
     std::atomic<bool> emergencyStopActive;
     mutable std::mutex emergencyMutex;
-    std::mutex emergencyMutex;
     std::condition_variable emergencyCondition;
     std::chrono::steady_clock::time_point emergencyTriggerTime;
     std::string emergencyReason;
@@ -132,9 +136,10 @@ public:
             return;
         }
         
-        // Check for waypoint index bounds
-        if (static_cast<size_t>(currentWaypoint) >= path.size()) {
-            initiateEmergencyStop("Current waypoint index out of bounds");
+        // The waypoint passed in is a node id, so check that it is on the path being executed
+        // (comparing it with path.size() treated it as an index).
+        if (std::find(path.begin(), path.end(), currentWaypoint) == path.end()) {
+            initiateEmergencyStop("Current waypoint is not on the executed path");
             return;
         }
         
@@ -309,18 +314,30 @@ bool PathExecutor::executeNextStep() {
     return true;
 }
 
+// The executor whose errorCallback the emergency manager currently reports to.
+static const PathExecutor* g_emergencyCallbackOwner = nullptr;
+
+// Called by ~PathExecutor so the shared emergency manager never calls into a destroyed executor.
+void detachEmergencyCallback(const PathExecutor* executor) {
+    if (g_emergencyManager && g_emergencyCallbackOwner == executor) {
+        g_emergencyManager->setEmergencyCallback(nullptr);
+        g_emergencyCallbackOwner = nullptr;
+    }
+}
+
 bool PathExecutor::startExecution() {
     // Initialize emergency manager if not already done
     if (!g_emergencyManager) {
         g_emergencyManager = std::make_unique<EmergencyStopManager>();
-        
-        // Set up emergency callback
-        g_emergencyManager->setEmergencyCallback([this](const std::string& reason) {
-            if (errorCallback) {
-                errorCallback("Emergency stop: " + reason);
-            }
-        });
     }
+
+    // Report emergencies to the executor that is starting now
+    g_emergencyManager->setEmergencyCallback([this](const std::string& reason) {
+        if (errorCallback) {
+            errorCallback("Emergency stop: " + reason);
+        }
+    });
+    g_emergencyCallbackOwner = this;
     
     // Check for active emergency stop
     if (g_emergencyManager->isEmergencyStopActive()) {
