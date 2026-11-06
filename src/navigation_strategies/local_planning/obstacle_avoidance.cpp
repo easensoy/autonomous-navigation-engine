@@ -4,7 +4,9 @@
 #include <cmath>
 #include <queue>
 #include <unordered_set>
-#include <corecrt_math_defines.h>
+#include <limits>
+#include <stdexcept>
+#include <unordered_map>
 
 class ObstacleAvoidance {
 private:

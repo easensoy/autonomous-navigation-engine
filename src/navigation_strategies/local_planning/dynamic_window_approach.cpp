@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <limits>
+#include <stdexcept>
+#include <utility>
 
 class DynamicWindowApproach {
 private:
