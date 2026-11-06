@@ -1,9 +1,15 @@
 #include "reporting/PathVisualiser.hpp"
+#include "renderers.hpp"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class SVGExporter {
 private:
