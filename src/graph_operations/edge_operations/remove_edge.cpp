@@ -1,6 +1,7 @@
 #include "core/Graph.hpp"
 #include <iostream>
 #include <algorithm>
+#include <utility>
 
 bool Graph::removeEdge(int fromId, int toId) {
     std::cout << "[GRAPH] Attempting to remove edge: " << fromId << " -> " << toId << std::endl;

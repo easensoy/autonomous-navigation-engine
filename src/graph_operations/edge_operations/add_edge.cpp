@@ -1,4 +1,4 @@
-#include "graph_operations/GraphAnalysis.hpp"
+#include "core/Graph.hpp"
 #include <iostream>
 #include <algorithm>
 #include <chrono>
@@ -8,6 +8,13 @@
 #include <vector>
 #include <memory>
 #include <cmath>
+#include <exception>
+#include <functional>
+#include <numeric>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <utility>
 
 class EdgeAdditionAnalyzer {
 private:

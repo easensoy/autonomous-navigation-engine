@@ -1,4 +1,4 @@
-#include "graph_operations/GraphAnalysis.hpp"
+#include "core/Graph.hpp"
 #include <iostream>
 #include <algorithm>
 #include <chrono>
@@ -8,6 +8,11 @@
 #include <vector>
 #include <memory>
 #include <queue>
+#include <exception>
+#include <functional>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 class EdgeContractionAnalyzer {
 private:
