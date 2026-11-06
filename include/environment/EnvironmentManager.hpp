@@ -14,10 +14,15 @@ private:
     void validateEnvironmentIntegrity();
     void logEnvironmentChange(const std::string& oldName, const std::string& newName);
 
+    // Commits an environment without validation. Only EnvironmentSetter calls it, after it has
+    // validated the change; going through setEnvironment() again would re-enter the setter.
+    void applyEnvironment(std::shared_ptr<Graph> environment, const std::string& name);
+    friend class EnvironmentSetter;
+
 public:
     EnvironmentManager();
     explicit EnvironmentManager(std::shared_ptr<Graph> environment);
-    ~EnvironmentManager() = default;
+    ~EnvironmentManager();  // releases this manager's setter and persistence helpers
     
     void setEnvironment(std::shared_ptr<Graph> newEnvironment);
     void setEnvironment(std::shared_ptr<Graph> newEnvironment, const std::string& name);

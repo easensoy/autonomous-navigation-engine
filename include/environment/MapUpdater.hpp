@@ -2,6 +2,8 @@
 #include "core/Graph.hpp"
 #include <vector>
 #include <chrono>
+#include <string>
+#include <utility>
 
 enum class UpdateType {
     NODE_ADDITION,
