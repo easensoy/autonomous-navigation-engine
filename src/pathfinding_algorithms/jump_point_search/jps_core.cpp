@@ -6,6 +6,7 @@
 #include <iostream>
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <stdexcept>
@@ -39,16 +40,19 @@ std::vector<int> JumpPointSearch::findPath(int startId, int goalId) {
     std::cout << "[JPS] Finding path from node " << startId << " to node " << goalId << std::endl;
     
     if (!graph->hasNode(startId) || !graph->hasNode(goalId)) {
-        throw std::invalid_argument("Start or goal node does not exist");
+        return {};  // unknown start or goal: no route, as with the other searches
+    }
+    if (!mapGraphOntoGrid()) {
+        return {};
     }
     
     const Node& startNode = graph->getNode(startId);
     const Node& goalNode = graph->getNode(goalId);
     
-    int startX = static_cast<int>(startNode.getX());
-    int startY = static_cast<int>(startNode.getY());
-    int goalX = static_cast<int>(goalNode.getX());
-    int goalY = static_cast<int>(goalNode.getY());
+    int startX = static_cast<int>(std::lround(startNode.getX()));
+    int startY = static_cast<int>(std::lround(startNode.getY()));
+    int goalX = static_cast<int>(std::lround(goalNode.getX()));
+    int goalY = static_cast<int>(std::lround(goalNode.getY()));
     
     std::cout << "[JPS] Grid coordinates: Start(" << startX << "," << startY 
               << ") Goal(" << goalX << "," << goalY << ")" << std::endl;
@@ -157,6 +161,9 @@ bool JumpPointSearch::hasObstacle(int x, int y) const {
         return true;
     }
     
+    if (cellNodes.find(cellKey(x, y)) == cellNodes.end()) {
+        return true;  // no node stands on this cell
+    }
     std::string key = std::to_string(x) + "," + std::to_string(y);
     return obstacles.find(key) != obstacles.end();
 }
@@ -237,6 +244,9 @@ double JumpPointSearch::heuristic(int x1, int y1, int x2, int y2) const {
 }
 
 std::vector<std::pair<int, int>> JumpPointSearch::getJumpPoints(int startX, int startY, int goalX, int goalY) {
+    if (!mapGraphOntoGrid()) {
+        return {};
+    }
     return findJumpPoints(startX, startY, goalX, goalY);
 }
 
@@ -308,19 +318,74 @@ std::vector<int> JumpPointSearch::reconstructGridPath(const std::unordered_map<s
     
     std::reverse(gridPath.begin(), gridPath.end());
     
-    std::vector<int> nodePath;
-    for (auto [x, y] : gridPath) {
-        for (int nodeId : graph->getAllNodeIds()) {
-            const Node& node = graph->getNode(nodeId);
-            if (static_cast<int>(node.getX()) == x && static_cast<int>(node.getY()) == y) {
-                nodePath.push_back(nodeId);
-                break;
-            }
-        }
+    if (gridPath.empty() || gridPath.front() != std::make_pair(startX, startY)) {
+        return {};  // the parent chain does not lead back to the start
     }
-    
+    std::vector<int> nodePath = expandToGraphRoute(gridPath);
+    if (nodePath.empty()) {
+        std::cout << "[JPS] The grid route does not follow the graph's edges; no route returned" << std::endl;
+        return {};
+    }
     std::cout << "[JPS] Reconstructed path with " << nodePath.size() << " nodes" << std::endl;
     return nodePath;
+}
+
+long long JumpPointSearch::cellKey(int x, int y) const {
+    return static_cast<long long>(y) * gridWidth + x;
+}
+
+bool JumpPointSearch::mapGraphOntoGrid() {
+    cellNodes.clear();
+    for (int nodeId : graph->getAllNodeIds()) {
+        const Node& node = graph->getNode(nodeId);
+        const int x = static_cast<int>(std::lround(node.getX()));
+        const int y = static_cast<int>(std::lround(node.getY()));
+        if (!isValidPosition(x, y)) {
+            continue;  // outside the grid this search covers
+        }
+        const auto placed = cellNodes.emplace(cellKey(x, y), nodeId);
+        if (!placed.second) {
+            std::cout << "[JPS] Nodes " << placed.first->second << " and " << nodeId << " share grid cell (" << x
+                      << "," << y << "); Jump Point Search needs one node per cell" << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+// Consecutive jump points are joined by a straight or diagonal run of cells. Walk each run one cell
+// at a time and map every cell to its node; give up unless each step is an edge of the graph.
+std::vector<int> JumpPointSearch::expandToGraphRoute(const std::vector<std::pair<int, int>>& jumpPoints) const {
+    std::vector<int> route;
+    for (size_t i = 0; i < jumpPoints.size(); ++i) {
+        const auto [x, y] = jumpPoints[i];
+        if (i == 0) {
+            const auto first = cellNodes.find(cellKey(x, y));
+            if (first == cellNodes.end()) {
+                return {};
+            }
+            route.push_back(first->second);
+            continue;
+        }
+        const auto [fromX, fromY] = jumpPoints[i - 1];
+        const int runX = std::abs(x - fromX);
+        const int runY = std::abs(y - fromY);
+        if (runX != 0 && runY != 0 && runX != runY) {
+            return {};  // neither straight nor diagonal
+        }
+        const int stepX = (x > fromX) - (x < fromX);
+        const int stepY = (y > fromY) - (y < fromY);
+        for (int cx = fromX, cy = fromY; cx != x || cy != y;) {
+            cx += stepX;
+            cy += stepY;
+            const auto cell = cellNodes.find(cellKey(cx, cy));
+            if (cell == cellNodes.end() || !graph->hasEdge(route.back(), cell->second)) {
+                return {};
+            }
+            route.push_back(cell->second);
+        }
+    }
+    return route;
 }
 
 // Special members defined here, where jps_internals.hpp makes the helper classes complete.
