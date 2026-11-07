@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 
 class EmergencyStopManager {
 private:
@@ -27,26 +28,30 @@ public:
                            autoRecoveryEnabled(false), autoRecoveryDelay(5.0) {}
     
     void initiateEmergencyStop(const std::string& reason) {
-        std::lock_guard<std::mutex> lock(emergencyMutex);
-        
-        if (emergencyStopActive.load()) {
-            std::cout << "[EMERGENCY_STOP] Emergency stop already active, reason: " << emergencyReason << std::endl;
-            return;
+        std::function<void(const std::string&)> callback;
+        {
+            std::lock_guard<std::mutex> lock(emergencyMutex);
+            if (emergencyStopActive.load()) {
+                std::cout << "[EMERGENCY_STOP] Emergency stop already active, reason: " << emergencyReason << std::endl;
+                return;
+            }
+            emergencyStopTriggered.store(true);
+            emergencyStopActive.store(true);
+            emergencyTriggerTime = std::chrono::steady_clock::now();
+            emergencyReason = reason;
+            callback = emergencyCallback;  // a copy: the callback may install a new one while it runs
         }
-        
-        emergencyStopTriggered.store(true);
-        emergencyStopActive.store(true);
-        emergencyTriggerTime = std::chrono::steady_clock::now();
-        emergencyReason = reason;
-        
+
         std::cout << "[EMERGENCY_STOP] EMERGENCY STOP INITIATED!" << std::endl;
         std::cout << "[EMERGENCY_STOP] Reason: " << reason << std::endl;
         std::cout << "[EMERGENCY_STOP] All navigation operations halted immediately" << std::endl;
-        
-        if (emergencyCallback) {
-            emergencyCallback(reason);
+
+        // Called without the lock held: the callback may call back into this manager, for example
+        // through PathExecutor::startExecution, which reads the emergency reason.
+        if (callback) {
+            callback(reason);
         }
-        
+
         performImmediateStop();
         
         if (autoRecoveryEnabled) {
@@ -89,7 +94,8 @@ public:
     }
     
     void setEmergencyCallback(std::function<void(const std::string&)> callback) {
-        emergencyCallback = callback;
+        std::lock_guard<std::mutex> lock(emergencyMutex);
+        emergencyCallback = std::move(callback);
     }
     
     void enableAutoRecovery(bool enable, double delaySeconds = 5.0) {
@@ -219,6 +225,9 @@ private:
 // Global emergency stop manager
 static std::unique_ptr<EmergencyStopManager> g_emergencyManager;
 
+// The executor whose errorCallback the emergency manager currently reports to.
+static const PathExecutor* g_emergencyCallbackOwner = nullptr;
+
 void PathExecutor::emergencyStop() {
     std::cout << "[PATH_EXECUTOR] Emergency stop requested" << std::endl;
     
@@ -236,10 +245,13 @@ void PathExecutor::emergencyStop() {
                   " (node " + std::to_string(executionPath[currentWaypointIndex]) + ")";
     }
     
+    // When this call starts a new emergency and the manager reports to this executor, the manager's
+    // callback already passes the stop to errorCallback. Report it here only otherwise, so the error
+    // callback hears about each stop once.
+    const bool managerReportsHere = g_emergencyCallbackOwner == this && !g_emergencyManager->isEmergencyStopActive();
     g_emergencyManager->initiateEmergencyStop(reason);
-    
-    // Call error callback if set
-    if (errorCallback) {
+
+    if (errorCallback && !managerReportsHere) {
         errorCallback("Emergency stop activated: " + reason);
     }
     
@@ -313,9 +325,6 @@ bool PathExecutor::executeNextStep() {
     
     return true;
 }
-
-// The executor whose errorCallback the emergency manager currently reports to.
-static const PathExecutor* g_emergencyCallbackOwner = nullptr;
 
 // Called by ~PathExecutor so the shared emergency manager never calls into a destroyed executor.
 void detachEmergencyCallback(const PathExecutor* executor) {
