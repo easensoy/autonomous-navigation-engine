@@ -1,757 +1,210 @@
 # Autonomous Navigation Engine
 
-A comprehensive, high-performance C++ pathfinding and navigation library designed for real-world autonomous systems. This engine provides everything needed to implement sophisticated navigation solutions, from basic pathfinding to complete autonomous navigation systems.
+Classical graph planners in C++17: A\*, Dijkstra, breadth-first and depth-first search, Bellman–Ford and Jump Point Search. Around them sit route following, obstacle-aware replanning, path validation and console/SVG reporting. It builds and passes all 101 test cases with both MSVC and GCC on Windows.
 
-## 🎯 What You'll See In Action
+The engine plans on graphs you build: nodes with 2-D coordinates, joined by weighted one-way or two-way edges. It does not model vehicle dynamics, time or perception. Routes are sequences of nodes, obstacles are node IDs that the caller reports, and execution is simulated one node per step. [Known limitations](#known-limitations) lists what is missing or unfinished.
 
-### Visual Path Planning Output
-```
-=== A* Path Visualization ===
-Path length: 7 nodes, Total distance: 84.85 units
-Start: Node [0] -> Goal: Node [24] 
+- **Language:** C++17, built with CMake.
+- **Size:** 33 public headers and 129 source files, about 45,600 lines, plus 11 test programs.
+- **Tested with:** MSVC 19.51 (Visual Studio 2026) and GCC 14.2 (MSYS2 UCRT64) on Windows 11, using CMake 4.3 and Ninja 1.13.
+- **Tests:** 9 functional test programs with 101 cases and 2 benchmark smoke programs, run by CTest. All pass with both compilers.
+- **Not yet:** Linux and macOS builds, continuous integration.
 
-Grid Visualization (5x5):
-┌─────┬─────┬─────┬─────┬─────┐
-│  S  │  .  │  .  │  .  │  4  │  
-├─────┼─────┼─────┼─────┼─────┤
-│  .  │  o  │  .  │  .  │  .  │  
-├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  o  │  .  │  .  │  
-├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  o  │  .  │  
-├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  .  │  G  │  
-└─────┴─────┴─────┴─────┴─────┘
+## Algorithms
 
-Legend: S=Start, G=Goal, o=Path, .=Available, ■=Obstacle
+| Algorithm | Finds | Guarantee | Tests |
+|---|---|---|---|
+| A\* | Least-cost route | Optimal when edge weights are non-negative; a negative weight throws. The default heuristic is straight-line distance scaled to the graph's edge costs, so it never overestimates. Nodes are reopened when a cheaper route reaches them, so a custom heuristic only has to be admissible. | 18 cases, including agreement with Dijkstra on 100 random graphs |
+| Dijkstra | Least-cost route, and distances to every node | Optimal for non-negative weights; a negative weight throws | 17 cases |
+| Breadth-first search | Route with the fewest edges | Fewest edges, not least cost | 15 cases |
+| Depth-first search | Some route | None: often far from the shortest | None yet |
+| Bellman–Ford | Least-cost route when weights can be negative | Detects negative cycles and returns no route when it finds one | 13 cases |
+| Jump Point Search | Route on an 8-connected grid graph | Every route it returns uses only graph edges, but routes are not always the shortest (see [Known limitations](#known-limitations)) | 3 cases |
 
-Path Summary:
-  Total distance: 56.56 units
-  Direct distance: 56.56 units  
-  Path efficiency: 100.0% (optimal!)
-  Nodes explored: 15 out of 25 (60%)
-  Execution time: 0.234ms
-```
+When the start or goal is not in the graph, or the goal cannot be reached, every search returns an empty route except depth-first search. Depth-first search still throws `std::invalid_argument` for an unknown start or goal.
 
-### Real-Time Performance Analysis
-```
-=== Algorithm Performance Comparison ===
-Testing 4 algorithms on Dense Grid (100 nodes, 180 edges)
+## Navigation and path operations
 
-┌─────────────┬────────────┬───────────┬──────────────┬─────────────┐
-│ Algorithm   │ Avg Time   │ Success % │ Path Quality │ Memory (KB) │
-├─────────────┼────────────┼───────────┼──────────────┼─────────────┤
-│ A*          │   0.156ms  │   100.0%  │    Optimal   │     12.3    │
-│ Dijkstra    │   0.203ms  │   100.0%  │    Optimal   │     15.7    │
-│ BFS         │   0.089ms  │   100.0%  │   Suboptimal │      8.2    │
-│ Bellman-F   │   1.247ms  │   100.0%  │    Optimal   │     18.4    │
-└─────────────┴────────────┴───────────┴──────────────┴─────────────┘
+- **`NavigationCore`** plans a route, through waypoints if you give them. It follows the route one node per step and replans around obstacles reported on the way, keeping the part already travelled.
+- **`DynamicReplanner`** keeps the current route while it stays clear. Otherwise it runs A\* on a copy of the graph with the blocked nodes removed. A blocked goal has no route.
+- **`GlobalPathPlanner`** uses A\*, or Bellman–Ford when the graph has a negative weight. You can also ask for Dijkstra or Bellman–Ford explicitly.
+- **`MultiGoalPlanner`** orders the goals by nearest neighbour, then improves the order with 2-opt. The tour is good but not guaranteed to be the best.
+- **`PathValidator`** checks that every node exists and every step follows an edge. Its detailed check adds feasibility, safety and constraint reports.
+- **`PathOptimizer`** removes loops and takes cheaper shortcuts. **`PathSmoother`** cuts corners, using only existing edges.
+- **`PathExecutor`** simulates execution: one waypoint per step with a configurable delay, pause and resume, and an emergency stop.
+- **`EnvironmentManager`** switches between graphs, keeps a short history, and saves environments to files and restores them.
+- **Reporting** includes a console path printer, an ASCII renderer, SVG export, a logger and a timer.
 
-Winner: A* (Best balance of speed and optimality)
-```
+## What a run looks like
 
-### Scalability Analysis Visualization
-```
-=== Scaling Behavior Analysis ===
+The demo, `AutonomousNavigationEngine`, builds a 5 × 5 four-connected grid with 10-unit spacing. It finds a corner-to-corner route with A\*, Dijkstra and breadth-first search, follows that route, and validates and optimises it. Then it exercises environments, graph edits, multi-goal planning, algorithm selection, configuration and the console printer. This excerpt is from one run:
 
-A* Performance:
-Graph Size:    50   100   200   500  1000  2000
-Time (ms):   0.12  0.24  0.51  1.35  2.89  6.12
-Memory(KB):   4.2   8.1  16.8  42.1  89.7 184.2
-Scaling:   ████▓░░░░░░░░░░░░░░░░░░░░ Linear (O(n^1.2))
+```text
+=== Creating Sample Graph ===
+…
+Created graph with 25 nodes and 40 edges
 
-Dijkstra Performance:  
-Graph Size:    50   100   200   500  1000  2000
-Time (ms):   0.18  0.35  0.76  2.01  4.23  9.45
-Memory(KB):   5.1   9.8  19.6  48.2 102.1 208.7
-Scaling:   █████▓▓░░░░░░░░░░░░░░░░░░ Quadratic (O(n^1.4))
+=== Pathfinding Algorithm Comparison ===
+A*: Found path with 9 nodes in 22 μs
+Dijkstra: Found path with 9 nodes in 12 μs
+…
+BFS: Found path with 9 nodes in 236 μs
 
-Performance Breakpoints:
-⚠️  BFS becomes inefficient beyond 500 nodes
-⚠️  Bellman-Ford limited to <200 nodes for real-time use
-✓  A* scales well to 2000+ nodes
-✓  Dijkstra reliable up to 1000 nodes
-```
+=== Navigation System Demo ===
+Navigation started successfully
+Navigation step 0 completed
+…
+Navigation step 7 completed
+Navigation status: COMPLETED | mode GLOBAL_ONLY | at node 24 (9/9) | remaining 0
+Current path length: 9 nodes
 
-## 🏗️ System Architecture
-
-### Overall System Schema
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    USER INTERFACE                           │
-└─────────────────┬───────────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────────────────────┐
-│              NAVIGATION CORE                                │
-│  ┌─────────────┬─────────────┬─────────────┬─────────────┐  │
-│  │ Algorithm   │ Path        │ Execution   │ Emergency   │  │
-│  │ Selection   │ Planning    │ Control     │ Handling    │  │
-│  └─────────────┴─────────────┴─────────────┴─────────────┘  │
-└─────────────────┬───────────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────────────────────┐
-│                STRATEGY LAYER                               │
-│  ┌─────────────┬─────────────┬─────────────┬─────────────┐  │
-│  │ Global      │ Local       │ Dynamic     │ Multi-Goal  │  │
-│  │ Planning    │ Planning    │ Replanning  │ Planning    │  │
-│  └─────────────┴─────────────┴─────────────┴─────────────┘  │
-└─────────────────┬───────────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────────────────────┐
-│               ALGORITHM LAYER                               │
-│  ┌─────────┬─────────┬─────────┬─────────┬─────────────┐    │
-│  │ A*      │ Dijkstra│ BFS     │ DFS     │ Bellman-Ford│    │
-│  └─────────┴─────────┴─────────┴─────────┴─────────────┘    │
-└─────────────────┬───────────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────────────────────┐
-│                DATA LAYER                                   │
-│  ┌─────────────┬─────────────┬─────────────┬─────────────┐  │
-│  │ Graph       │ Environment │ Path        │ Performance │  │
-│  │ Structure   │ Management  │ Operations  │ Monitoring  │  │
-│  └─────────────┴─────────────┴─────────────┴─────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+=== Path Operations Demo ===
+…
+Path validation: VALID
+Optimized path length: 9 nodes
+Smoothed path length: 9 nodes
+Path cost: 80
+…
+Total distance: 8.00 units
+…
+Path Statistics:
+Nodes: 9
+Segments: 8
+Edge-weight cost: 80.00
+Geometric length (coordinate units): 80.00
+Straight-line distance (coordinate units): 56.57
+Efficiency: 70.71%
+Turns: 5
+Valid (every step follows an edge): yes
 ```
 
-### Component Performance Benchmarks
+How to read the excerpt:
 
-```
-=== Layer Performance Analysis ===
+- **It is trimmed.** It comes from the 342 lines the demo prints. "…" marks removed lines, most of them per-step logging, and colour codes are stripped.
+- **The timings are not a benchmark.** They come from one Release build on an Intel Core Ultra 7 165H and include console logging, which breadth-first search does at every step.
+- **The two distance lines disagree by a factor of 10.** "Total distance: 8.00 units" and "Edge-weight cost: 80.00" describe the same route; [Known limitations](#known-limitations) explains why.
 
-Navigation Core Components:
-┌─────────────────┬─────────────┬─────────────┬─────────────┐
-│ Component       │ Avg Latency │ Memory Peak │ Success Rate│
-├─────────────────┼─────────────┼─────────────┼─────────────┤
-│ Algorithm Select│    0.023ms  │     2.1KB   │    99.8%    │
-│ Path Planning   │    0.156ms  │    12.3KB   │    99.9%    │
-│ Execution Ctrl  │    0.045ms  │     3.7KB   │   100.0%    │
-│ Emergency Handle│    0.012ms  │     1.2KB   │   100.0%    │
-└─────────────────┴─────────────┴─────────────┴─────────────┘
+## Tests
 
-Strategy Layer Performance:
-┌─────────────────┬─────────────┬─────────────┬─────────────┐
-│ Strategy        │ Planning    │ Adaptation  │ Efficiency  │
-│ Type            │ Time        │ Speed       │ Rating      │
-├─────────────────┼─────────────┼─────────────┼─────────────┤
-│ Global Planning │    0.203ms  │      N/A    │    9.2/10   │
-│ Local Planning  │    0.089ms  │    0.034ms  │    8.7/10   │
-│ Dynamic Replan  │    0.134ms  │    0.067ms  │    9.1/10   │
-│ Multi-Goal      │    0.456ms  │      N/A    │    8.9/10   │
-└─────────────────┴─────────────┴─────────────┴─────────────┘
-```
+```text
+> ctest --test-dir build
+…
+ 1/11 Test  #1: test_graph .......................   Passed    0.03 sec
+ 2/11 Test  #2: test_a_star ......................   Passed    0.07 sec
+ 3/11 Test  #3: test_dijkstra ....................   Passed    0.04 sec
+ 4/11 Test  #4: test_bfs .........................   Passed    0.05 sec
+ 5/11 Test  #5: test_bellman_ford ................   Passed    0.03 sec
+ 6/11 Test  #6: test_jump_point_search ...........   Passed    0.05 sec
+ 7/11 Test  #7: test_full_navigation .............   Passed    8.22 sec
+ 8/11 Test  #8: test_environment_switching .......   Passed    0.08 sec
+ 9/11 Test  #9: test_emergency_stop ..............   Passed    0.03 sec
+10/11 Test #10: algorithm_benchmarks .............   Passed    0.42 sec
+11/11 Test #11: scability_tests ..................   Passed   62.67 sec
 
-## 🧠 Algorithm Intelligence
+100% tests passed, 0 tests failed out of 11
 
-### Pathfinding Algorithm Selection Schema
-
-```
-                    ┌─────────────────┐
-                    │ Navigation      │
-                    │ Request         │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │ Environment     │
-                    │ Analysis        │
-                    └────────┬────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-┌───────▼────────┐  ┌────────▼────────┐  ┌───────▼────────┐
-│ Graph Size     │  │ Edge Weights    │  │ Performance    │
-│ Analysis       │  │ Analysis        │  │ Requirements   │
-└───────┬────────┘  └────────┬────────┘  └───────┬────────┘
-        │                    │                    │
-        └────────────────────┼────────────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │ Algorithm       │
-                    │ Selector        │
-                    └────────┬────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-┌───────▼────────┐  ┌────────▼────────┐  ┌───────▼────────┐
-│ Speed Priority │  │ Optimal Priority│  │ Memory Priority│
-│ → BFS/A*       │  │ → Dijkstra/A*  │  │ → DFS/BFS      │
-└────────────────┘  └─────────────────┘  └────────────────┘
+Total Test time (real) =  72.97 sec
 ```
 
-### Algorithm Search Pattern Analysis
+This is one MSVC run on a fresh clone, with the `Start` lines omitted.
 
-#### A* Search Visualization
-```
-=== A* Search Pattern ===
-Finding path from S to G in a 5x5 grid with obstacles:
+| Program | Cases | Covers |
+|---|---|---|
+| `test_graph` | 6 | Removing two-way edges in both directions, edge counts, the revision counter |
+| `test_a_star` | 18 | Optimality when edges cost less than their length, inconsistent heuristics, graph changes between searches, admissibility checks, negative weights, 100 random graphs against Dijkstra |
+| `test_dijkstra` | 17 | Shortest paths and distances, distances to all nodes, unknown and disconnected nodes, zero-weight edges |
+| `test_bfs` | 15 | Fewest-edge paths, reachability, nodes at a given depth, all paths, trees |
+| `test_bellman_ford` | 13 | Negative weights, negative-cycle detection, all shortest paths, unknown and disconnected nodes |
+| `test_jump_point_search` | 3 | Routes made only of graph edges, empty routes for a graph without edges and for unknown nodes |
+| `test_full_navigation` | 16 | Planning and stepping, waypoints, obstacle replanning, validation and optimisation, simulated execution, multi-goal planning, routes that revisit nodes, blocked goals |
+| `test_environment_switching` | 11 | Switching graphs, navigation during a switch, saving and restoring, validating on a different graph |
+| `test_emergency_stop` | 2 | An emergency stop whose error callback calls back into the executor |
+| `algorithm_benchmarks`, `scability_tests` | – | Smoke runs that print timings; they fail only if they throw |
 
-Initial State:        After Step 1:        After Step 3:        Final Result:
-┌─────┬─────┬─────┬─────┬─────┐  ┌─────┬─────┬─────┬─────┬─────┐  ┌─────┬─────┬─────┬─────┬─────┐  ┌─────┬─────┬─────┬─────┬─────┐
-│  S  │  .  │  .  │  .  │  .  │  │  S  │  1  │  .  │  .  │  .  │  │  S  │  ●  │  2  │  .  │  .  │  │  S  │  ●  │  ●  │  ●  │  G  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  .  │  ■  │  ■  │  .  │  .  │  │  .  │  ■  │  ■  │  .  │  .  │  │  1  │  ■  │  ■  │  3  │  .  │  │  .  │  ■  │  ■  │  ●  │  .  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  4  │  │  .  │  .  │  .  │  .  │  ●  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  .  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  .  │  G  │  │  .  │  .  │  .  │  .  │  G  │  │  .  │  .  │  .  │  .  │  G  │  │  .  │  .  │  .  │  .  │  .  │
-└─────┴─────┴─────┴─────┴─────┘  └─────┴─────┴─────┴─────┴─────┘  └─────┴─────┴─────┴─────┴─────┘  └─────┴─────┴─────┴─────┴─────┘
+Each functional program exits non-zero when any of its cases fails, so CTest reports the failure. The regression tests for the bugs fixed in November 2026 were run against the unfixed code first. 17 of their cases failed there with both compilers, and all of them pass now.
 
-A* Statistics:
-- Nodes explored: 8 out of 23 available (35%)
-- Search direction: Focused toward goal
-- Path optimality: 100% (shortest possible)
-- Key insight: Heuristic guides search efficiently around obstacles
-```
+Most of the test time goes to two programs:
 
-#### Dijkstra Search Visualization
-```
-=== Dijkstra Search Pattern ===
-Same problem, different approach:
+- **`test_full_navigation`** waits on simulated execution.
+- **`scability_tests`** took between 34 s and 63 s across three runs of the same code on this machine, partly because it seeds its graphs from the clock.
 
-Step 1:              Step 2:              Step 3:              Final:
-┌─────┬─────┬─────┬─────┬─────┐  ┌─────┬─────┬─────┬─────┬─────┐  ┌─────┬─────┬─────┬─────┬─────┐  ┌─────┬─────┬─────┬─────┬─────┐
-│  S  │  1  │  .  │  .  │  .  │  │  S  │  1  │  2  │  .  │  .  │  │  S  │  1  │  2  │  3  │  .  │  │  S  │  ●  │  ●  │  ●  │  G  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  2  │  ■  │  ■  │  .  │  .  │  │  2  │  ■  │  ■  │  4  │  .  │  │  2  │  ■  │  ■  │  4  │  5  │  │  .  │  ■  │  ■  │  ●  │  .  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  3  │  .  │  .  │  .  │  .  │  │  3  │  5  │  .  │  .  │  6  │  │  3  │  5  │  6  │  .  │  6  │  │  .  │  .  │  .  │  .  │  ●  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  .  │  │  .  │  .  │  .  │  .  │  7  │  │  .  │  .  │  .  │  .  │  .  │
-├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤  ├─────┼─────┼─────┼─────┼─────┤
-│  .  │  .  │  .  │  .  │  G  │  │  .  │  .  │  .  │  .  │  G  │  │  .  │  .  │  .  │  .  │  G  │  │  .  │  .  │  .  │  .  │  .  │
-└─────┴─────┴─────┴─────┴─────┘  └─────┴─────┴─────┴─────┴─────┘  └─────┴─────┴─────┴─────┴─────┘  └─────┴─────┴─────┴─────┴─────┘
+## Build and run
 
-Dijkstra Statistics:
-- Nodes explored: 15 out of 23 available (65%)
-- Search pattern: Systematic expansion in all directions
-- Path optimality: 100% (guaranteed shortest)
-- Key insight: Explores more thoroughly but guarantees optimal solution
+You need CMake 3.20 or newer and a C++17 compiler. These steps have only been tried on Windows 11.
+
+**MSVC.** From the *x64 Native Tools Command Prompt for VS* in the Visual Studio 2026 Start-menu folder. That prompt provides `cmake`, `ninja` and `ctest`.
+
+```bat
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=cl
+cmake --build build
+ctest --test-dir build
+build\AutonomousNavigationEngine.exe
 ```
 
-### Algorithm Performance Head-to-Head
-```
-=== Live Performance Comparison ===
-Problem: Navigate 50x50 grid (2,500 nodes) with 20% obstacles
+**GCC (MSYS2 UCRT64).** From a prompt where `cmake` and `ninja` are on `PATH` and `C:\msys64\ucrt64\bin` comes first. The tested setup used the CMake and Ninja that ship with Visual Studio.
 
-Real-time Results:
-┌─────────────┬──────────────┬───────────────┬─────────────────┬─────────────────┐
-│ Algorithm   │ Search Time  │ Nodes Explored│ Memory Used (KB)│ Path Quality    │
-├─────────────┼──────────────┼───────────────┼─────────────────┼─────────────────┤
-│ A*          │ ████▓▓░░░ 12ms │ ████▓░░░ 847  │ ████▓░░░ 124    │ ████████ Optimal│
-│ Dijkstra    │ ██████▓░ 18ms  │ ███████ 1,205 │ ██████▓░ 156    │ ████████ Optimal│
-│ BFS         │ ███▓░░░░ 8ms   │ ████████ 1,580│ ███▓░░░░ 89     │ ████▓▓▓░ Good   │
-│ Bellman-F   │ ████████ 45ms │ ████████ 2,500│ ████████ 387    │ ████████ Optimal│
-└─────────────┴──────────────┴───────────────┴─────────────────┴─────────────────┘
-
-Winner Analysis:
-🥇 Speed: BFS (8ms) - Best for unweighted/simple scenarios
-🥈 Efficiency: A* (12ms, 847 nodes) - Best balance of speed and optimality  
-🥉 Reliability: Dijkstra (18ms) - Most predictable performance
-
-Recommendation: A* for this scenario (excellent speed + guaranteed optimal paths)
+```bat
+cmake -S . -B build-gcc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+cmake --build build-gcc
+ctest --test-dir build-gcc
 ```
 
-### Performance Heatmap
-```
-=== Performance Heatmap ===
-Problem types vs Algorithm efficiency (darker = better performance)
+The build produces the static library `NavigationEngine`, the demo and the 11 test programs. Pass `-DBUILD_TESTS=OFF` to skip the tests.
 
-                A*     Dijkstra    BFS    Bellman-F
-Grid_Small    ████     ████      ████      ███▓
-Grid_Large    ████     ███▓      ██▓▓      ▓▓▓░
-Random_Sparse ████     ████      ███▓      ██▓▓
-Random_Dense  ████     ███▓      ██▓▓      ▓▓░░
-Tree_Deep     ███▓     ████      ████      ██▓▓
-Complete      ███▓     ██▓▓      ▓▓░░      ░░░░
+## Design notes
 
-Legend: ████ Excellent  ███▓ Good  ██▓▓ Fair  ▓▓░░ Poor  ░░░░ Unusable
+- **Why the default A\* heuristic is safe.** Let *k* be the smallest cost-per-length ratio over all edges, and let *h*(*n*) = *k* · |*n* − goal|. For any edge *u* → *v*, the triangle inequality gives *h*(*u*) ≤ *k* · (|*uv*| + |*v* − goal|) ≤ cost(*u*, *v*) + *h*(*v*). So *h* is consistent, and therefore admissible, whatever the non-negative edge costs are.
+- **Caching against a revision counter.** Every change to a `Graph` (nodes, edges, or mutable node access) advances `Graph::getRevision()`. A\* computes *k* in one pass over the edges, caches it, and recomputes it only when the revision moves.
+- **Failure contract.** The searches report "no route" as an empty vector. That covers an unknown start or goal, an unreachable goal, and, in Bellman–Ford, a negative cycle. Exceptions mark inputs an algorithm cannot handle, such as a negative weight in A\* or Dijkstra. Depth-first search does not follow this yet: it throws for an unknown start or goal.
 
-Insights:
-• A* dominates most scenarios (excellent heuristic guidance)
-• Dijkstra most reliable across all problem types
-• BFS excellent for simple problems, struggles with complexity
-• Bellman-Ford limited to small, specialized use cases
-```
+## Known limitations
 
-## 🛣️ Navigation Pipeline
+- **No vehicle model.** Planning happens on graphs only: there is no time, kinematics or trajectory. Obstacles are node IDs that the caller reports; there is no perception.
+- **Mixed distance units.** `Node::euclideanDistance` multiplies coordinate distances by 0.1, so straight-line distances and edge weights can be in different units. The demo shows it: the console printer reports 8.00 units for a route whose edge-weight cost is 80.
+- **Jump Point Search is not always shortest.** Every route it returns is valid. But on 300 random 8-connected grids with obstacles, its route was longer than Dijkstra's in 79 cases (by up to 2.4×), and it found no route in 4 cases where one existed. Its straight and diagonal jump rules come from different variants of the algorithm. Use A\* when the shortest route matters.
+- **Experimental code.** Many source files compile into the library, but nothing in the public API, the demo or the tests reaches them. Examples are `DStarLite`, `DynamicWindowApproach` and `TravelingSalesmanSolver` in `src/navigation_strategies/`.
+- **Declared but undefined methods.** These fail at link time if called:
+    - the `GraphBuilder` and `LocalPathPlanner` constructors;
+    - `GraphBuilder::buildGraph`;
+    - `NodeManager::moveNode`;
+    - `EdgeManager::getMinimumSpanningTree`;
+    - `ConnectivityAnalyzer::getBridgeEdges`;
+    - `MapUpdater::rollback`.
+- **Placeholder scores.** The performance-based scoring in `AlgorithmSelector` uses simulated, random metrics, not measured ones.
+- **Process-wide state.** 18 components keep a file-level singleton. One of them is the emergency-stop state, which the public API cannot reset.
+- **Benchmarks are smoke tests.** `algorithm_benchmarks` and `scability_tests` seed their random graphs from the clock, build a new solver for every query, and do not measure memory. Their timings are therefore not comparable between runs.
+- **Verbose output.** Most components print straight to standard output rather than through the logger, so their output cannot be filtered.
+- **Compiler warnings.** A GCC Debug build adds `-Wall -Wextra -Wpedantic` and reports 76 warnings:
+    - 56 unused parameters;
+    - 14 unused variables;
+    - 3 out-of-order member initialisers;
+    - one each of unused-but-set-variable, sign-compare and maybe-uninitialized.
 
-### Navigation Pipeline Schema
+## Project layout
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Start/Goal  │───▶│ Environment │───▶│ Global Path │
-│ Definition  │    │ Assessment  │    │ Planning    │
-└─────────────┘    └─────────────┘    └──────┬──────┘
-                                              │
-┌─────────────┐    ┌─────────────┐    ┌──────▼──────┐
-│ Path        │◀───│ Path        │◀───│ Algorithm   │
-│ Validation  │    │ Optimization│    │ Execution   │
-└──────┬──────┘    └─────────────┘    └─────────────┘
-       │
-┌──────▼──────┐    ┌─────────────┐    ┌─────────────┐
-│ Local Path  │───▶│ Real-time   │───▶│ Execution   │
-│ Refinement  │    │ Monitoring  │    │ Control     │
-└─────────────┘    └─────────────┘    └──────┬──────┘
-                                              │
-                          ┌─────────────┐    │
-                          │ Emergency   │◀───┘
-                          │ Handling    │
-                          └─────────────┘
-```
-
-### Pipeline Component Benchmarks
-
-```
-=== Pipeline Stage Performance ===
-
-Stage Analysis (1000-node graph):
-┌─────────────────┬─────────────┬─────────────┬─────────────┐
-│ Pipeline Stage  │ Avg Time    │ Success %   │ Bottleneck  │
-├─────────────────┼─────────────┼─────────────┼─────────────┤
-│ Environment     │    0.034ms  │    99.9%    │     No      │
-│ Global Planning │    0.203ms  │    99.8%    │   Medium    │
-│ Algorithm Exec  │    0.156ms  │    99.9%    │   Medium    │
-│ Path Optimize   │    0.089ms  │    99.7%    │     No      │
-│ Validation      │    0.023ms  │   100.0%    │     No      │
-│ Local Refine    │    0.067ms  │    99.8%    │     No      │
-│ Real-time Mon   │    0.012ms  │   100.0%    │     No      │
-│ Execution Ctrl  │    0.045ms  │   100.0%    │     No      │
-└─────────────────┴─────────────┴─────────────┴─────────────┘
-
-Critical Path: Global Planning → Algorithm Execution
-Total Pipeline Latency: 0.629ms (excellent for real-time systems)
+```text
+include/                   public headers, one folder per module
+src/
+  core/                    Node, Edge, Graph
+  pathfinding_algorithms/  A*, Dijkstra, BFS, DFS, Bellman–Ford, Jump Point Search
+  navigation_strategies/   global planning, replanning and multi-goal planning, plus experiments
+  autonomous_navigator/    NavigationCore, AlgorithmSelector, PathExecutor
+  path_operations/         validation, optimisation, smoothing, cost calculation
+  environment/             EnvironmentManager, MapUpdater, ObstacleDetector
+  graph_operations/        node and edge managers, connectivity analysis, graph generators
+  utilities/               configuration, maths helpers, priority queues
+  reporting/               logging, timing, console, ASCII and SVG output
+  main.cpp                 the demo
+tests/
+  core_tests/  algorithm_tests/  integration_tests/  performance_tests/
 ```
 
-## 📊 Data Structure Performance
-
-### Graph Data Structure Schema
-
-```
-                    ┌─────────────────┐
-                    │    GRAPH        │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-     ┌────────▼────────┐    │    ┌────────▼────────┐
-     │     NODES       │    │    │     EDGES       │
-     │ ┌─────────────┐ │    │    │ ┌─────────────┐ │
-     │ │ ID          │ │    │    │ │ From Node   │ │
-     │ │ Name        │ │    │    │ │ To Node     │ │
-     │ │ Coordinates │ │    │    │ │ Weight      │ │
-     │ │ Properties  │ │    │    │ │ Directional │ │
-     │ └─────────────┘ │    │    │ └─────────────┘ │
-     └─────────────────┘    │    └─────────────────┘
-                            │
-                   ┌────────▼────────┐
-                   │ ADJACENCY LIST  │
-                   │ ┌─────────────┐ │
-                   │ │ Node ID     │ │
-                   │ │ Connected   │ │
-                   │ │ Neighbors   │ │
-                   │ │ Edge Refs   │ │
-                   │ └─────────────┘ │
-                   └─────────────────┘
-```
-
-### Data Structure Performance Analysis
-
-```
-=== Graph Operations Benchmark ===
-
-Core Operations (1000-node graph):
-┌─────────────────────┬─────────────┬─────────────┬─────────────┐
-│ Operation           │ Time (μs)   │ Memory (KB) │ Complexity  │
-├─────────────────────┼─────────────┼─────────────┼─────────────┤
-│ Add Node            │      2.3    │     +0.1    │    O(1)     │
-│ Add Edge            │      3.7    │     +0.2    │    O(1)     │
-│ Find Node           │      1.8    │      0.0    │    O(1)     │
-│ Get Neighbors       │      4.2    │      0.0    │    O(k)     │
-│ Remove Node         │     15.4    │     -0.1    │    O(k)     │
-│ Remove Edge         │      8.9    │     -0.2    │    O(k)     │
-│ Graph Traversal     │    234.6    │     12.3    │    O(V+E)   │
-│ Connectivity Check  │    189.2    │      8.7    │    O(V+E)   │
-└─────────────────────┴─────────────┴─────────────┴─────────────┘
-
-Scaling Characteristics:
-Graph Size     Add Ops    Search Ops    Memory Usage
-   100:         ████       ████         ████▓
-   500:         ████       ████         ████▓▓
-  1000:         ███▓       ████         █████▓
-  5000:         ███▓       ███▓         ██████▓
- 10000:         ██▓▓       ███▓         ███████▓
-
-Efficiency Rating: 9.1/10 (excellent for real-time applications)
-```
-
-## 🌍 Environment Management
-
-### Environment Management Schema
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Static Map      │    │ Dynamic         │    │ Sensor          │
-│ Definition      │───▶│ Environment     │◀───│ Data            │
-└─────────────────┘    │ Manager         │    └─────────────────┘
-                       └────────┬────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        │                       │                       │
-┌───────▼────────┐    ┌────────▼────────┐    ┌────────▼────────┐
-│ Obstacle       │    │ Map Updates     │    │ Environment     │
-│ Detection      │    │ & Changes       │    │ Validation      │
-└───────┬────────┘    └────────┬────────┘    └────────┬────────┘
-        │                      │                      │
-        └──────────────────────┼──────────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │ Navigation Update   │
-                    │ Trigger             │
-                    └─────────────────────┘
-```
-
-### Environment Management Benchmarks
-
-```
-=== Environment Operations Performance ===
-
-Dynamic Environment Handling:
-┌─────────────────────┬─────────────┬─────────────┬─────────────┐
-│ Operation           │ Latency     │ Update Rate │ Success %   │
-├─────────────────────┼─────────────┼─────────────┼─────────────┤
-│ Static Map Load     │    12.3ms   │      N/A    │   100.0%    │
-│ Obstacle Detection  │     0.8ms   │    50 Hz    │    99.7%    │
-│ Map Update          │     2.1ms   │    20 Hz    │    99.9%    │
-│ Environment Switch  │     5.7ms   │     N/A     │    99.8%    │
-│ Validation Check    │     1.4ms   │   100 Hz    │   100.0%    │
-│ Real-time Adapt     │     3.2ms   │    30 Hz    │    99.6%    │
-└─────────────────────┴─────────────┴─────────────┴─────────────┘
-
-Environment Complexity Scaling:
-Nodes    Static Load    Dynamic Update    Memory Usage
-  100:        ████           ████              ████
-  500:        ████           ████              ████▓
- 1000:        ███▓           ████              █████
- 2000:        ███▓           ███▓              █████▓
- 5000:        ██▓▓           ███▓              ██████▓
-
-Real-time Performance: Excellent (sub-5ms response to environment changes)
-```
-
-## ⚡ Real-Time Execution
-
-### Real-time Execution Schema
-
-```
-┌─────────────┐
-│ Path Queue  │
-└──────┬──────┘
-       │
-┌──────▼──────┐    ┌─────────────┐    ┌─────────────┐
-│ Current     │───▶│ Safety      │───▶│ Movement    │
-│ Waypoint    │    │ Check       │    │ Execution   │
-└─────────────┘    └──────┬──────┘    └──────┬──────┘
-                          │                  │
-                   ┌──────▼──────┐          │
-                   │ Obstacle    │          │
-                   │ Detected?   │          │
-                   └──────┬──────┘          │
-                          │                  │
-                    ┌─────▼─────┐           │
-                    │ Replan    │           │
-                    │ Required? │           │
-                    └─────┬─────┘           │
-                          │                  │
-                          └──────────────────┘
-                                             │
-                                    ┌────────▼────────┐
-                                    │ Progress        │
-                                    │ Monitoring      │
-                                    └─────────────────┘
-```
-
-### Real-Time Performance Metrics
-
-```
-=== Real-Time Navigation Analysis ===
-
-Execution Control Performance:
-┌─────────────────────┬─────────────┬─────────────┬─────────────┐
-│ Component           │ Response    │ Throughput  │ Reliability │
-├─────────────────────┼─────────────┼─────────────┼─────────────┤
-│ Waypoint Processing │    0.045ms  │   22,000/s  │    99.99%   │
-│ Safety Validation   │    0.023ms  │   43,000/s  │   100.00%   │
-│ Obstacle Detection  │    0.089ms  │   11,200/s  │    99.97%   │
-│ Replanning Trigger  │    0.134ms  │    7,500/s  │    99.98%   │
-│ Movement Control    │    0.067ms  │   14,900/s  │   100.00%   │
-│ Progress Monitor    │    0.012ms  │   83,300/s  │   100.00%   │
-└─────────────────────┴─────────────┴─────────────┴─────────────┘
-
-Real-Time Characteristics:
-Metric               Target      Achieved    Status
-Max Latency:          5.0ms       3.7ms      ✓ PASS
-Update Rate:         100 Hz      127 Hz      ✓ PASS  
-Jitter:              <1.0ms      0.3ms       ✓ PASS
-CPU Usage:           <25%        12%         ✓ PASS
-
-Real-Time Rating: 9.7/10 (excellent for autonomous systems)
-```
-
-## 📈 Algorithm Performance Monitoring
-
-### Algorithm Performance Monitoring Schema
-
-```
-                    ┌─────────────────┐
-                    │ Algorithm       │
-                    │ Execution       │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-     ┌────────▼────────┐    │    ┌────────▼────────┐
-     │ Performance     │    │    │ Quality         │
-     │ Metrics         │    │    │ Metrics         │
-     │ ┌─────────────┐ │    │    │ ┌─────────────┐ │
-     │ │ Exec Time   │ │    │    │ │ Path Length │ │
-     │ │ Memory Use  │ │    │    │ │ Optimality  │ │
-     │ │ Node Count  │ │    │    │ │ Success Rate│ │
-     │ └─────────────┘ │    │    │ └─────────────┘ │
-     └─────────────────┘    │    └─────────────────┘
-                            │
-                   ┌────────▼────────┐
-                   │ Comparative     │
-                   │ Analysis        │
-                   │ ┌─────────────┐ │
-                   │ │ Benchmarks  │ │
-                   │ │ Rankings    │ │
-                   │ │ Trends      │ │
-                   │ └─────────────┘ │
-                   └─────────────────┘
-```
-
-### Comprehensive Performance Analysis
-
-```
-=== Comprehensive Scalability Report ===
-Test Configuration: Grid topology, varying sizes
-
-A* Algorithm Analysis:
-┌─────────┬─────────┬──────────┬─────────────┬──────────────┐
-│Graph    │Time(ms) │Memory(KB)│Nodes        │Success       │
-│Size     │         │          │Explored     │Rate          │
-├─────────┼─────────┼──────────┼─────────────┼──────────────┤
-│    25   │   0.12  │    2.1   │      15     │    100%      │
-│   100   │   0.34  │    7.8   │      67     │    100%      │
-│   400   │   1.23  │   28.4   │     234     │    100%      │
-│  1600   │   4.56  │  112.3   │     892     │    100%      │
-│  6400   │  18.92  │  445.7   │   3,567     │    100%      │
-└─────────┴─────────┴──────────┴─────────────┴──────────────┘
-
-Performance Profile: 
-Time Complexity: O(n^1.2) - Excellent scaling
-Memory Complexity: O(n) - Linear growth  
-Efficiency Rating: 9.2/10
-
-Scaling Characteristics:
-████████████████████▓▓▓▓▓ Excellent (0-1000 nodes)
-████████████████▓▓▓▓▓▓▓▓▓ Good (1000-5000 nodes)  
-████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ Fair (5000+ nodes)
-```
-
-### Memory Usage Patterns
-```
-=== Memory Consumption Analysis ===
-
-Memory Usage by Component (1000-node graph):
-┌─────────────────────┬──────────┬─────────────┐
-│ Component           │ Memory   │ Percentage  │
-├─────────────────────┼──────────┼─────────────┤
-│ Graph Structure     │  45.2 KB │    40.1%    │
-│ Algorithm State     │  32.8 KB │    29.1%    │  
-│ Search Structures   │  28.4 KB │    25.2%    │
-│ Path Storage        │   4.1 KB │     3.6%    │
-│ Profiling Data      │   2.3 KB │     2.0%    │
-├─────────────────────┼──────────┼─────────────┤
-│ Total               │ 112.8 KB │   100.0%    │
-└─────────────────────┴──────────┴─────────────┘
-
-Memory Scaling Trends:
-Graph Size    A*      Dijkstra    BFS     Bellman-Ford
-   100:    ████▓      █████▓     ███▓      ██████▓▓
-   500:    ████▓▓     ██████▓    ████▓     ████████▓
-  1000:    █████▓▓    ███████▓   █████▓    ██████████
-  2000:    ██████▓▓   ████████▓  ██████▓   [Too Large]
-
-Peak Memory Efficiency:
-🥇 BFS: 67 KB per 1000 nodes
-🥈 A*: 112 KB per 1000 nodes  
-🥉 Dijkstra: 156 KB per 1000 nodes
-```
-
-## 🎮 Real-World Applications
-
-### Warehouse Robot Navigation
-```
-=== Warehouse Robot Navigation ===
-Mission: Transport item from Loading_Dock to Shipping
-
-Initial Route Planning:
-Loading_Dock → Fast_Lane → Storage_A → Storage_B → Packaging → Shipping
-Estimated time: 92 units
-Route efficiency: 94% (accounting for traffic costs)
-
-Real-time Execution:
-[14:23:01] Starting from Loading_Dock
-[14:23:03] Entering Fast_Lane (smooth transit)
-[14:23:07] Obstacle detected in Storage_A! 
-[14:23:07] Replanning route...
-[14:23:07] New route: Fast_Lane → Alternative_Path → Packaging → Shipping
-[14:23:08] Route updated, continuing navigation
-[14:23:15] Arrived at Shipping dock
-[14:23:15] Mission completed - Total time: 14 seconds
-
-Navigation Summary:
-✓ Dynamic replanning: 1 successful adaptation
-✓ Obstacle avoidance: Functioned correctly
-✓ Total efficiency: 91% (excellent despite replanning)
-```
-
-### Game AI: RTS Unit Movement
-```
-=== RTS Unit Pathfinding ===
-Unit: Heavy Tank Squadron
-Mission: Attack Enemy_Base
-Constraints: Avoid forest (tanks can't pass), prefer open terrain
-
-Route Analysis:
-Option 1 (Fast): Base → Plains → River → Enemy_Base
-- Travel time: 33 units
-- Risk level: High (exposed crossing)
-- Tactical rating: 6/10
-
-Option 2 (Safe): Base → Plains → Forest → Hills → Enemy_Base  
-- Travel time: 42 units  
-- Risk level: Low (cover available)
-- Tactical rating: 8/10
-
-AI Decision: Selecting Option 2 (Safe route)
-Reasoning: Extra 9 units travel time acceptable for 33% risk reduction
-```
-
-### Multi-Criteria Path Optimization
-```
-=== Multi-Criteria Route Optimization ===
-Optimizing route: Home → Work (Downtown)
-
-Objective Analysis:
-┌─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
-│ Route       │ Distance    │ Time        │ Energy      │ Risk        │
-│ Option      │ (miles)     │ (minutes)   │ (mpg equiv) │ (incidents) │
-├─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
-│ Highway     │    12.3     │     18      │    28.4     │    0.12     │
-│ City Streets│    10.8     │     28      │    31.2     │    0.08     │
-│ Scenic Route│    15.7     │     25      │    35.1     │    0.04     │
-│ OPTIMIZED   │    11.4     │     22      │    32.1     │    0.06     │
-└─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
-
-🏆 Winner: OPTIMIZED route (7% better than best alternative)
-
-The optimized route balances all criteria effectively:
-✓ Distance: 93% of shortest route
-✓ Time: 82% of fastest route  
-✓ Energy: 90% of most efficient route
-✓ Risk: 75% of safest route
-```
-
-## 🔧 Building and Testing
-
-### Build System Output
-```bash
-$ mkdir build && cd build
-$ cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
-
--- Configuring Autonomous Navigation Engine v1.0.0
--- Found components:
-   ✓ Core pathfinding algorithms (4 algorithms)
-   ✓ Navigation strategies (3 planners)  
-   ✓ Graph operations (5 builders)
-   ✓ Utilities and math functions
-   ✓ Comprehensive test suite (15 test categories)
-   ✓ Performance profiling tools
-   ✓ Visualization components
-
-$ make -j4
-
-Building Navigation Engine...
-[████████████████████████████████] 100%
-
-Built components:
-✓ libNavigationEngine.a (2.1 MB)
-✓ Algorithm tests (8 executables)  
-✓ Integration tests (3 executables)
-✓ Performance benchmarks (2 executables)
-✓ Example applications (4 demos)
-
-Build completed in 23.4 seconds
-```
-
-### Test Suite Results
-```
-$ make test
-
-Running Navigation Engine Test Suite...
-
-Algorithm Correctness Tests:
-✓ test_a_star         : 15/15 tests passed
-✓ test_dijkstra       : 18/18 tests passed  
-✓ test_bfs            : 12/12 tests passed
-✓ test_bellman_ford   : 14/14 tests passed
-
-Integration Tests:
-✓ test_full_navigation      : 13/13 tests passed
-✓ test_environment_switching: 10/10 tests passed
-
-Performance Tests:
-✓ algorithm_benchmarks: Performance within expected ranges
-✓ scalability_tests   : All algorithms scale as predicted
-
-Overall Result: 92/92 tests passed (100%)
-Test suite completed in 4.7 seconds
-```
-
-## 🏆 Performance Summary
-
-### Overall System Performance Rating
-
-```
-=== Navigation Engine Performance Card ===
-
-Core Algorithms:
-🥇 A*: 9.2/10 (Best balance of speed and optimality)
-🥈 Dijkstra: 8.8/10 (Most reliable, guaranteed optimal)
-🥉 BFS: 8.1/10 (Fastest for simple scenarios)
-   Bellman-Ford: 6.7/10 (Specialized use cases)
-
-System Components:
-Navigation Core: 9.4/10 (Excellent coordination)
-Strategy Layer: 9.1/10 (Adaptive planning)
-Environment Mgmt: 9.0/10 (Robust handling)
-Real-time Exec: 9.7/10 (Outstanding responsiveness)
-
-Scalability:
-Small graphs (≤100): ████████████ Excellent
-Medium graphs (≤1000): ████████▓▓ Very Good  
-Large graphs (≤5000): ██████▓▓▓▓ Good
-Massive graphs (5000+): ████▓▓▓▓▓▓ Fair
-
-Overall System Rating: 9.1/10
-✓ Production-ready for autonomous systems
-✓ Excellent real-time performance
-✓ Comprehensive algorithm coverage
-✓ Robust error handling and adaptation
-```
-
-**The Autonomous Navigation Engine transforms abstract pathfinding algorithms into practical, intelligent navigation systems that handle the complexities of real-world environments. Whether you're building warehouse robots, game AI, or autonomous vehicles, this library provides the robust foundation and comprehensive tooling you need to create sophisticated navigation solutions.**
+## Roadmap
+
+Planned, not yet implemented:
+
+1. Continuous integration with MSVC and GCC, and a `.gitignore` for build output.
+2. Benchmarks with fixed seeds, solvers built once per graph, warm-up runs, percentiles and saved workloads.
+3. A visual generated by the C++ code: a warehouse map, a corridor that becomes blocked, and the replanned route, labelled with real costs and timings.
+4. Timed trajectories with a simple vehicle model, and evaluation of whole scenarios in closed loop.
+5. A small learned scorer for candidate routes, compared against these planners as baselines.
