@@ -7,6 +7,14 @@
 #include <string>
 #include <utility>
 
+// Jump Point Search on a grid laid over the graph. Each node stands on the integer cell nearest its
+// coordinates; cells with no node, or marked with addObstacle, are blocked. A route is returned node
+// by node, and only if every step is one of the graph's edges, so the graph should be an 8-connected
+// grid whose edge costs match the step lengths.
+// Known limitation: routes are valid but not guaranteed shortest, and some routes are missed. The
+// straight and diagonal jump rules come from different JPS variants (without and with corner
+// cutting), and with diagonal movement disabled, goals off the start's row and column are missed.
+// Use A* when the shortest route matters.
 class JumpPointSearch
 {
     private:
@@ -15,6 +23,7 @@ class JumpPointSearch
         int gridHeight;
         std::unordered_set<std::string> obstacles;
         bool diagonalMovement;
+        std::unordered_map<long long, int> cellNodes;  // node on each open cell, rebuilt per search
         
         class JumpPointIdentifier;
         class GridPruningManager;
@@ -34,6 +43,9 @@ class JumpPointSearch
 
         bool isValidPosition(int x, int y) const;
         bool hasObstacle(int x, int y) const;
+        long long cellKey(int x, int y) const;
+        bool mapGraphOntoGrid();  // false if two nodes share a cell
+        std::vector<int> expandToGraphRoute(const std::vector<std::pair<int, int>>& jumpPoints) const;
         std::vector<std::pair<int, int>> getNeighbors(int x, int y) const;
         std::pair<int, int> jump(int x, int y, int dx, int dy, int goalX, int goalY) const;
         double heuristic(int x1, int y1, int x2, int y2) const;
