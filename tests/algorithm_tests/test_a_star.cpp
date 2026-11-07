@@ -209,10 +209,14 @@ public:
             std::cout << "✗ Some A* tests failed!" << std::endl;
         }
     }
+
+    bool allPassed() const {
+        return testsRun > 0 && testsPassed == testsRun;
+    }
 };
 
 int main() {
     AStarTester tester;
     tester.runAllTests();
-    return 0;
+    return tester.allPassed() ? 0 : 1;
 }
