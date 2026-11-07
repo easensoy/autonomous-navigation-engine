@@ -208,12 +208,15 @@ if(BUILD_TESTS)
     enable_testing()
     
     set(TEST_SOURCES
+        tests/core_tests/test_graph.cpp
         tests/algorithm_tests/test_a_star.cpp
         tests/algorithm_tests/test_dijkstra.cpp
         tests/algorithm_tests/test_bfs.cpp
         tests/algorithm_tests/test_bellman_ford.cpp
+        tests/algorithm_tests/test_jump_point_search.cpp
         tests/integration_tests/test_full_navigation.cpp
         tests/integration_tests/test_environment_switching.cpp
+        tests/integration_tests/test_emergency_stop.cpp
         tests/performance_tests/algorithm_benchmarks.cpp
         tests/performance_tests/scability_tests.cpp
     )
