@@ -23,6 +23,7 @@ private:
     NavigationMode currentMode;
     std::vector<int> activePath;
     int currentPosition;
+    size_t routeIndex;      // index of currentPosition in activePath; a route may pass a node twice
     bool navigationActive;
     bool navigationPaused;  // set by pause/emergency stop, cleared by resume or a new start
 
