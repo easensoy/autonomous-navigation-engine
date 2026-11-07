@@ -12,6 +12,7 @@ void Graph::addNode(int id, const std::string& name, double x, double y) {
     
     nodes[id] = std::make_unique<Node>(id, name, x, y);
     adjacencyList[id] = std::vector<Edge>();
+    ++revision;
     
     std::cout << "Added node: " << *nodes[id] << std::endl;
 }
@@ -38,6 +39,7 @@ bool Graph::removeNode(int nodeId) {
     
     nodes.erase(nodeId);
     adjacencyList.erase(nodeId);
+    ++revision;
     
     return true;
 }
@@ -53,5 +55,6 @@ const Node& Graph::getNode(int nodeId) const {
 
 Node& Graph::getNode(int nodeId) {
     validateNodeExists(nodeId);
+    ++revision;  // the caller may overwrite the node
     return *nodes.at(nodeId);
 }
