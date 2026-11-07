@@ -20,18 +20,22 @@ Graph& Graph::operator=(const Graph& other) {
             nodes[pair.first] = std::make_unique<Node>(*pair.second);
         }
         adjacencyList = other.adjacencyList;
+        ++revision;
     }
     return *this;
 }
 
 Graph::Graph(Graph&& other) noexcept
     : nodes(std::move(other.nodes)), adjacencyList(std::move(other.adjacencyList)) {
+    ++other.revision;  // its nodes and edges have moved out
 }
 
 Graph& Graph::operator=(Graph&& other) noexcept {
     if (this != &other) {
         nodes = std::move(other.nodes);
         adjacencyList = std::move(other.adjacencyList);
+        ++revision;
+        ++other.revision;
     }
     return *this;
 }
