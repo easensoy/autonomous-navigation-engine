@@ -384,10 +384,14 @@ public:
         std::cout << "- Real-time environment updates are handled gracefully" << std::endl;
         std::cout << "- Performance varies across different environment structures" << std::endl;
     }
+
+    bool allPassed() const {
+        return testsRun > 0 && testsPassed == testsRun;
+    }
 };
 
 int main() {
     EnvironmentSwitchingTester tester;
     tester.runAllTests();
-    return 0;
+    return tester.allPassed() ? 0 : 1;
 }
