@@ -7,6 +7,7 @@
 #include <limits>
 #include <queue>
 #include <unordered_set>
+#include <cstdint>
 
 class AStar {
 private:
@@ -61,8 +62,17 @@ private:
     mutable size_t nodesExplored;
     mutable double lastSearchTime;
     mutable bool searchStatisticsEnabled;
+
+    // minimumCostPerLength() result, reused until the graph's revision changes.
+    mutable bool costPerLengthKnown = false;
+    mutable std::uint64_t costPerLengthRevision = 0;
+    mutable double costPerLength = 0.0;
     
     double calculateHeuristic(int nodeId, int goalId) const;
+    // Smallest edge cost per unit of straight-line length (0 when no edge has a length). The default
+    // heuristic is straight-line distance times this, which never overestimates.
+    // Throws std::invalid_argument if any edge weight is negative.
+    double minimumCostPerLength() const;
     std::vector<int> reconstructPath(const std::unordered_map<int, int>& cameFrom, int current) const;
     
     void initializeOpenList();
@@ -107,11 +117,16 @@ public:
     void setHeuristicFunction(std::function<double(int, int)> heuristic);
     
     /**
-     * Finds optimal path between specified start and goal nodes using A* algorithm.
+     * Finds a least-cost path between start and goal with A*. Edge weights must be non-negative.
+     * The path is optimal when the heuristic never overestimates the remaining cost. Without a
+     * custom heuristic, straight-line distance is scaled by the smallest cost-per-length ratio
+     * among the graph's edges, which never overestimates. A node is reopened when a cheaper route
+     * to it turns up after expansion, so an admissible but inconsistent heuristic is handled too.
      * @param startId Identifier of the starting node
      * @param goalId Identifier of the destination node
-     * @return Vector of node identifiers representing the optimal path; empty if either node
-     *         does not exist or the goal is unreachable
+     * @return Vector of node identifiers representing the path; empty if either node does not
+     *         exist or the goal is unreachable
+     * @throws std::invalid_argument if the graph has a negative edge weight
      */
     std::vector<int> findPath(int startId, int goalId) const;
     
@@ -141,10 +156,13 @@ public:
     double chebyshevHeuristic(int nodeId, int goalId) const;
     
     /**
-     * Validates whether the configured heuristic function is admissible.
+     * Checks that the heuristic in use (the custom one, or the default scaled distance) never
+     * overestimates: for every node a search from startId can reach, h(node, goalId) must not
+     * exceed the cheapest cost from that node to goalId, computed exactly by a backward Dijkstra.
      * @param startId Starting node for validation
      * @param goalId Goal node for validation
-     * @return True if heuristic is admissible, false otherwise
+     * @return True if no reachable node is overestimated; false otherwise, or if either node is unknown
+     * @throws std::invalid_argument if the graph has a negative edge weight
      */
     bool isHeuristicAdmissible(int startId, int goalId) const;
     
