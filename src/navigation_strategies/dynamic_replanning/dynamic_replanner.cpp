@@ -8,7 +8,8 @@
 
 // DynamicReplanner keeps the current route and a list of blocked nodes, and replans when a newly
 // reported obstacle lies on the route. Planning around obstacles runs A* on a copy of the graph
-// with the blocked nodes removed, so the route never passes through them.
+// with the blocked nodes removed, so the route never passes through them. The start is exempt
+// (the vehicle is already there); a goal that is itself blocked has no route.
 
 DynamicReplanner::DynamicReplanner(const Graph* graph)
     : environment(graph),
@@ -26,9 +27,14 @@ std::vector<int> DynamicReplanner::planAvoidingObstacles(int startId, int goalId
     if (!environment->hasNode(startId) || !environment->hasNode(goalId)) {
         return {};
     }
+    const bool goalBlocked =
+        std::find(knownObstacles.begin(), knownObstacles.end(), goalId) != knownObstacles.end();
+    if (goalBlocked && goalId != startId) {
+        return {};
+    }
     bool blocksSomething = false;
     for (int obstacle : knownObstacles) {
-        if (obstacle != startId && obstacle != goalId && environment->hasNode(obstacle)) {
+        if (obstacle != startId && environment->hasNode(obstacle)) {
             blocksSomething = true;
             break;
         }
@@ -39,7 +45,7 @@ std::vector<int> DynamicReplanner::planAvoidingObstacles(int startId, int goalId
 
     Graph reduced(*environment);
     for (int obstacle : knownObstacles) {
-        if (obstacle != startId && obstacle != goalId) {
+        if (obstacle != startId) {
             reduced.removeNode(obstacle);
         }
     }
