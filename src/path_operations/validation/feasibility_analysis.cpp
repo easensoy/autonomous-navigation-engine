@@ -53,8 +53,6 @@ public:
         if (!graph) {
             throw std::invalid_argument("Graph pointer cannot be null");
         }
-        
-        std::cout << "[FEASIBILITY] Feasibility analyzer initialized" << std::endl;
     }
     
     FeasibilityMetrics analyzeFeasibility(const std::vector<int>& path) {
@@ -426,16 +424,29 @@ public:
     }
 };
 
-// Global feasibility analyzer
-static std::unique_ptr<FeasibilityAnalyzer> g_feasibilityAnalyzer;
+// Settings applied to every analysis once configureFeasibilityAnalysis has been called.
+namespace {
+struct FeasibilitySettings {
+    bool configured = false;
+    double threshold = 0.7;
+    double capacity = 100.0;
+    bool realTimeChecks = true;
+};
+FeasibilitySettings g_feasibilitySettings;
+}  // namespace
 
 bool analyzePathFeasibility(const Graph* graph, const std::vector<int>& path, 
                            double& executionProbability, std::string& feasibilityReport) {
-    if (!g_feasibilityAnalyzer) {
-        g_feasibilityAnalyzer = std::make_unique<FeasibilityAnalyzer>(graph);
+    // A fresh analyzer for each call, bound to the graph it is given, so nothing from an earlier
+    // graph can leak into this analysis.
+    FeasibilityAnalyzer analyzer(graph);
+    if (g_feasibilitySettings.configured) {
+        analyzer.setFeasibilityThreshold(g_feasibilitySettings.threshold);
+        analyzer.setResourceCapacity(g_feasibilitySettings.capacity);
+        analyzer.enableRealTime(g_feasibilitySettings.realTimeChecks);
     }
     
-    auto metrics = g_feasibilityAnalyzer->analyzeFeasibility(path);
+    auto metrics = analyzer.analyzeFeasibility(path);
     executionProbability = metrics.executionProbability;
     
     // Generate feasibility report
@@ -457,9 +468,5 @@ bool analyzePathFeasibility(const Graph* graph, const std::vector<int>& path,
 }
 
 void configureFeasibilityAnalysis(double threshold, double capacity, bool realTimeEnabled) {
-    if (g_feasibilityAnalyzer) {
-        g_feasibilityAnalyzer->setFeasibilityThreshold(threshold);
-        g_feasibilityAnalyzer->setResourceCapacity(capacity);
-        g_feasibilityAnalyzer->enableRealTime(realTimeEnabled);
-    }
+    g_feasibilitySettings = {true, threshold, capacity, realTimeEnabled};
 }
