@@ -1,5 +1,4 @@
 #include "autonomous_navigator/NavigationCore.hpp"
-#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <memory>
@@ -8,7 +7,8 @@
 
 // NavigationCore owns the route being followed. Routes come from the GlobalPathPlanner; once
 // obstacles are reported, every route is planned through the DynamicReplanner so it avoids them.
-// A navigation step moves the current position one node along the route.
+// A navigation step moves the current position one node along the route. Progress is kept as an
+// index into the route, because a route through several waypoints can pass the same node twice.
 
 namespace {
 const char* modeName(NavigationMode mode) {
@@ -26,6 +26,7 @@ NavigationCore::NavigationCore(const Graph* graph)
     : environment(graph),
       currentMode(NavigationMode::GLOBAL_ONLY),
       currentPosition(-1),
+      routeIndex(0),
       navigationActive(false),
       navigationPaused(false) {
     if (environment) {
@@ -52,6 +53,7 @@ bool NavigationCore::activatePath(std::vector<int> path) {
         return false;
     }
     activePath = std::move(path);
+    routeIndex = 0;
     currentPosition = activePath.front();
     navigationActive = activePath.size() > 1;
     navigationPaused = false;
@@ -97,6 +99,7 @@ void NavigationCore::stopNavigation() {
     navigationActive = false;
     navigationPaused = false;
     activePath.clear();
+    routeIndex = 0;
     currentPosition = -1;
 }
 
@@ -123,17 +126,13 @@ int NavigationCore::getCurrentPosition() const {
 }
 
 bool NavigationCore::isNavigationComplete() const {
-    return !activePath.empty() && currentPosition == activePath.back();
+    return !activePath.empty() && routeIndex + 1 == activePath.size();
 }
 
 double NavigationCore::getRemainingDistance() const {
-    auto here = std::find(activePath.begin(), activePath.end(), currentPosition);
-    if (here == activePath.end()) {
-        return 0.0;
-    }
     double remaining = 0.0;
-    for (auto it = here; it + 1 != activePath.end(); ++it) {
-        remaining += environment->getEdgeWeight(*it, *(it + 1));
+    for (size_t i = routeIndex; i + 1 < activePath.size(); ++i) {
+        remaining += environment->getEdgeWeight(activePath[i], activePath[i + 1]);
     }
     return remaining;
 }
@@ -163,35 +162,33 @@ void NavigationCore::handleObstacles(const std::vector<int>& obstacles) {
         }
         return;
     }
-    // Keep the route if it is still clear; otherwise replan from the current position.
+    // Hand the replanner only the part still ahead. It keeps that part if it is still clear, or plans
+    // a new one from the current position; either way the result starts at the current position.
+    dynamicReplanner->setInitialPath(std::vector<int>(activePath.begin() + routeIndex, activePath.end()));
     std::vector<int> route = dynamicReplanner->updateAndReplan(currentPosition, activePath.back(), obstacles);
     if (route.empty()) {
         std::cout << "[NAVIGATION] No route around the reported obstacles; navigation halted" << std::endl;
         navigationActive = false;
         return;
     }
-    if (route.front() == activePath.front()) {
-        activePath = route;
-    } else {
-        // Keep the part already travelled so the route still reads start -> goal.
-        auto here = std::find(activePath.begin(), activePath.end(), currentPosition);
-        std::vector<int> merged(activePath.begin(), here);
-        merged.insert(merged.end(), route.begin(), route.end());
-        activePath = std::move(merged);
-    }
+    // Keep the part already travelled so the route still reads start -> goal; routeIndex keeps
+    // pointing at the current position, which is the first node of the new part.
+    std::vector<int> merged(activePath.begin(), activePath.begin() + routeIndex);
+    merged.insert(merged.end(), route.begin(), route.end());
+    activePath = std::move(merged);
 }
 
 bool NavigationCore::executeNavigationStep() {
     if (!navigationActive || activePath.empty()) {
         return false;
     }
-    auto here = std::find(activePath.begin(), activePath.end(), currentPosition);
-    if (here == activePath.end() || here + 1 == activePath.end()) {
+    if (routeIndex + 1 >= activePath.size()) {
         navigationActive = false;
         return false;
     }
-    currentPosition = *(here + 1);
-    if (currentPosition == activePath.back()) {
+    ++routeIndex;
+    currentPosition = activePath[routeIndex];
+    if (routeIndex + 1 == activePath.size()) {
         navigationActive = false;  // goal reached
     }
     return true;
@@ -212,9 +209,8 @@ std::string NavigationCore::getNavigationStatus() const {
     }
     status << " | mode " << modeName(currentMode);
     if (!activePath.empty()) {
-        auto here = std::find(activePath.begin(), activePath.end(), currentPosition);
-        status << " | at node " << currentPosition << " (" << (here - activePath.begin() + 1) << "/"
-               << activePath.size() << ") | remaining " << getRemainingDistance();
+        status << " | at node " << currentPosition << " (" << (routeIndex + 1) << "/" << activePath.size()
+               << ") | remaining " << getRemainingDistance();
     }
     return status.str();
 }
