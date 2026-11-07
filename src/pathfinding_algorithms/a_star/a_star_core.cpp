@@ -44,8 +44,12 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
     closedListManager->clear();
     nodesExplored = 0;
 
-    auto heuristic = [this](int nodeId, int goal) {
-        return heuristicFunction ? heuristicFunction(nodeId, goal) : calculateHeuristic(nodeId, goal);
+    // The default heuristic is straight-line distance scaled by the smallest cost per unit length of
+    // any edge, so it never overestimates and A* stays optimal whatever the edge costs are.
+    // minimumCostPerLength() also rejects negative weights, which A* cannot handle.
+    const double scale = minimumCostPerLength();
+    auto heuristic = [this, scale](int nodeId, int goal) {
+        return heuristicFunction ? heuristicFunction(nodeId, goal) : scale * calculateHeuristic(nodeId, goal);
     };
 
     std::unordered_map<int, double> gScore;
@@ -56,7 +60,13 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
     std::vector<int> path;
     while (!openListManager->empty()) {
         AStarNode current = openListManager->pop();
-        if (closedListManager->contains(current.nodeId)) {
+        // Skip entries made stale by a cheaper route, and nodes already expanded at this cost. A
+        // closed node is expanded again only when a strictly cheaper route reaches it, which a custom
+        // heuristic that is admissible but not consistent can cause.
+        const auto best = gScore.find(current.nodeId);
+        if ((best != gScore.end() && current.gScore > best->second) ||
+            (closedListManager->contains(current.nodeId) &&
+             current.gScore >= closedListManager->getGScore(current.nodeId))) {
             continue;
         }
         closedListManager->add(current.nodeId, current.gScore, current.fScore);
@@ -69,9 +79,6 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
 
         for (const Edge& edge : graph->getEdgesFrom(current.nodeId)) {
             const int neighbor = edge.getToNode();
-            if (closedListManager->contains(neighbor)) {
-                continue;
-            }
             const double tentative = current.gScore + edge.getWeight();
             auto known = gScore.find(neighbor);
             if (known == gScore.end() || tentative < known->second) {
