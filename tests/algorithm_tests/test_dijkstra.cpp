@@ -287,10 +287,14 @@ public:
             std::cout << "✗ Some Dijkstra tests failed!" << std::endl;
         }
     }
+
+    bool allPassed() const {
+        return testsRun > 0 && testsPassed == testsRun;
+    }
 };
 
 int main() {
     DijkstraTester tester;
     tester.runAllTests();
-    return 0;
+    return tester.allPassed() ? 0 : 1;
 }
