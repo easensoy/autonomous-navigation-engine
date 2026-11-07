@@ -3,6 +3,7 @@
 #include "graph_operations/GraphBuilder.hpp"
 #include "pathfinding_algorithms/AStar.hpp"
 #include "pathfinding_algorithms/Dijkstra.hpp"
+#include "path_operations/PathValidator.hpp"
 #include "core/Graph.hpp"
 #include <iostream>
 #include <cassert>
@@ -362,7 +363,28 @@ public:
             
             return started && stepResult && finalStep && !status.empty();
         });
-        
+
+        runTest("Path validation uses the graph it is given", []() {
+            // Two copies of one two-node map that differ only in their node ids: validating the
+            // same route on each must give the same answer.
+            Graph first;
+            first.addNode(0, "A", 0, 0);
+            first.addNode(1, "B", 10, 0);
+            first.addEdge(0, 1, 10.0);
+            Graph second;
+            second.addNode(100, "A", 0, 0);
+            second.addNode(101, "B", 10, 0);
+            second.addEdge(100, 101, 10.0);
+
+            PathValidator firstValidator(&first);
+            PathValidator secondValidator(&second);
+            std::string firstReport;
+            std::string secondReport;
+            const bool firstValid = firstValidator.validatePathWithDetails({0, 1}, firstReport);
+            const bool secondValid = secondValidator.validatePathWithDetails({100, 101}, secondReport);
+            return firstValid == secondValid && secondReport.find("does not exist") == std::string::npos;
+        });
+
         printResults();
     }
     
