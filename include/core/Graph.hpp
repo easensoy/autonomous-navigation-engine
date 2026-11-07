@@ -5,12 +5,14 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <cstdint>
 
 class Graph
 {
     private:
         std::unordered_map<int, std::unique_ptr<Node>> nodes;
         std::unordered_map<int, std::vector<Edge>> adjacencyList;
+        std::uint64_t revision = 0;  // see getRevision()
 
         void validateNodeExists(int nodeId) const;
     
@@ -48,6 +50,11 @@ class Graph
 
         bool isConnected() const;
         void printGraphStructure() const;
+
+        // Changes whenever nodes or edges change (the non-const getNode counts as a change, since
+        // the caller may overwrite the node), so algorithms can cache values derived from the graph
+        // and recompute them only when the revision moves.
+        std::uint64_t getRevision() const;
 
         auto begin() const { return nodes.begin(); }
         auto end() const { return nodes.end(); }
