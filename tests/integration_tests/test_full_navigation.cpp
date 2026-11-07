@@ -488,7 +488,83 @@ public:
             
             return started && !statusLog.empty() && statusLog.size() >= 3;
         });
-        
+
+        runTest("Route that revisits a node runs to the goal", []() {
+            // Waypoints 1, 0, 2 on the line 0 - 1 - 2 give the route 0 1 0 1 2, which passes
+            // nodes 0 and 1 twice. Progress has to follow the route, not a node's first visit.
+            Graph line;
+            for (int i = 0; i < 3; ++i) {
+                line.addNode(i, "Stop" + std::to_string(i), i * 10.0, 0);
+            }
+            line.addEdge(0, 1, 10.0);
+            line.addEdge(1, 2, 10.0);
+
+            NavigationCore navigator(&line);
+            if (!navigator.startNavigationWithWaypoints(0, {1, 0, 2}) ||
+                navigator.getCurrentPath() != std::vector<int>{0, 1, 0, 1, 2}) {
+                return false;
+            }
+            std::vector<int> visited;
+            std::vector<double> remaining;
+            std::string statusAtSecondVisit;
+            for (int step = 0; step < 10 && navigator.executeNavigationStep(); ++step) {
+                visited.push_back(navigator.getCurrentPosition());
+                remaining.push_back(navigator.getRemainingDistance());
+                if (visited.size() == 3) {
+                    statusAtSecondVisit = navigator.getNavigationStatus();
+                }
+            }
+            return visited == std::vector<int>{1, 0, 1, 2} &&
+                   remaining == std::vector<double>{30.0, 20.0, 10.0, 0.0} &&
+                   statusAtSecondVisit.find("(4/5)") != std::string::npos && navigator.isNavigationComplete();
+        });
+
+        runTest("No route to a goal reported as blocked", []() {
+            Graph line;
+            for (int i = 0; i < 3; ++i) {
+                line.addNode(i, "Stop" + std::to_string(i), i * 10.0, 0);
+            }
+            line.addEdge(0, 1, 10.0);
+            line.addEdge(1, 2, 10.0);
+
+            DynamicReplanner replanner(&line);
+            const std::vector<int> route = replanner.updateAndReplan(0, 2, {2});
+
+            NavigationCore navigator(&line);
+            navigator.handleObstacles({2});  // reported before navigation starts
+            const bool started = navigator.startNavigation(0, 2);
+            return route.empty() && !started;
+        });
+
+        runTest("Replanning after a revisit keeps the travelled route", []() {
+            // Square A(0) B(1) C(2) D(3): the last leg 0 -> 2 goes through 1 (cost 20 against 21 through 3).
+            Graph square;
+            square.addNode(0, "A", 0, 0);
+            square.addNode(1, "B", 10, 0);
+            square.addNode(2, "C", 10, 10);
+            square.addNode(3, "D", 0, 10);
+            square.addEdge(0, 1, 10.0);
+            square.addEdge(1, 2, 10.0);
+            square.addEdge(0, 3, 10.0);
+            square.addEdge(3, 2, 11.0);
+
+            NavigationCore navigator(&square);
+            if (!navigator.startNavigationWithWaypoints(0, {1, 0, 2}) ||
+                navigator.getCurrentPath() != std::vector<int>{0, 1, 0, 1, 2}) {
+                return false;
+            }
+            navigator.executeNavigationStep();  // at 1
+            navigator.executeNavigationStep();  // back at 0, the third entry of the route
+            navigator.handleObstacles({1});     // node 1, next on the route, is now blocked
+            const std::vector<int> replanned = navigator.getCurrentPath();
+            std::vector<int> visited;
+            for (int step = 0; step < 10 && navigator.executeNavigationStep(); ++step) {
+                visited.push_back(navigator.getCurrentPosition());
+            }
+            return replanned == std::vector<int>{0, 1, 0, 3, 2} && visited == std::vector<int>{3, 2} &&
+                   navigator.isNavigationComplete();
+        });
+
         printResults();
     }
     
