@@ -515,10 +515,14 @@ public:
         std::cout << "- Error handling prevents system failures gracefully" << std::endl;
         std::cout << "- Resource management maintains system stability" << std::endl;
     }
+
+    bool allPassed() const {
+        return testsRun > 0 && testsPassed == testsRun;
+    }
 };
 
 int main() {
     FullNavigationTester tester;
     tester.runAllTests();
-    return 0;
+    return tester.allPassed() ? 0 : 1;
 }
