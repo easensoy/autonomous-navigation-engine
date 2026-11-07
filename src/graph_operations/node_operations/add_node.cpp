@@ -106,7 +106,7 @@ public:
         
         std::string nodeName = newName.empty() ? (sourceNode.getName() + "_copy") : newName;
         
-        return addNodeWithSpecificId(nextAutoId, nodeName, sourceNode.getX(), sourceNode.getY()) != -1;
+        return addNodeWithSpecificId(nextAutoId, nodeName, sourceNode.getX(), sourceNode.getY());
     }
     
     void setValidation(bool enable) {
