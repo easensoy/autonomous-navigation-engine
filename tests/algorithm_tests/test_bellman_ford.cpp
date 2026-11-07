@@ -221,10 +221,14 @@ public:
             std::cout << "✗ Some Bellman-Ford tests failed!" << std::endl;
         }
     }
+
+    bool allPassed() const {
+        return testsRun > 0 && testsPassed == testsRun;
+    }
 };
 
 int main() {
     BellmanFordTester tester;
     tester.runAllTests();
-    return 0;
+    return tester.allPassed() ? 0 : 1;
 }
