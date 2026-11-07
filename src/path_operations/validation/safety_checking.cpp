@@ -51,8 +51,6 @@ public:
         if (!graph) {
             throw std::invalid_argument("Graph pointer cannot be null");
         }
-        
-        std::cout << "[SAFETY_CHECK] Safety checker initialized" << std::endl;
     }
     
     SafetyMetrics checkPathSafety(const std::vector<int>& path) {
@@ -422,16 +420,29 @@ public:
     }
 };
 
-// Global safety checker
-static std::unique_ptr<SafetyChecker> g_safetyChecker;
+// Settings applied to every check once configureSafetyChecking has been called.
+namespace {
+struct SafetySettings {
+    bool configured = false;
+    double minimumSafetyScore = 0.6;
+    double hazardProximityThreshold = 5.0;
+    bool emergencyPlanning = true;
+};
+SafetySettings g_safetySettings;
+}  // namespace
 
 bool checkPathSafety(const Graph* graph, const std::vector<int>& path, 
                     double& safetyScore, std::string& safetyReport) {
-    if (!g_safetyChecker) {
-        g_safetyChecker = std::make_unique<SafetyChecker>(graph);
+    // A fresh checker for each call, bound to the graph it is given, so nothing from an earlier
+    // graph can leak into this check.
+    SafetyChecker checker(graph);
+    if (g_safetySettings.configured) {
+        checker.setMinimumSafetyScore(g_safetySettings.minimumSafetyScore);
+        checker.setHazardProximityThreshold(g_safetySettings.hazardProximityThreshold);
+        checker.enableEmergencyPlanning(g_safetySettings.emergencyPlanning);
     }
     
-    auto metrics = g_safetyChecker->checkPathSafety(path);
+    auto metrics = checker.checkPathSafety(path);
     safetyScore = metrics.overallSafetyScore;
     
     // Generate safety report
@@ -454,9 +465,5 @@ bool checkPathSafety(const Graph* graph, const std::vector<int>& path,
 }
 
 void configureSafetyChecking(double minSafetyScore, double proximityThreshold, bool emergencyPlanning) {
-    if (g_safetyChecker) {
-        g_safetyChecker->setMinimumSafetyScore(minSafetyScore);
-        g_safetyChecker->setHazardProximityThreshold(proximityThreshold);
-        g_safetyChecker->enableEmergencyPlanning(emergencyPlanning);
-    }
+    g_safetySettings = {true, minSafetyScore, proximityThreshold, emergencyPlanning};
 }
