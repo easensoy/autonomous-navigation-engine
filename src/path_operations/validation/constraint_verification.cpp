@@ -36,8 +36,6 @@ public:
         if (!graph) {
             throw std::invalid_argument("Graph pointer cannot be null");
         }
-        
-        std::cout << "[CONSTRAINT_VERIFY] Constraint verifier initialized" << std::endl;
     }
     
     bool verifyPathConstraints(const std::vector<int>& path, std::vector<ConstraintViolation>& violations) const {
@@ -351,17 +349,30 @@ public:
     }
 };
 
-// Global constraint verifier
-static std::unique_ptr<ConstraintVerifier> g_constraintVerifier;
+// Limits applied to every verification once setConstraintParameters has been called.
+namespace {
+struct ConstraintSettings {
+    bool configured = false;
+    double maxSegmentLength = 50.0;
+    double maxTotalLength = 1000.0;
+    double maxDeviationAngle = M_PI;
+};
+ConstraintSettings g_constraintSettings;
+}  // namespace
 
 bool verifyPathConstraints(const Graph* graph, const std::vector<int>& path, 
                           std::string& violationReport, bool strictMode) {
-    if (!g_constraintVerifier || g_constraintVerifier.get() == nullptr) {
-        g_constraintVerifier = std::make_unique<ConstraintVerifier>(graph, strictMode);
+    // A fresh verifier for each call, bound to the graph and strictness it is given (a shared one
+    // would keep the first caller's graph and strict mode).
+    ConstraintVerifier verifier(graph, strictMode);
+    if (g_constraintSettings.configured) {
+        verifier.setMaxSegmentLength(g_constraintSettings.maxSegmentLength);
+        verifier.setMaxTotalLength(g_constraintSettings.maxTotalLength);
+        verifier.setMaxDeviationAngle(g_constraintSettings.maxDeviationAngle);
     }
     
     std::vector<ConstraintVerifier::ConstraintViolation> violations;
-    bool isValid = g_constraintVerifier->verifyPathConstraints(path, violations);
+    bool isValid = verifier.verifyPathConstraints(path, violations);
     
     // Generate violation report
     violationReport.clear();
@@ -382,9 +393,5 @@ bool checkPathStructuralConstraints(const Graph* graph, const std::vector<int>& 
 }
 
 void setConstraintParameters(double maxSegmentLength, double maxTotalLength, double maxAngle) {
-    if (g_constraintVerifier) {
-        g_constraintVerifier->setMaxSegmentLength(maxSegmentLength);
-        g_constraintVerifier->setMaxTotalLength(maxTotalLength);
-        g_constraintVerifier->setMaxDeviationAngle(maxAngle);
-    }
+    g_constraintSettings = {true, maxSegmentLength, maxTotalLength, maxAngle};
 }
