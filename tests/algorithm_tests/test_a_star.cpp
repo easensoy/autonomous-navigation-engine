@@ -1,12 +1,18 @@
 #include "pathfinding_algorithms/AStar.hpp"
+#include "pathfinding_algorithms/Dijkstra.hpp"
 #include "core/Graph.hpp"
 #include <iostream>
+#include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <functional>
+#include <random>
+#include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 class AStarTester {
 private:
@@ -194,7 +200,155 @@ public:
             std::vector<int> path = astar.findPath(0, 1);
             return path.empty();
         });
-        
+
+        runTest("Default heuristic stays optimal when edges cost less than their length", []() {
+            // The cheap route detours far away in space, so plain straight-line distance
+            // overestimates its remaining cost unless the heuristic is scaled to the edge costs.
+            Graph graph;
+            graph.addNode(0, "Start", 0, 0);
+            graph.addNode(1, "FarDetour", 1000, 0);
+            graph.addNode(2, "NearStep", 1, 0);
+            graph.addNode(3, "Goal", 2, 0);
+            graph.addEdge(0, 1, 1.0, false);
+            graph.addEdge(1, 3, 1.0, false);
+            graph.addEdge(0, 2, 1.0, false);
+            graph.addEdge(2, 3, 10.0, false);
+
+            AStar astar(&graph);
+            std::vector<int> path = astar.findPath(0, 3);
+            return !path.empty() && astar.getPathCost(path) == 2.0;
+        });
+
+        runTest("Default heuristic follows edge changes made between searches", []() {
+            // The first search caches the heuristic scale for this graph. Adding a cheap detour far
+            // away in space lowers that scale; reusing the old value would overestimate the detour.
+            Graph graph;
+            graph.addNode(0, "Start", 0, 0);
+            graph.addNode(1, "FarDetour", 1000, 0);
+            graph.addNode(2, "NearStep", 1, 0);
+            graph.addNode(3, "Goal", 2, 0);
+            graph.addEdge(0, 2, 1.0, false);
+            graph.addEdge(2, 3, 10.0, false);
+
+            AStar astar(&graph);
+            const std::vector<int> before = astar.findPath(0, 3);
+            graph.addEdge(0, 1, 1.0, false);
+            graph.addEdge(1, 3, 1.0, false);
+            const std::vector<int> after = astar.findPath(0, 3);
+            return astar.getPathCost(before) == 11.0 && !after.empty() && astar.getPathCost(after) == 2.0;
+        });
+
+        runTest("Admissible but inconsistent heuristic still finds the optimal path", []() {
+            // h(2) = 3 never overestimates (the cheapest 2 -> 3 route costs 3), but it drops by 3
+            // across the edge 2 -> 1, which costs 1. Node 1 has to be reopened to find the cost-4 route.
+            Graph graph;
+            for (int i = 0; i < 4; ++i) {
+                graph.addNode(i, "Node" + std::to_string(i), 0, 0);
+            }
+            graph.addEdge(0, 1, 3.0, false);
+            graph.addEdge(0, 2, 1.0, false);
+            graph.addEdge(2, 1, 1.0, false);
+            graph.addEdge(1, 3, 2.0, false);
+            graph.addEdge(2, 3, 100.0, false);
+
+            AStar astar(&graph);
+            astar.setHeuristicFunction([](int nodeId, int) { return nodeId == 2 ? 3.0 : 0.0; });
+            std::vector<int> path = astar.findPath(0, 3);
+            return !path.empty() && astar.getPathCost(path) == 4.0;
+        });
+
+        runTest("Admissibility check works with the default heuristic", []() {
+            Graph graph;
+            graph.addNode(0, "Start", 0, 0);
+            graph.addNode(1, "Goal", 10, 0);
+            graph.addEdge(0, 1, 10.0);
+
+            AStar astar(&graph);
+            return astar.isHeuristicAdmissible(0, 1);
+        });
+
+        runTest("Admissibility check catches an overestimate away from the start", []() {
+            Graph graph;
+            for (int i = 0; i < 3; ++i) {
+                graph.addNode(i, "Node" + std::to_string(i), i * 10.0, 0);
+            }
+            graph.addEdge(0, 1, 10.0);
+            graph.addEdge(1, 2, 10.0);
+
+            AStar astar(&graph);
+            // Fine at the start (0 <= 20), but node 1 claims 50 when the goal is 10 away.
+            astar.setHeuristicFunction([](int nodeId, int) { return nodeId == 1 ? 50.0 : 0.0; });
+            return !astar.isHeuristicAdmissible(0, 2);
+        });
+
+        runTest("Rejects negative edge weights", []() {
+            Graph graph;
+            for (int i = 0; i < 3; ++i) {
+                graph.addNode(i, "Node" + std::to_string(i), i * 10.0, 0);
+            }
+            graph.addEdge(0, 1, 10.0, false);
+            graph.addEdge(1, 2, -5.0, false);
+
+            AStar astar(&graph);
+            try {
+                astar.findPath(0, 2);
+            } catch (const std::invalid_argument&) {
+                return true;
+            }
+            return false;
+        });
+
+        runTest("Matches Dijkstra's cost on 100 random graphs", []() {
+            // Edge costs range from 5% to 300% of the straight-line length, so many edges cost
+            // less than their length: the case where an unscaled distance heuristic overestimates.
+            std::mt19937 rng(20261107);
+            std::uniform_real_distribution<double> coordinate(0.0, 100.0);
+            std::uniform_real_distribution<double> costFactor(0.05, 3.0);
+            std::uniform_int_distribution<int> nodeCount(5, 25);
+            for (int trial = 0; trial < 100; ++trial) {
+                Graph graph;
+                const int n = nodeCount(rng);
+                for (int i = 0; i < n; ++i) {
+                    const double x = coordinate(rng);
+                    const double y = coordinate(rng);
+                    graph.addNode(i, "N" + std::to_string(i), x, y);
+                }
+                std::uniform_int_distribution<int> pickNode(0, n - 1);
+                for (int e = 0; e < n * 3; ++e) {
+                    const int a = pickNode(rng);
+                    const int b = pickNode(rng);
+                    if (a == b || graph.hasEdge(a, b) || graph.hasEdge(b, a)) {
+                        continue;
+                    }
+                    const double length = graph.getNode(a).euclideanDistance(graph.getNode(b));
+                    const double cost = std::max(0.001, length * costFactor(rng));
+                    const bool twoWay = rng() % 2 == 0;
+                    graph.addEdge(a, b, cost, twoWay);
+                }
+
+                AStar astar(&graph);
+                Dijkstra dijkstra(&graph);
+                for (int query = 0; query < 3; ++query) {
+                    const int start = pickNode(rng);
+                    const int goal = pickNode(rng);
+                    const std::vector<int> found = astar.findPath(start, goal);
+                    const std::vector<int> shortest = dijkstra.findShortestPath(start, goal);
+                    if (found.empty() != shortest.empty()) {
+                        return false;
+                    }
+                    if (!found.empty()) {
+                        const double expected = astar.getPathCost(shortest);
+                        if (std::abs(astar.getPathCost(found) - expected) > 1e-9 * std::max(1.0, expected)) {
+                            std::cout << "(trial " << trial << ": A* cost " << astar.getPathCost(found)
+                                      << ", Dijkstra cost " << expected << ") ";
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        });
+
         printResults();
     }
     
