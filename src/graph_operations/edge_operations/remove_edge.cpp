@@ -1,53 +1,8 @@
 #include "core/Graph.hpp"
 #include <iostream>
-#include <algorithm>
 #include <utility>
 
-bool Graph::removeEdge(int fromId, int toId) {
-    std::cout << "[GRAPH] Attempting to remove edge: " << fromId << " -> " << toId << std::endl;
-    
-    // Validate that both nodes exist
-    if (!hasNode(fromId)) {
-        std::cout << "[GRAPH] Cannot remove edge - source node " << fromId << " does not exist" << std::endl;
-        return false;
-    }
-    
-    if (!hasNode(toId)) {
-        std::cout << "[GRAPH] Cannot remove edge - target node " << toId << " does not exist" << std::endl;
-        return false;
-    }
-    
-    bool edgeRemoved = false;
-    
-    // Remove edge from fromId to toId
-    auto& fromEdges = adjacencyList[fromId];
-    auto it = std::find_if(fromEdges.begin(), fromEdges.end(),
-        [toId](const Edge& edge) { return edge.getToNode() == toId; });
-    
-    if (it != fromEdges.end()) {
-        bool wasBidirectional = it->isBidirectional();
-        fromEdges.erase(it);
-        edgeRemoved = true;
-        
-        std::cout << "[GRAPH] Removed edge " << fromId << " -> " << toId << std::endl;
-        
-        // If the edge was bidirectional, also remove the reverse edge
-        if (wasBidirectional) {
-            auto& toEdges = adjacencyList[toId];
-            auto reverseIt = std::find_if(toEdges.begin(), toEdges.end(),
-                [fromId](const Edge& edge) { return edge.getToNode() == fromId; });
-            
-            if (reverseIt != toEdges.end()) {
-                toEdges.erase(reverseIt);
-                std::cout << "[GRAPH] Removed bidirectional edge " << toId << " -> " << fromId << std::endl;
-            }
-        }
-    } else {
-        std::cout << "[GRAPH] Edge " << fromId << " -> " << toId << " not found" << std::endl;
-    }
-    
-    return edgeRemoved;
-}
+// Graph::removeEdge itself is defined in core/graph/edge_insertion.cpp; these helpers build on it.
 
 // Additional helper function for batch edge removal
 bool removeMultipleEdges(Graph* graph, const std::vector<std::pair<int, int>>& edgesToRemove) {
