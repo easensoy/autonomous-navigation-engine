@@ -7,17 +7,27 @@ size_t Graph::getNodeCount() const {
     return nodes.size();
 }
 
+// A two-way edge is stored once per direction but counts as one edge; a one-way edge counts once.
 size_t Graph::getEdgeCount() const {
     size_t count = 0;
     for (const auto& pair : adjacencyList) {
-        count += pair.second.size();
+        for (const Edge& edge : pair.second) {
+            if (!edge.isBidirectional() || edge.getFromNode() < edge.getToNode()) {
+                ++count;
+            }
+        }
     }
-    return count / 2;
+    return count;
+}
+
+std::uint64_t Graph::getRevision() const {
+    return revision;
 }
 
 void Graph::clear() {
     nodes.clear();
     adjacencyList.clear();
+    ++revision;
 }
 
 bool Graph::isEmpty() const {
