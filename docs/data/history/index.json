@@ -1,0 +1,415 @@
+{
+ "schema": "ane-evidence/history/1",
+ "selection_rule": "The README, docs/data/summary.json and the figures use the newest complete benchmark run made at the published source revision. Every run stays in this history, whatever its results; none is replaced or dropped.",
+ "runs": [
+  {
+   "folder": "2026-11-08T04-30_57c9805-999180972288abbe",
+   "generated_utc": "2026-11-08T04:30:32+00:00",
+   "source": {
+    "head": "57c9805ca11f1cc5d152a4d8ab5cbbe125a29fb7",
+    "dirty": true,
+    "dirty_state_id": "999180972288abbe"
+   },
+   "compiler": "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe",
+   "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+    "logical_processors": 22,
+    "memory_bytes": 33777467392,
+    "os": "Windows-11-10.0.26200-SP0",
+    "ac_power": true,
+    "power_plan": "Balanced"
+   },
+   "load_gate": null,
+   "background_cpu_load": {},
+   "bench_records_sha256": "b6f7d8ac0d84d88086b65749a413b3412a423d4196aa0f6fbf4b9c2c9952042b",
+   "headline": {
+    "hero_plan_ms_p50": 0.1446,
+    "hero_replan_ms_p50": 0.4405,
+    "replan_search_share": {
+     "warehouse_s": 0.1662501412076079,
+     "warehouse_m": 0.15615136073877542,
+     "warehouse_l": 0.1234689318283259,
+     "hero": 0.17534056102346468
+    },
+    "replan_ms_p50": {
+     "warehouse_s": 0.48119999999999996,
+     "warehouse_m": 4.2456,
+     "warehouse_l": 30.432299999999998
+    },
+    "astar_query_ms_p50": {
+     "warehouse_s": 0.050699999999999995,
+     "warehouse_m": 0.5337,
+     "warehouse_l": 3.2677
+    },
+    "dijkstra_over_astar_paired_p50": {
+     "warehouse_s": 9.397177419354838,
+     "warehouse_m": 9.384306987399771,
+     "warehouse_l": 10.635866484377605
+    },
+    "astar_zero_over_astar_paired_p50": {
+     "warehouse_s": 3.290625,
+     "warehouse_m": 3.678120063191153,
+     "warehouse_l": 3.9749670619235835
+    },
+    "astar_optimal": {
+     "warehouse_s": "985/1000",
+     "warehouse_m": "976/1000",
+     "warehouse_l": "489/500"
+    },
+    "repeat_spread_median": {
+     "warehouse_s": {
+      "astar": 0.092640925851964,
+      "astar_zero": 0.07382921782155326,
+      "dijkstra": 0.08662047501418935,
+      "bfs": 0.06317328599344949
+     },
+     "warehouse_m": {
+      "astar": 0.3309415079236595,
+      "astar_zero": 0.1652543276545289,
+      "dijkstra": 0.12388983621312712,
+      "bfs": 0.10731855255945283
+     },
+     "warehouse_l": {
+      "astar": 0.1642718268646285,
+      "astar_zero": 0.152972155195642,
+      "dijkstra": 0.09529651191660676,
+      "bfs": 0.09506451085500484
+     }
+    }
+   },
+   "note": "Before the A* open-list fix (working tree on 57c9805). Background load not measured."
+  },
+  {
+   "folder": null,
+   "generated_utc": "2026-11-08T11:13:37+00:00",
+   "source": {
+    "head": "57c9805ca11f1cc5d152a4d8ab5cbbe125a29fb7",
+    "dirty": true,
+    "dirty_state_id": "6397dd18e31ba7c8"
+   },
+   "compiler": "MSVC 19.51",
+   "machine": null,
+   "load_gate": null,
+   "background_cpu_load": {},
+   "bench_records_sha256": null,
+   "headline": {
+    "hero_plan_ms_p50": 0.163,
+    "hero_replan_ms_p50": 0.498,
+    "replan_search_share": {
+     "warehouse_s": 0.154,
+     "warehouse_m": 0.168,
+     "warehouse_l": 0.131,
+     "hero": 0.159
+    },
+    "replan_ms_p50": {
+     "warehouse_s": 0.432,
+     "warehouse_m": 4.087,
+     "warehouse_l": 37.548
+    },
+    "astar_query_ms_p50": {
+     "warehouse_s": 0.0464,
+     "warehouse_m": 0.5103,
+     "warehouse_l": 3.6019
+    },
+    "dijkstra_over_astar_paired_p50": {
+     "warehouse_s": 10.45,
+     "warehouse_m": 10.47,
+     "warehouse_l": 12.42
+    },
+    "astar_zero_over_astar_paired_p50": {
+     "warehouse_s": 3.24,
+     "warehouse_m": 3.63,
+     "warehouse_l": 4.21
+    },
+    "astar_optimal": {
+     "warehouse_s": "1000/1000",
+     "warehouse_m": "1000/1000",
+     "warehouse_l": "500/500"
+    },
+    "repeat_spread_median": {
+     "warehouse_s": {
+      "astar": 0.135,
+      "astar_zero": 0.107,
+      "dijkstra": 0.095,
+      "bfs": 0.086
+     },
+     "warehouse_m": {
+      "astar": 0.453,
+      "astar_zero": 0.25,
+      "dijkstra": 0.156,
+      "bfs": 0.152
+     },
+     "warehouse_l": {
+      "astar": 0.32,
+      "astar_zero": 0.289,
+      "dijkstra": 0.195,
+      "bfs": 0.345
+     }
+    }
+   },
+   "note": "With the A* fix, before it was committed. Partial record: the run's files were overwritten by the next run; these headline values were printed from its summary.json during the session, rounded as shown. Background load not measured."
+  },
+  {
+   "folder": "2026-11-08T11-46_d732311",
+   "generated_utc": "2026-11-08T11:46:05+00:00",
+   "source": {
+    "head": "d732311e1a71dec70489920eb07a1521a0774daf",
+    "dirty": false,
+    "dirty_state_id": null
+   },
+   "compiler": "cl",
+   "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+    "logical_processors": 22,
+    "memory_bytes": 33777467392,
+    "os": "Windows-11-10.0.26200-SP0",
+    "ac_power": true,
+    "power_plan": "Balanced"
+   },
+   "load_gate": null,
+   "background_cpu_load": {},
+   "bench_records_sha256": "df8fcdb05624e8587888884f8598517d217ecc314beb63f04b18b275deb143c9",
+   "headline": {
+    "hero_plan_ms_p50": 0.141,
+    "hero_replan_ms_p50": 0.4184,
+    "replan_search_share": {
+     "warehouse_s": 0.1523904501071684,
+     "warehouse_m": 0.15608775416001508,
+     "warehouse_l": 0.1409197340048501,
+     "hero": 0.1600135270266007
+    },
+    "replan_ms_p50": {
+     "warehouse_s": 0.48179999999999995,
+     "warehouse_m": 4.715,
+     "warehouse_l": 44.9319
+    },
+    "astar_query_ms_p50": {
+     "warehouse_s": 0.0744,
+     "warehouse_m": 0.638,
+     "warehouse_l": 3.7512999999999996
+    },
+    "dijkstra_over_astar_paired_p50": {
+     "warehouse_s": 10.3247344461305,
+     "warehouse_m": 10.014998469543924,
+     "warehouse_l": 13.018739781159603
+    },
+    "astar_zero_over_astar_paired_p50": {
+     "warehouse_s": 3.1863560732113143,
+     "warehouse_m": 3.5039928129367137,
+     "warehouse_l": 4.292124050049896
+    },
+    "astar_optimal": {
+     "warehouse_s": "1000/1000",
+     "warehouse_m": "1000/1000",
+     "warehouse_l": "500/500"
+    },
+    "repeat_spread_median": {
+     "warehouse_s": {
+      "astar": 0.43683133586670564,
+      "astar_zero": 0.40107985898221954,
+      "dijkstra": 0.3292046345540541,
+      "bfs": 0.392578851146856
+     },
+     "warehouse_m": {
+      "astar": 0.48485453984734395,
+      "astar_zero": 0.36891937871729774,
+      "dijkstra": 0.24186151532544287,
+      "bfs": 0.27064899313014257
+     },
+     "warehouse_l": {
+      "astar": 0.33508245480835874,
+      "astar_zero": 0.3125549153105546,
+      "dijkstra": 0.2075551580362436,
+      "bfs": 0.31643559311749336
+     }
+    }
+   },
+   "note": "At the published commit d732311. Background load not measured; other processes kept several cores busy during the run (observed with Windows performance counters)."
+  },
+  {
+   "folder": "2026-11-08T19-49_361f788",
+   "generated_utc": "2026-11-08T19:49:43+00:00",
+   "source": {
+    "head": "361f78854000eca4d12118d3c56e4574801f7a84",
+    "dirty": false,
+    "dirty_state_id": null
+   },
+   "compiler": "cl",
+   "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+    "logical_processors": 22,
+    "memory_bytes": 33777467392,
+    "os": "Windows-11-10.0.26200-SP0",
+    "ac_power": true,
+    "power_plan": "Balanced"
+   },
+   "load_gate": {
+    "threshold": 0.1,
+    "window_s": 10.0,
+    "consecutive_windows": 2,
+    "timeout_s": 900.0,
+    "waited_s": 900.2,
+    "window_loads": [
+     0.2765,
+     0.3686,
+     0.3935,
+     0.3882,
+     0.2993,
+     0.3638,
+     0.3327,
+     0.3066,
+     0.3069,
+     0.3769,
+     0.5109,
+     0.2969,
+     0.2806,
+     0.3567,
+     0.3256,
+     0.2525,
+     0.2587,
+     0.3456,
+     0.333,
+     0.2696,
+     0.2532,
+     0.2667,
+     0.2851,
+     0.2697,
+     0.3726,
+     0.3684,
+     0.3525,
+     0.2726,
+     0.2909,
+     0.3512,
+     0.3541,
+     0.2964,
+     0.2864,
+     0.3352,
+     0.2794,
+     0.3024,
+     0.2776,
+     0.3149,
+     0.2799,
+     0.3027,
+     0.4379,
+     0.3547,
+     0.3029,
+     0.3516,
+     0.3233,
+     0.2522,
+     0.2208,
+     0.2882,
+     0.2875,
+     0.3119,
+     0.2837,
+     0.2411,
+     0.1962,
+     0.2268,
+     0.2327,
+     0.217,
+     0.2626,
+     0.2453,
+     0.2118,
+     0.2166,
+     0.242,
+     0.2564,
+     0.2794,
+     0.2847,
+     0.2883,
+     0.2441,
+     0.2373,
+     0.2216,
+     0.1984,
+     0.2233,
+     0.2314,
+     0.3067,
+     0.2988,
+     0.3215,
+     0.3668,
+     0.2727,
+     0.259,
+     0.2465,
+     0.2948,
+     0.4045,
+     0.3517,
+     0.276,
+     0.2644,
+     0.3544,
+     0.2886,
+     0.2587,
+     0.2339,
+     0.2797,
+     0.223,
+     0.2026
+    ],
+    "met": false,
+    "definition": "share of all logical processors' time in use by any process, per window, sampled before the benchmark starts"
+   },
+   "background_cpu_load": {
+    "warehouse_l.query": 0.2430331021956651,
+    "warehouse_l.replan": 0.21476271278803877,
+    "warehouse_m.query": 0.23865287022308473,
+    "warehouse_m.replan": 0.22743190154634366,
+    "warehouse_s.query": 0.17866593325545146,
+    "warehouse_s.replan": 0.1569270771051932,
+    "hero": 0.17660461890479015
+   },
+   "bench_records_sha256": "e063ea490e82c1db461641b9e06794bf7bdd8da10cf9212495f2300ae0caf448",
+   "headline": {
+    "hero_plan_ms_p50": 0.1163,
+    "hero_replan_ms_p50": 0.3493,
+    "replan_search_share": {
+     "warehouse_s": 0.15030988016669639,
+     "warehouse_m": 0.15726526809697644,
+     "warehouse_l": 0.1329669662513947,
+     "hero": 0.15355199186470575
+    },
+    "replan_ms_p50": {
+     "warehouse_s": 0.4583,
+     "warehouse_m": 4.2703,
+     "warehouse_l": 36.6645
+    },
+    "astar_query_ms_p50": {
+     "warehouse_s": 0.0453,
+     "warehouse_m": 0.6117,
+     "warehouse_l": 3.6462
+    },
+    "dijkstra_over_astar_paired_p50": {
+     "warehouse_s": 10.679151061173533,
+     "warehouse_m": 9.773052058523307,
+     "warehouse_l": 12.126494114784514
+    },
+    "astar_zero_over_astar_paired_p50": {
+     "warehouse_s": 3.2478485370051633,
+     "warehouse_m": 3.4802578565672846,
+     "warehouse_l": 4.1902742836682965
+    },
+    "astar_optimal": {
+     "warehouse_s": "1000/1000",
+     "warehouse_m": "1000/1000",
+     "warehouse_l": "500/500"
+    },
+    "repeat_spread_median": {
+     "warehouse_s": {
+      "astar": 0.151442915447683,
+      "astar_zero": 0.11896878212411405,
+      "dijkstra": 0.1257709840846647,
+      "bfs": 0.1018754212964573
+     },
+     "warehouse_m": {
+      "astar": 0.47730326976460996,
+      "astar_zero": 0.3509399581350081,
+      "dijkstra": 0.21738670639062774,
+      "bfs": 0.25550427956191957
+     },
+     "warehouse_l": {
+      "astar": 0.3427203867228973,
+      "astar_zero": 0.3102416678033971,
+      "dijkstra": 0.22563941416399175,
+      "bfs": 0.3560704920039305
+     }
+    }
+   },
+   "note": "First run with the load gate and background-load records, at 361f788 (after the A* fix, the Jump Point Search rewrite, the NavigationCore states and the API cleanup)."
+  }
+ ]
+}

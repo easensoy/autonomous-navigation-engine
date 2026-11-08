@@ -3050,13 +3050,17 @@
   },
   "status_before": "ACTIVE | mode GLOBAL_ONLY | at node 527 (10/39) | remaining 30.2426",
   "replanner_route": [],
-  "console_message": "[NAVIGATION] No route around the reported obstacles; navigation halted",
-  "status_after": "IDLE | mode GLOBAL_ONLY | at node 527 (10/39) | remaining 30.2426",
+  "console_message": "[NAVIGATION] No route from node 527 to goal 789 around the reported obstacles; navigation blocked",
+  "status_after": "BLOCKED | mode GLOBAL_ONLY | at node 527 after 9 steps | no route to goal 789",
+  "state_after": "BLOCKED",
   "position_after": 527,
-  "route_after_is_route_before": true,
-  "route_after_contains_blocked": true,
-  "remaining_cost_after": 30.242640687119287,
+  "current_path_after": [518, 519, 520, 521, 522, 523, 524, 525, 526, 527],
+  "invalidated_route": [527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542, 543, 544, 592, 593, 594, 595, 642, 689, 737, 785, 786, 787, 788, 789],
+  "invalidated_route_blocked_nodes": 1,
+  "remaining_after_is_infinite": true,
   "execute_step_after": false,
+  "retry_after": false,
+  "state_after_retry": "BLOCKED",
   "reachable": false,
   "astar_route": [],
   "astar_expansions": 728,
@@ -3088,9 +3092,9 @@
       "detail": "728 expansions, 728 reachable, 0 pushed but never expanded"
     },
     {
-      "name": "navigation is no longer active",
+      "name": "the navigator enters BLOCKED",
       "pass": true,
-      "detail": "IDLE | mode GLOBAL_ONLY | at node 527 (10/39) | remaining 30.2426"
+      "detail": "BLOCKED | mode GLOBAL_ONLY | at node 527 after 9 steps | no route to goal 789"
     },
     {
       "name": "the navigator stays on its node",
@@ -3101,7 +3105,19 @@
       "pass": true
     },
     {
-      "name": "the old route is still returned by getCurrentPath",
+      "name": "getCurrentPath returns only the travelled part, ending at the current node",
+      "pass": true
+    },
+    {
+      "name": "getInvalidatedRoute returns the abandoned route ahead",
+      "pass": true
+    },
+    {
+      "name": "getRemainingDistance is infinite",
+      "pass": true
+    },
+    {
+      "name": "retryNavigation fails while the blockage stands",
       "pass": true
     }
   ]
