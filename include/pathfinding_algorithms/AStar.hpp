@@ -25,17 +25,16 @@ private:
         bool operator>(const AStarNode& other) const;
     };
 
+    // Lowest f first. A node can have several entries, one per cheaper route found; findPath()
+    // skips the stale ones (lazy deletion), so size() counts entries, not distinct nodes.
     class OpenListManager {
     private:
         std::priority_queue<AStarNode, std::vector<AStarNode>, std::greater<AStarNode>> openQueue;
-        std::unordered_set<int> openSet;
-        
+
     public:
         void push(const AStarNode& node);
         AStarNode pop();
         bool empty() const;
-        bool contains(int nodeId) const;
-        void remove(int nodeId);
         size_t size() const;
         void clear();
     };
@@ -82,8 +81,6 @@ private:
     void addToOpenList(const AStarNode& node);
     AStarNode getNextFromOpenList();
     bool isOpenListEmpty() const;
-    bool isInOpenList(int nodeId) const;
-    void removeFromOpenList(int nodeId);
     size_t getOpenListSize() const;
     
     void initializeClosedList();

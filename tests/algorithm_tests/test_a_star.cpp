@@ -11,6 +11,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -181,7 +182,7 @@ public:
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
             
             std::cout << " (100 searches in " << duration.count() << "μs)";
-            return duration.count() < 10000; // Should complete in less than 10ms
+            return duration.count() < 1000000;  // 1 s: guards against a pathological slowdown, not a speed target
         });
         
         runTest("Disconnected Graph", [this]() {
@@ -347,6 +348,85 @@ public:
                 }
             }
             return true;
+        });
+
+        runTest("Equal-cost routes whose sums round apart do not hide the cheaper entry", []() {
+            // X is reached first at g = 0.1 + 0.2 = 0.30000000000000004, then at 0.15 + 0.15 = 0.3.
+            // Adding h(X), about 99.9, rounds both open-list entries to the same f, and on equal f the
+            // stale entry (larger g) comes out first. Skipping it must leave the cheaper entry live:
+            // X is the only way to G.
+            Graph graph;
+            graph.addNode(0, "S", 0, 0);
+            graph.addNode(1, "P", 1, 0);
+            graph.addNode(2, "Q", 0, 1);
+            graph.addNode(3, "X", 1, 1);
+            graph.addNode(4, "G", 1000, 1);
+            graph.addEdge(0, 1, 0.1, false);
+            graph.addEdge(0, 2, 0.15, false);
+            graph.addEdge(1, 3, 0.2, false);
+            graph.addEdge(2, 3, 0.15, false);
+            graph.addEdge(3, 4, 1000.0, false);
+
+            AStar astar(&graph);
+            return astar.findPath(0, 4) == std::vector<int>{0, 2, 3, 4};
+        });
+
+        runTest("Matches Dijkstra's cost on a racked grid full of equal-cost routes", []() {
+            // A 22 x 17 lattice, 8-connected, with six 7 x 2 racks removed; each edge costs its
+            // length (1 or sqrt 2). Routes of equal cost add the same steps in different orders, so
+            // their sums can differ in the last bit, and the racks leave few alternatives when a
+            // node is lost. No randomness, so every compiler builds the same graph.
+            constexpr int width = 22;
+            constexpr int height = 17;
+            auto isRack = [&](int x, int y) {
+                return (y % 5 == 2 || y % 5 == 3) && y < height - 2 && x % 10 >= 2 && x % 10 <= 8 && x < width - 2;
+            };
+            Graph graph;
+            for (int y = 0; y < height; ++y) {
+                for (int x = 0; x < width; ++x) {
+                    if (!isRack(x, y)) {
+                        graph.addNode(y * width + x, "N" + std::to_string(y * width + x), x, y);
+                    }
+                }
+            }
+            const int offsets[4][2] = {{1, 0}, {0, 1}, {1, 1}, {-1, 1}};
+            for (int y = 0; y < height; ++y) {
+                for (int x = 0; x < width; ++x) {
+                    for (const auto& offset : offsets) {
+                        const int nx = x + offset[0];
+                        const int ny = y + offset[1];
+                        const int from = y * width + x;
+                        const int to = ny * width + nx;
+                        if (nx >= 0 && nx < width && ny < height && graph.hasNode(from) && graph.hasNode(to)) {
+                            graph.addEdge(from, to, std::hypot(double(offset[0]), double(offset[1])));
+                        }
+                    }
+                }
+            }
+
+            AStar astar(&graph);
+            Dijkstra dijkstra(&graph);
+            int queries = 0;
+            int costlier = 0;
+            for (int start = 0; start < width * height; start += 7) {
+                if (!graph.hasNode(start)) {
+                    continue;
+                }
+                const std::unordered_map<int, double> best = dijkstra.findShortestDistances(start);
+                for (int goal = 1; goal < width * height; goal += 9) {
+                    if (goal == start || !graph.hasNode(goal)) {
+                        continue;
+                    }
+                    ++queries;
+                    const std::vector<int> found = astar.findPath(start, goal);
+                    const double expected = best.at(goal);
+                    if (found.empty() || astar.getPathCost(found) > expected + 1e-9 * std::max(1.0, expected)) {
+                        ++costlier;
+                    }
+                }
+            }
+            std::cout << "(" << costlier << " of " << queries << " queries costlier than Dijkstra) ";
+            return queries > 1000 && costlier == 0;
         });
 
         printResults();

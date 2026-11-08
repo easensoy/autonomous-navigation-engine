@@ -64,6 +64,7 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
     std::vector<int> path;
     while (!openListManager->empty()) {
         AStarNode current = openListManager->pop();
+        // The open list returns every entry pushed, so this check alone decides which are live.
         // Skip entries made stale by a cheaper route, and nodes already expanded at this cost. A
         // closed node is expanded again only when a strictly cheaper route reaches it, which a custom
         // heuristic that is admissible but not consistent can cause.
