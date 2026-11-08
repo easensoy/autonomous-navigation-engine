@@ -1,0 +1,10 @@
+# Failure case: the goal is a pick face inside aisle C; at step 9 both ends of that aisle stretch
+# are reported blocked, so the goal is free but no route reaches it.
+include warehouse_layout.txt
+name failure_disconnected
+title Both ends of the goal's aisle are reported blocked at step 9
+start 1 11
+goal 37 16
+block_step 9
+block 33.5 15.5 34.5 17.5 west end blocked
+block 40.5 15.5 41.5 17.5 east end blocked

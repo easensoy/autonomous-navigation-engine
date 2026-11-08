@@ -1,0 +1,8 @@
+# Failure case: the same trip as the hero, but at step 9 the goal node itself is reported blocked.
+include warehouse_layout.txt
+name failure_goal_blocked
+title The goal node is reported blocked at step 9
+start 1 11
+goal 45 16
+block_step 9
+block 44.5 15.5 45.5 16.5 goal blocked

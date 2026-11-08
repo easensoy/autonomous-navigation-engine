@@ -1,0 +1,27 @@
+# Warehouse layout shared by the README scenarios (hero replan, search comparison, failures).
+# Coordinates are raw coordinate units: the x/y stored on each Node. One node stands on every
+# integer point that no rack covers; neighbours are joined by two-way edges (8-connected).
+# Edge weight = straight-line length x mean of the two endpoint zone multipliers.
+name warehouse
+title 47 x 24 lattice warehouse: 12 racks, aisles A-C, two cross aisles, perimeter aisles
+lattice 0 0 46 23
+connectivity 8
+
+# Racks in four rows (y 3-5, 8-10, 13-15, 18-20) and three blocks (x 4-15, 19-30, 34-41).
+shelf  3.5  2.5 15.5  5.5 rack
+shelf 18.5  2.5 30.5  5.5 rack
+shelf 33.5  2.5 41.5  5.5 rack
+shelf  3.5  7.5 15.5 10.5 rack
+shelf 18.5  7.5 30.5 10.5 rack
+shelf 33.5  7.5 41.5 10.5 rack
+shelf  3.5 12.5 15.5 15.5 rack
+shelf 18.5 12.5 30.5 15.5 rack
+shelf 33.5 12.5 41.5 15.5 rack
+shelf  3.5 17.5 15.5 20.5 rack
+shelf 18.5 17.5 30.5 20.5 rack
+shelf 33.5 17.5 41.5 20.5 rack
+
+# Aisles: A (y 6-7), B (y 11-12), C (y 16-17); perimeter aisles y 0-2 and 21-23;
+# cross aisles x 16-18 and 31-33; open areas x 0-3 and 42-46.
+# The middle stretch of aisle C is a picking zone where each unit of length costs 3.
+zone 18.5 15.5 30.5 17.5 3 picking zone

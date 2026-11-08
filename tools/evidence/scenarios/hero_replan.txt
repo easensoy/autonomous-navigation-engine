@@ -1,0 +1,9 @@
+# The README hero: the navigator plans dock -> packing station, starts driving along aisle B, and
+# at step 9 aisle B is reported blocked ahead of it. It replans from the node it is on.
+include warehouse_layout.txt
+name hero_replan
+title Aisle B is blocked ahead of the navigator at step 9; it replans from the node it is on
+start 1 11
+goal 45 16
+block_step 9
+block 20.5 10.5 27.5 12.5 aisle B blocked
