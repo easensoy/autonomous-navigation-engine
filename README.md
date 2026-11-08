@@ -1,138 +1,130 @@
 # Autonomous Navigation Engine
 
-Classical graph planners in C++17: A\*, Dijkstra, breadth-first and depth-first search, Bellman–Ford and Jump Point Search. Around them sit route following, obstacle-aware replanning, path validation and console/SVG reporting. It builds and passes all 101 test cases with both MSVC and GCC on Windows.
+[![CI](https://github.com/easensoy/autonomous-navigation-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/easensoy/autonomous-navigation-engine/actions/workflows/ci.yml)
 
-The engine plans on graphs you build: nodes with 2-D coordinates, joined by weighted one-way or two-way edges. It does not model vehicle dynamics, time or perception. Routes are sequences of nodes, obstacles are node IDs that the caller reports, and execution is simulated one node per step. [Known limitations](#known-limitations) lists what is missing or unfinished.
+A C++17 library that plans least-cost routes on weighted 2-D graphs, follows them one node per step,
+and replans from the node it is on when nodes ahead are reported blocked. The figures and measured
+numbers on this page are regenerated from the library's own output by one command; the scenarios,
+ordered search traces and raw timings are in [`docs/data`](docs/data).
 
-- **Language:** C++17, built with CMake.
-- **Size:** 33 public headers and 129 source files, about 45,600 lines, plus 11 test programs.
-- **Tested with:** MSVC 19.51 (Visual Studio 2026) and GCC 14.2 (MSYS2 UCRT64) on Windows 11, using CMake 4.3 and Ninja 1.13.
-- **Tests:** 9 functional test programs with 101 cases and 2 benchmark smoke programs, run by CTest. All pass with both compilers.
-- **Not yet:** Linux and macOS builds, continuous integration.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.gif">
+  <img src="docs/assets/hero-light.gif" width="100%" alt="Animated warehouse map with racks, aisles A, B and C, and a hatched picking zone on aisle C. A navigator leaves the dock along aisle B on its planned route, cost 46.7. At step 9, 14 nodes of aisle B ahead are reported blocked. It replans from its current node: down a cross aisle to aisle A, past the blockage, back up to aisle B, and reaches the station after 49 steps, cost 52.3. The abandoned plan stays dashed; during the replan the shortest detour by distance, through the picking zone, appears dotted with its cost of 62.2.">
+</picture>
 
-## Algorithms
+<sub>Simulated graph steps on a 744-node warehouse graph, one node per step; not a vehicle model.
+Static version: [light](docs/assets/hero-static-light.png) · [dark](docs/assets/hero-static-dark.png).</sub>
 
-| Algorithm | Finds | Guarantee | Tests |
-|---|---|---|---|
-| A\* | Least-cost route | Optimal when edge weights are non-negative; a negative weight throws. The default heuristic is straight-line distance scaled to the graph's edge costs, so it never overestimates. Nodes are reopened when a cheaper route reaches them, so a custom heuristic only has to be admissible. | 18 cases, including agreement with Dijkstra on 100 random graphs |
-| Dijkstra | Least-cost route, and distances to every node | Optimal for non-negative weights; a negative weight throws | 17 cases |
-| Breadth-first search | Route with the fewest edges | Fewest edges, not least cost | 15 cases |
-| Depth-first search | Some route | None: often far from the shortest | None yet |
-| Bellman–Ford | Least-cost route when weights can be negative | Detects negative cycles and returns no route when it finds one | 13 cases |
-| Jump Point Search | Route on an 8-connected grid graph | Every route it returns uses only graph edges, but routes are not always the shortest (see [Known limitations](#known-limitations)) | 3 cases |
+## What happens
 
-When the start or goal is not in the graph, or the goal cannot be reached, every search returns an empty route except depth-first search. Depth-first search still throws `std::invalid_argument` for an unknown start or goal.
+- **The map is a graph.** One node per free lattice point of a 47 × 24 warehouse: 744 nodes and 2,249
+  two-way edges, diagonals included. An edge costs its length in coordinate units (u), times 3 inside
+  aisle C's picking zone. `NavigationCore` plans dock → station with A\* (through `DynamicReplanner`):
+  cost 46.7 along aisle B.
+- **Step 9: aisle B is blocked.** The caller reports 14 nodes of aisle B, 11 nodes ahead, through
+  `handleObstacles`. The replanner searches from the navigator's current node on a copy of the graph
+  without those nodes.
+- **The decision.** It drops to aisle A and comes back up: remaining cost 43.3, against 37.7 for the
+  abandoned remainder. The shortest detour by distance is 38.2 u, 5.1 u shorter, but it crosses the
+  picking zone and would cost 62.2. The navigator arrives after 49 steps, having paid 52.3.
+- **Checked, not just drawn.** The exporter verifies the run against the graph: every step follows an
+  edge, no blocked node is entered after step 9, the travelled part is kept, and the replanned
+  remainder costs exactly Dijkstra's optimum on the same reduced graph (20 checks, all passing).
+  Planning took 0.14 ms and the replan 0.42 ms, median of 1,000 runs, timed apart from the animation.
 
-## Navigation and path operations
+### Finding: the search is the small part of a replan
 
-- **`NavigationCore`** plans a route, through waypoints if you give them. It follows the route one node per step and replans around obstacles reported on the way, keeping the part already travelled.
-- **`DynamicReplanner`** keeps the current route while it stays clear. Otherwise it runs A\* on a copy of the graph with the blocked nodes removed. A blocked goal has no route.
-- **`GlobalPathPlanner`** uses A\*, or Bellman–Ford when the graph has a negative weight. You can also ask for Dijkstra or Bellman–Ford explicitly.
-- **`MultiGoalPlanner`** orders the goals by nearest neighbour, then improves the order with 2-opt. The tour is good but not guaranteed to be the best.
-- **`PathValidator`** checks that every node exists and every step follows an edge. Its detailed check adds feasibility, safety and constraint reports.
-- **`PathOptimizer`** removes loops and takes cheaper shortcuts. **`PathSmoother`** cuts corners, using only existing edges.
-- **`PathExecutor`** simulates execution: one waypoint per step with a configurable delay, pause and resume, and an emergency stop.
-- **`EnvironmentManager`** switches between graphs, keeps a short history, and saves environments to files and restores them.
-- **Reporting** includes a console path printer, an ASCII renderer, SVG export, a logger and a timer.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/replan-cost-dark.png">
+  <img src="docs/assets/replan-cost-light.png" width="100%" alt="Stacked bars, one per warehouse size from 744 to 33,786 nodes, splitting one replan's time into A* search, heuristic scale pass, graph copy and blocked-node removal. The A* search is 14 to 16 percent of each bar; graph handling and the scale pass take most of the rest. Median replan times run from 0.42 ms to 44.9 ms.">
+</picture>
 
-## What a run looks like
+**Tested:** `NavigationCore::handleObstacles` on 300, 300 and 200 random blockages (3 × 3 nodes on the
+planned route) in three saved warehouses, and the hero's own replan 1,000 times; then the operations it
+performs, timed one by one. Nothing on this path prints to the console, and the separately timed parts
+account for 86–98% of the end-to-end time (median per warehouse). **Result:** the A\* search is 14–16% of a replan at every size. The
+rest is copying the whole graph, deleting each blocked node with a scan of every adjacency list, and
+recomputing A\*'s heuristic scale over every edge of the copy, because a new `AStar` cannot reuse the
+original's cache. On the 33,786-node warehouse that is 44.9 ms per replan against 5.94 ms of search.
+**Conclusion:** replanning cost here is dominated by graph handling, not search. The search share
+stayed within 12–18% across three full runs that day (the first before the A\* fix), while absolute
+times moved with machine load.
+Filtering blocked nodes inside the search and reusing the original A\*'s scale (still admissible when
+nodes are removed) would remove most of it; that change is
+[proposed, not made](docs/TECHNICAL_NOTES.md#where-a-replans-time-goes).
 
-The demo, `AutonomousNavigationEngine`, builds a 5 × 5 four-connected grid with 10-unit spacing. It finds a corner-to-corner route with A\*, Dijkstra and breadth-first search, follows that route, and validates and optimises it. Then it exercises environments, graph edits, multi-goal planning, algorithm selection, configuration and the console printer. This excerpt is from one run:
+## Comparing planners
 
-```text
-=== Creating Sample Graph ===
-…
-Created graph with 25 nodes and 40 edges
+### Search behaviour and route quality on the replanner's query
 
-=== Pathfinding Algorithm Comparison ===
-A*: Found path with 9 nodes in 22 μs
-Dijkstra: Found path with 9 nodes in 12 μs
-…
-BFS: Found path with 9 nodes in 236 μs
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/search-comparison-dark.png">
+  <img src="docs/assets/search-comparison-light.png" width="100%" alt="Four copies of the warehouse with expanded nodes shaded by expansion order. Dijkstra and A* with a zero heuristic shade almost every node, 730 and 712 expanded; A* with its default heuristic shades a narrow band along its route, 158 expanded; all three return the same route via aisle A with cost 43.3. BFS shades 645 nodes and returns a 37-edge route through the picking zone with cost 63.9.">
+</picture>
 
-=== Navigation System Demo ===
-Navigation started successfully
-Navigation step 0 completed
-…
-Navigation step 7 completed
-Navigation status: COMPLETED | mode GLOBAL_ONLY | at node 24 (9/9) | remaining 0
-Current path length: 9 nodes
+**Tested:** the replanner's exact query at step 9, run through each planner with a `SearchObserver`
+recording expansions in the order they happened. **Result:**
 
-=== Path Operations Demo ===
-…
-Path validation: VALID
-Optimized path length: 9 nodes
-Smoothed path length: 9 nodes
-Path cost: 80
-…
-Total distance: 8.00 units
-…
-Path Statistics:
-Nodes: 9
-Segments: 8
-Edge-weight cost: 80.00
-Geometric length (coordinate units): 80.00
-Straight-line distance (coordinate units): 56.57
-Efficiency: 70.71%
-Turns: 5
-Valid (every step follows an edge): yes
-```
+| Planner | Route cost | Length | Edges | Expanded |
+|---|---:|---:|---:|---:|
+| Dijkstra | 43.3 | 43.3 u | 40 | 730 (every reachable node; no early exit) |
+| A\*, h = 0 | 43.3 | 43.3 u | 40 | 712 |
+| A\*, default heuristic | 43.3 | 43.3 u | 40 | 158 |
+| BFS | 63.9 | 39.9 u | 37 | 645 |
 
-How to read the excerpt:
+**Conclusion:** stopping at the goal alone saves little here (730 → 712, since the station is among the
+farthest nodes); the heuristic does the work (712 → 158). BFS minimises edges, so it takes the picking
+zone and pays 47.5% more. Attaching the observer leaves every route unchanged, which the exporter checks.
 
-- **It is trimmed.** It comes from the 342 lines the demo prints. "…" marks removed lines, most of them per-step logging, and colour codes are stripped.
-- **The timings are not a benchmark.** They come from one Release build on an Intel Core Ultra 7 165H and include console logging, which breadth-first search does at every step.
-- **The two distance lines disagree by a factor of 10.** "Total distance: 8.00 units" and "Edge-weight cost: 80.00" describe the same route; [Known limitations](#known-limitations) explains why.
+**A bug the traces found, now fixed.** Recording expansions in order exposed a defect in A\*'s open
+list. Two equal-cost routes to a node can sum to values one rounding step apart. Once the heuristic was
+added, both frontier entries had the same *f*, the tie-break popped the stale one first, and the open
+list's bookkeeping then discarded the live one, so the node was never expanded. On the saved
+workloads A\* returned a costlier route than Dijkstra's on 15/1,000, 24/1,000 and 11/500 queries, by
+0.51–1.41 cost units (at most 7.8%), and on a five-node graph no route at all. The open list now keeps
+every entry, and the search alone skips the stale ones. On the same workloads A\* now returns the
+optimal route cost on all 2,500 queries and 800 replans, and two regression tests that failed on the
+old code pass. That is a result about route cost. Latency was timed separately, in alternation with
+the old code: queries got faster, not slower.
+[Mechanism, traces and before/after data](docs/TECHNICAL_NOTES.md#a-tie-bug-found-by-the-traces).
 
-## Tests
+### Controlled performance
 
-```text
-> ctest --test-dir build
-…
- 1/11 Test  #1: test_graph .......................   Passed    0.03 sec
- 2/11 Test  #2: test_a_star ......................   Passed    0.07 sec
- 3/11 Test  #3: test_dijkstra ....................   Passed    0.04 sec
- 4/11 Test  #4: test_bfs .........................   Passed    0.05 sec
- 5/11 Test  #5: test_bellman_ford ................   Passed    0.03 sec
- 6/11 Test  #6: test_jump_point_search ...........   Passed    0.05 sec
- 7/11 Test  #7: test_full_navigation .............   Passed    8.22 sec
- 8/11 Test  #8: test_environment_switching .......   Passed    0.08 sec
- 9/11 Test  #9: test_emergency_stop ..............   Passed    0.03 sec
-10/11 Test #10: algorithm_benchmarks .............   Passed    0.42 sec
-11/11 Test #11: scability_tests ..................   Passed   62.67 sec
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/perf-latency-dark.png">
+  <img src="docs/assets/perf-latency-light.png" width="100%" alt="Left: per-query latency against graph size, log scales, for Dijkstra, A* with a zero heuristic, BFS and A*; A* has the lowest median and 95th percentile at every size. Right: share of queries by route cost relative to the optimum; A* sits at exactly 1, the optimal cost, on every query, while BFS spreads to about 2.3.">
+</picture>
 
-100% tests passed, 0 tests failed out of 11
+**Tested:** 1,000 / 1,000 / 500 seeded start–goal pairs on warehouses of 1,107, 8,943 and 33,786 nodes;
+each planner timed 5 times per query after a warm-up, one solver object reused per graph, logging
+silenced, no observer attached. **Result:** paired per query, A\* is 10.0–13.0× faster than Dijkstra
+at the median, and 3.2–4.3× faster than A\* with *h* = 0, which isolates the heuristic's share. BFS returns
+a costlier route than the optimum on most queries (median cost ×1.03–×1.23). **Conclusion:** on weighted
+warehouse graphs the scaled straight-line heuristic is what makes A\* fast, and minimising edges is not
+a usable proxy for cost. **Qualifications:** absolute times are from one laptop and one compiler, and
+this run shared the machine with background work: Dijkstra's and BFS's times, whose code did not
+change, were 16–43% higher than in a quieter run earlier that day. In that run, before the A\* fix,
+Dijkstra ÷ A\* was 9.4–10.6× ([protocol and noise](docs/EVIDENCE.md#measurement-mode-what-is-timed)).
+BFS's times include its per-node print calls, which the API cannot disable.
 
-Total Test time (real) =  72.97 sec
-```
+### Failure behaviour
 
-This is one MSVC run on a fresh clone, with the `Start` lines omitted.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/failure-panel-dark.png">
+  <img src="docs/assets/failure-panel-light.png" width="100%" alt="Two warehouse maps. Left: the goal itself is reported blocked. Right: both ends of the goal's aisle are reported blocked, cutting it off. In both, the navigator has stopped on its node after 9 steps and the old route, still returned by getCurrentPath, is drawn dashed to the goal. Below the maps, the engine's console message and status string, IDLE, and the result of a further step, false.">
+</picture>
 
-| Program | Cases | Covers |
-|---|---|---|
-| `test_graph` | 6 | Removing two-way edges in both directions, edge counts, the revision counter |
-| `test_a_star` | 18 | Optimality when edges cost less than their length, inconsistent heuristics, graph changes between searches, admissibility checks, negative weights, 100 random graphs against Dijkstra |
-| `test_dijkstra` | 17 | Shortest paths and distances, distances to all nodes, unknown and disconnected nodes, zero-weight edges |
-| `test_bfs` | 15 | Fewest-edge paths, reachability, nodes at a given depth, all paths, trees |
-| `test_bellman_ford` | 13 | Negative weights, negative-cycle detection, all shortest paths, unknown and disconnected nodes |
-| `test_jump_point_search` | 3 | Routes made only of graph edges, empty routes for a graph without edges and for unknown nodes |
-| `test_full_navigation` | 16 | Planning and stepping, waypoints, obstacle replanning, validation and optimisation, simulated execution, multi-goal planning, routes that revisit nodes, blocked goals |
-| `test_environment_switching` | 11 | Switching graphs, navigation during a switch, saving and restoring, validating on a different graph |
-| `test_emergency_stop` | 2 | An emergency stop whose error callback calls back into the executor |
-| `algorithm_benchmarks`, `scability_tests` | – | Smoke runs that print timings; they fail only if they throw |
+**Tested:** the hero's trip with a different blockage at step 9: the goal itself, or both ends of the
+goal's aisle. **Result:** the replanner returns no route (in the first case without searching; in the
+second, after A\* has expanded all 728 reachable nodes), the navigator prints a halt message, stays on
+its node and refuses further steps. **Conclusion:** it fails
+safe, taking no step once no route is left, but it reports `IDLE`, the same status as before a start,
+while `getCurrentPath()` still returns the old route through the blocked nodes. Callers must read the
+status, not the path.
 
-Each functional program exits non-zero when any of its cases fails, so CTest reports the failure. The regression tests for the bugs fixed in November 2026 were run against the unfixed code first. 17 of their cases failed there with both compilers, and all of them pass now.
+## Quick start
 
-Most of the test time goes to two programs:
-
-- **`test_full_navigation`** waits on simulated execution.
-- **`scability_tests`** took between 34 s and 63 s across three runs of the same code on this machine, partly because it seeds its graphs from the clock.
-
-## Build and run
-
-You need CMake 3.20 or newer and a C++17 compiler. These steps have only been tried on Windows 11.
-
-**MSVC.** From the *x64 Native Tools Command Prompt for VS* in the Visual Studio 2026 Start-menu folder. That prompt provides `cmake`, `ninja` and `ctest`.
+CMake 3.20+ and a C++17 compiler. On Windows, from the *x64 Native Tools Command Prompt for VS* (tested):
 
 ```bat
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=cl
@@ -141,70 +133,67 @@ ctest --test-dir build
 build\AutonomousNavigationEngine.exe
 ```
 
-**GCC (MSYS2 UCRT64).** From a prompt where `cmake` and `ninja` are on `PATH` and `C:\msys64\ucrt64\bin` comes first. The tested setup used the CMake and Ninja that ship with Visual Studio.
+On Linux, the commands the CI runs:
 
-```bat
-cmake -S . -B build-gcc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
-cmake --build build-gcc
-ctest --test-dir build-gcc
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build
+./build/AutonomousNavigationEngine
 ```
 
-The build produces the static library `NavigationEngine`, the demo and the 11 test programs. Pass `-DBUILD_TESTS=OFF` to skip the tests.
+Regenerate the figures and measurements on this page (9–12 minutes on the test machine, mostly the
+benchmark; `--skip-bench` re-renders from the saved timings in about two minutes):
 
-## Design notes
-
-- **Why the default A\* heuristic is safe.** Let *k* be the smallest cost-per-length ratio over all edges, and let *h*(*n*) = *k* · |*n* − goal|. For any edge *u* → *v*, the triangle inequality gives *h*(*u*) ≤ *k* · (|*uv*| + |*v* − goal|) ≤ cost(*u*, *v*) + *h*(*v*). So *h* is consistent, and therefore admissible, whatever the non-negative edge costs are.
-- **Caching against a revision counter.** Every change to a `Graph` (nodes, edges, or mutable node access) advances `Graph::getRevision()`. A\* computes *k* in one pass over the edges, caches it, and recomputes it only when the revision moves.
-- **Failure contract.** The searches report "no route" as an empty vector. That covers an unknown start or goal, an unreachable goal, and, in Bellman–Ford, a negative cycle. Exceptions mark inputs an algorithm cannot handle, such as a negative weight in A\* or Dijkstra. Depth-first search does not follow this yet: it throws for an unknown start or goal.
-
-## Known limitations
-
-- **No vehicle model.** Planning happens on graphs only: there is no time, kinematics or trajectory. Obstacles are node IDs that the caller reports; there is no perception.
-- **Mixed distance units.** `Node::euclideanDistance` multiplies coordinate distances by 0.1, so straight-line distances and edge weights can be in different units. The demo shows it: the console printer reports 8.00 units for a route whose edge-weight cost is 80.
-- **Jump Point Search is not always shortest.** Every route it returns is valid. But on 300 random 8-connected grids with obstacles, its route was longer than Dijkstra's in 79 cases (by up to 2.4×), and it found no route in 4 cases where one existed. Its straight and diagonal jump rules come from different variants of the algorithm. Use A\* when the shortest route matters.
-- **Experimental code.** Many source files compile into the library, but nothing in the public API, the demo or the tests reaches them. Examples are `DStarLite`, `DynamicWindowApproach` and `TravelingSalesmanSolver` in `src/navigation_strategies/`.
-- **Declared but undefined methods.** These fail at link time if called:
-    - the `GraphBuilder` and `LocalPathPlanner` constructors;
-    - `GraphBuilder::buildGraph`;
-    - `NodeManager::moveNode`;
-    - `EdgeManager::getMinimumSpanningTree`;
-    - `ConnectivityAnalyzer::getBridgeEdges`;
-    - `MapUpdater::rollback`.
-- **Placeholder scores.** The performance-based scoring in `AlgorithmSelector` uses simulated, random metrics, not measured ones.
-- **Process-wide state.** 18 components keep a file-level singleton. One of them is the emergency-stop state, which the public API cannot reset.
-- **Benchmarks are smoke tests.** `algorithm_benchmarks` and `scability_tests` seed their random graphs from the clock, build a new solver for every query, and do not measure memory. Their timings are therefore not comparable between runs.
-- **Verbose output.** Most components print straight to standard output rather than through the logger, so their output cannot be filtered.
-- **Compiler warnings.** A GCC Debug build adds `-Wall -Wextra -Wpedantic` and reports 76 warnings:
-    - 56 unused parameters;
-    - 14 unused variables;
-    - 3 out-of-order member initialisers;
-    - one each of unused-but-set-variable, sign-compare and maybe-uninitialized.
-
-## Project layout
-
-```text
-include/                   public headers, one folder per module
-src/
-  core/                    Node, Edge, Graph
-  pathfinding_algorithms/  A*, Dijkstra, BFS, DFS, Bellman–Ford, Jump Point Search
-  navigation_strategies/   global planning, replanning and multi-goal planning, plus experiments
-  autonomous_navigator/    NavigationCore, AlgorithmSelector, PathExecutor
-  path_operations/         validation, optimisation, smoothing, cost calculation
-  environment/             EnvironmentManager, MapUpdater, ObstacleDetector
-  graph_operations/        node and edge managers, connectivity analysis, graph generators
-  utilities/               configuration, maths helpers, priority queues
-  reporting/               logging, timing, console, ASCII and SVG output
-  main.cpp                 the demo
-tests/
-  core_tests/  algorithm_tests/  integration_tests/  performance_tests/
+```bash
+python -m pip install -r tools/evidence/requirements.txt
+python tools/evidence/regenerate.py --cxx cl     # or --cxx g++ / clang++
 ```
 
-## Roadmap
+Run it where CMake, Ninja and the compiler are on `PATH`; on Windows, the *x64 Native Tools Command
+Prompt for VS* for MSVC. Per-toolchain commands are in [docs/TESTING.md](docs/TESTING.md).
 
-Planned, not yet implemented:
+## How it fits together
 
-1. Continuous integration with MSVC and GCC, and a `.gitignore` for build output.
-2. Benchmarks with fixed seeds, solvers built once per graph, warm-up runs, percentiles and saved workloads.
-3. A visual generated by the C++ code: a warehouse map, a corridor that becomes blocked, and the replanned route, labelled with real costs and timings.
-4. Timed trajectories with a simple vehicle model, and evaluation of whole scenarios in closed loop.
-5. A small learned scorer for candidate routes, compared against these planners as baselines.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-fits-dark.png">
+  <img src="docs/assets/how-it-fits-light.png" width="100%" alt="Two rows of boxes. Top row, the hero's executed path inside the library: the scenario file is built into a 744-node Graph with addNode and addEdge; NavigationCore::startNavigation plans through DynamicReplanner, GlobalPathPlanner and A*; 9 navigation steps; handleObstacles with 14 nodes, where DynamicReplanner copies the graph, removes the 14 nodes, builds a new AStar and searches from the current node; 40 more steps to the station. Bottom row, the evidence pipeline: evidence_export in trace mode, docs/data with JSON traces and CSV timings, summarize.py, the render scripts, and check_outputs.py.">
+</picture>
+
+The figures come from two C++ programs that link the library: `evidence_export` (trace mode: attaches
+`SearchObserver`, checks every route, writes JSON) and `evidence_bench` (measurement mode: no observer,
+raw timings to CSV). Python only summarises and draws. A provenance manifest records the git revision,
+uncommitted-change hash, compiler flags, machine and the hash of every output.
+
+Two cross-checks support the numbers:
+
+- Rebuilt with GCC 14.2, the traces match MSVC's event for event.
+- With no observer attached, the hooks cost nothing measurable against the library as committed
+  before them ([validation runs](docs/EVIDENCE.md#validation-runs-not-part-of-the-regeneration)).
+
+Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact-map).
+
+## Tests and platforms
+
+- **12 CTest programs, 112 functional cases**, all passing with MSVC 19.51 and GCC 14.2 on Windows 11,
+  including `test_search_observer` (tracing never changes a route; events arrive in execution order)
+  and the two A\* tie-bug regression tests.
+- **CI** (`.github/workflows/ci.yml`) builds and tests on Windows with MSVC and MSYS2 GCC, and on
+  Ubuntu 24.04 with GCC and Clang; the badge at the top shows its latest result. Linux builds are
+  tested only there, and macOS has not been tried.
+- **What the library contains** (searches, navigation, path operations, the demo):
+  [docs/LIBRARY.md](docs/LIBRARY.md). Design notes and the measured findings in depth:
+  [docs/TECHNICAL_NOTES.md](docs/TECHNICAL_NOTES.md). Test inventory and toolchains:
+  [docs/TESTING.md](docs/TESTING.md).
+
+## Limitations
+
+- **Graph planning only:** no time, kinematics or vehicle model; obstacles are node ids the caller
+  reports; a step is one node. The picking-zone cost is an assumption of the scenario.
+- **Known defects:** replanning copies the whole graph; the navigator's no-route state reads as
+  `IDLE`; Jump Point Search is experimental and not always shortest.
+- **Measurements** come from one laptop (Intel Core Ultra 7 165H, Windows 11, MSVC, Balanced power
+  plan) under varying background load, and report no memory use.
+
+Everything else, including declared-but-undefined methods, unreachable experimental classes and the
+library's mixed distance scale: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
