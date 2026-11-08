@@ -109,9 +109,11 @@ def _run_records(bench: Path) -> list[Path]:
 
 
 def records_digest(bench: Path) -> str:
+    """SHA-256 over the run records' names and contents, with CRLF normalised to LF, so the digest is
+    the same in a checkout that converts line endings (core.autocrlf) as in the repository."""
     h = hashlib.sha256()
     for path in _run_records(bench):
-        h.update(path.name.encode() + b"\0" + path.read_bytes())
+        h.update(path.name.encode() + b"\0" + path.read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
 

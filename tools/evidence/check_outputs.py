@@ -287,16 +287,20 @@ def readme_claims(s):
     return claims
 
 
+def readme_link_targets(readme: str) -> list:
+    """The README's relative image and link targets: no URLs, no in-page anchors."""
+    targets = re.findall(r'(?:src|srcset|href)="([^"#:]+)"', readme) + re.findall(r"\]\(([^)#:]+)\)", readme)
+    return [t.strip() for t in targets if t.strip() and not t.strip().startswith(("http", "mailto"))]
+
+
 def check_readme(r):
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     summary = load("summary.json")
     for description, text in readme_claims(summary):
         r.check(f"README states {description} as '{text}'", text in readme)
     # Every relative image or link target exists.
-    for target in re.findall(r'(?:src|srcset|href)="([^"#:]+)"', readme) + re.findall(r"\]\(([^)#:]+)\)", readme):
-        target = target.strip()
-        if target and not target.startswith(("http", "mailto")):
-            r.check(f"README link target exists: {target}", (REPO / target).exists())
+    for target in readme_link_targets(readme):
+        r.check(f"README link target exists: {target}", (REPO / target).exists())
 
 
 def check_history(r):

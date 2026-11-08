@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Mutation test for check_outputs.py.
 
-Copies the committed evidence (README.md and docs/) into a temporary directory, requires the copy to
-pass, then applies one corruption at a time and requires check_outputs to report a failure:
+Copies the committed evidence (README.md, docs/ and the other files the README links to) into a
+temporary directory, requires the copy to pass, then applies one corruption at a time and requires
+check_outputs to report a failure:
 
   - a route step that is not an edge of the exported graph;
   - a README number that disagrees with docs/data/summary.json;
@@ -110,9 +111,20 @@ def run_checker(root: Path) -> bool:
 
 
 def fresh_copy(parent: Path) -> Path:
+    """A copy of everything check_outputs reads: README.md, docs/, and each other file or folder the
+    README links to (such as CHANGELOG.md)."""
     root = Path(tempfile.mkdtemp(dir=parent))
     shutil.copy2(REPO / "README.md", root / "README.md")
     shutil.copytree(REPO / "docs", root / "docs")
+    for target in check_outputs.readme_link_targets((REPO / "README.md").read_text(encoding="utf-8")):
+        source, destination = REPO / target, root / target
+        if destination.exists() or not source.exists():
+            continue  # copied with docs/ already, or missing, which check_outputs reports
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
     return root
 
 

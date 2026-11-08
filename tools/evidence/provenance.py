@@ -193,12 +193,20 @@ def tool_hashes(repo: Path, build_dir: Path) -> dict:
     return out
 
 
+TEXT_OUTPUTS = (".json", ".csv", ".txt")
+
+
 def output_hashes(repo: Path) -> dict:
+    """SHA-256 of every output file. Text files are hashed with CRLF normalised to LF, as git stores
+    them, so the hashes match the committed blobs and any checkout."""
     hashes = {}
     for folder in ("docs/data", "docs/assets"):
         for path in sorted((repo / folder).rglob("*")):
             if path.is_file() and path.name != "manifest.json":
-                hashes[path.relative_to(repo).as_posix()] = file_sha256(path)
+                if path.suffix in TEXT_OUTPUTS:
+                    hashes[path.relative_to(repo).as_posix()] = sha256(path.read_bytes().replace(b"\r\n", b"\n"))
+                else:
+                    hashes[path.relative_to(repo).as_posix()] = file_sha256(path)
     return hashes
 
 
@@ -235,6 +243,8 @@ def write_manifest(repo: Path, build_dir: Path, out: Path, *, quick: bool):
         },
         "bench_runs": bench_records(data),
         "tools_sha256": tool_hashes(repo, build_dir),
+        "outputs_sha256_definition": "SHA-256 of each file under docs/data and docs/assets except this manifest; "
+                                     "text files (.json, .csv, .txt) with CRLF normalised to LF, as git stores them",
         "outputs_sha256": output_hashes(repo),
     }
     out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
