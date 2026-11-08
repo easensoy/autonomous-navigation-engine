@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <map>
+#include <unordered_map>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -148,4 +150,49 @@ bool EdgeManager::validateEdgeConsistency() const {
         }
     }
     return true;
+}
+
+std::vector<std::pair<int, int>> EdgeManager::getMinimumSpanningTree() const {
+    std::map<std::pair<int, int>, double> candidates;  // undirected pair -> cheaper weight
+    for (int id : graph->getAllNodeIds()) {
+        for (const Edge& edge : graph->getEdgesFrom(id)) {
+            const int to = edge.getToNode();
+            if (to == id) {
+                continue;  // a self-loop never joins two trees
+            }
+            const auto key = std::make_pair(std::min(id, to), std::max(id, to));
+            const auto [entry, added] = candidates.emplace(key, edge.getWeight());
+            if (!added) {
+                entry->second = std::min(entry->second, edge.getWeight());
+            }
+        }
+    }
+    std::vector<std::tuple<double, int, int>> ordered;
+    ordered.reserve(candidates.size());
+    for (const auto& [pair, weight] : candidates) {
+        ordered.emplace_back(weight, pair.first, pair.second);
+    }
+    std::sort(ordered.begin(), ordered.end());
+
+    std::unordered_map<int, int> parent;  // union-find with path halving
+    for (int id : graph->getAllNodeIds()) {
+        parent[id] = id;
+    }
+    auto root = [&parent](int node) {
+        while (parent[node] != node) {
+            parent[node] = parent[parent[node]];
+            node = parent[node];
+        }
+        return node;
+    };
+    std::vector<std::pair<int, int>> forest;
+    for (const auto& [weight, a, b] : ordered) {
+        const int rootA = root(a);
+        const int rootB = root(b);
+        if (rootA != rootB) {
+            parent[rootA] = rootB;
+            forest.emplace_back(a, b);
+        }
+    }
+    return forest;
 }

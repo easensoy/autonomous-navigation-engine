@@ -52,6 +52,11 @@ public:
     double getNodeTraversalCost(int nodeId) const;
     double estimateCostToGoal(int currentId, int goalId) const;
     
+    // The model (cost weights, node costs, edge costs) as text: a header line "cost-model 1", then
+    // one entry per line, "weight <TYPE> <value>", "node <id> <cost>" or "edge <from> <to> <cost>",
+    // with values written to round-trip exactly. loadCostModel replaces the model: it starts from the
+    // defaults (resetCostModel) and applies every entry. Both throw std::runtime_error on an I/O
+    // error; loadCostModel also throws on a malformed line, naming it, and then leaves the model unchanged.
     void loadCostModel(const std::string& modelFile);
     void saveCostModel(const std::string& modelFile) const;
     void resetCostModel();

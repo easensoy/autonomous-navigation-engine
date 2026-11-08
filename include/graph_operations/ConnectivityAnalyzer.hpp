@@ -29,17 +29,15 @@ public:
     
     int getLargestComponentSize() const;
     std::vector<int> getLargestComponent() const;
-    std::vector<int> getBridgeEdges() const;
+    // Edges whose removal disconnects their component, as (smaller id, larger id) pairs in ascending
+    // order. Edges are treated as undirected: two nodes joined in either direction are one edge.
+    std::vector<std::pair<int, int>> getBridgeEdges() const;
     
     double calculateAveragePathLength() const;
     int calculateGraphDiameter() const;
     std::vector<int> findCriticalNodes() const;
     
     bool wouldRemovalDisconnect(int nodeId) const;
-    std::vector<std::pair<int, int>> findBottleneckEdges() const;
-    double calculateConnectivityRobustness() const;
     
     void generateConnectivityReport() const;
-    std::vector<int> suggestAdditionalConnections() const;
-    void optimizeConnectivity();
 };

@@ -185,3 +185,67 @@ void ConnectivityAnalyzer::generateConnectivityReport() const {
     std::cout << "Average shortest path: " << m.averagePathLength << " hops" << std::endl;
     std::cout << "Diameter: " << m.diameter << " hops" << std::endl;
 }
+
+std::vector<std::pair<int, int>> ConnectivityAnalyzer::getBridgeEdges() const {
+    // Iterative depth-first search (no recursion depth limit). A search-tree edge parent - child is a
+    // bridge when no back edge from child's subtree reaches parent or above it.
+    const auto adjacency = undirectedAdjacency(*graph);
+    std::vector<int> roots;
+    roots.reserve(adjacency.size());
+    for (const auto& entry : adjacency) {
+        roots.push_back(entry.first);
+    }
+    std::sort(roots.begin(), roots.end());
+
+    struct Frame {
+        int node;
+        int parent;
+        bool hasParent;
+        bool parentSkipped;
+        std::size_t next;
+    };
+    std::unordered_map<int, int> discovered;
+    std::unordered_map<int, int> low;
+    int clock = 0;
+    std::vector<std::pair<int, int>> bridges;
+    for (int root : roots) {
+        if (discovered.count(root)) {
+            continue;
+        }
+        discovered[root] = low[root] = clock++;
+        std::vector<Frame> stack{{root, 0, false, false, 0}};
+        while (!stack.empty()) {
+            Frame& frame = stack.back();
+            const std::vector<int>& neighbours = adjacency.at(frame.node);
+            if (frame.next < neighbours.size()) {
+                const int next = neighbours[frame.next++];
+                if (next == frame.node) {
+                    continue;  // self-loop
+                }
+                if (frame.hasParent && next == frame.parent && !frame.parentSkipped) {
+                    frame.parentSkipped = true;  // the tree edge back to the parent (lists hold no duplicates)
+                    continue;
+                }
+                const auto seen = discovered.find(next);
+                if (seen == discovered.end()) {
+                    discovered[next] = low[next] = clock++;
+                    const int from = frame.node;
+                    stack.push_back({next, from, true, false, 0});  // invalidates `frame`
+                } else {
+                    low[frame.node] = std::min(low[frame.node], seen->second);
+                }
+                continue;
+            }
+            const Frame done = frame;
+            stack.pop_back();
+            if (done.hasParent) {
+                low[done.parent] = std::min(low[done.parent], low[done.node]);
+                if (low[done.node] > discovered[done.parent]) {
+                    bridges.emplace_back(std::min(done.parent, done.node), std::max(done.parent, done.node));
+                }
+            }
+        }
+    }
+    std::sort(bridges.begin(), bridges.end());
+    return bridges;
+}
