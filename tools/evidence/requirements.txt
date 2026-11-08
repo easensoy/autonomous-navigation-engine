@@ -1,0 +1,4 @@
+# Python packages for tools/evidence (versions the published figures were rendered with).
+numpy==2.3.1
+matplotlib==3.10.3
+pillow==10.4.0
