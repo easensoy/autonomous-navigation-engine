@@ -1,0 +1,14 @@
+# CMake build trees (the README builds into build/ and build-gcc/)
+/build/
+/build-*/
+/out/
+CMakeUserPresets.json
+
+# Visual Studio state
+/.vs/
+
+# Written by the demo when it runs from the repository root
+/navigation.log
+
+# Python bytecode from tools/evidence
+__pycache__/
