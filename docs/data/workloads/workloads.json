@@ -1,0 +1,77 @@
+{
+  "schema": "ane-evidence/workloads/1",
+  "generator": "evidence_export workloads (tools/evidence/evidence_export.cpp), splitmix64 seeds",
+  "workloads": [
+    {
+      "name": "warehouse_s",
+      "title": "4 x 5 racks, picking zones with p=0.25 at x3, seed 11",
+      "scenario_file": "warehouse_s.txt",
+      "queries_file": "warehouse_s.queries.txt",
+      "replans_file": "warehouse_s.replans.txt",
+      "lattice": [0, 0, 62, 28],
+      "nodes": 1107,
+      "edges": 3214,
+      "picking_zones": 4,
+      "racks": 20,
+      "fingerprint": "3ce74c023df9fb3d",
+      "query_count": 1000,
+      "query_seed": 1592590337,
+      "replan_count": 300,
+      "replan_seed": 1592590593,
+      "layout_seed": 11
+    },
+    {
+      "name": "warehouse_m",
+      "title": "12 x 17 racks, picking zones with p=0.25 at x3, seed 12",
+      "scenario_file": "warehouse_m.txt",
+      "queries_file": "warehouse_m.queries.txt",
+      "replans_file": "warehouse_m.replans.txt",
+      "lattice": [0, 0, 182, 88],
+      "nodes": 8943,
+      "edges": 25370,
+      "picking_zones": 50,
+      "racks": 204,
+      "fingerprint": "a5e2482b674069db",
+      "query_count": 1000,
+      "query_seed": 1592590338,
+      "replan_count": 300,
+      "replan_seed": 1592590594,
+      "layout_seed": 12
+    },
+    {
+      "name": "warehouse_l",
+      "title": "24 x 34 racks, picking zones with p=0.25 at x3, seed 13",
+      "scenario_file": "warehouse_l.txt",
+      "queries_file": "warehouse_l.queries.txt",
+      "replans_file": "warehouse_l.replans.txt",
+      "lattice": [0, 0, 362, 173],
+      "nodes": 33786,
+      "edges": 95183,
+      "picking_zones": 189,
+      "racks": 816,
+      "fingerprint": "1f674d17f679915b",
+      "query_count": 500,
+      "query_seed": 1592590339,
+      "replan_count": 200,
+      "replan_seed": 1592590595,
+      "layout_seed": 13
+    }
+  ],
+  "checks": [
+    {
+      "name": "warehouse_s: all replan events generated",
+      "pass": true,
+      "detail": "300 of 300"
+    },
+    {
+      "name": "warehouse_m: all replan events generated",
+      "pass": true,
+      "detail": "300 of 300"
+    },
+    {
+      "name": "warehouse_l: all replan events generated",
+      "pass": true,
+      "detail": "200 of 200"
+    }
+  ]
+}
