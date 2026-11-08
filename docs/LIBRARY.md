@@ -19,7 +19,7 @@ edges. It has no model of vehicle dynamics, time or perception:
 | Breadth-first search | Route with the fewest edges | Fewest edges, not least cost | 15 cases |
 | Depth-first search | Some route | None: often far from the shortest | none yet |
 | Bellman–Ford | Least-cost route when weights can be negative | Detects negative cycles and returns no route when it finds one | 13 cases |
-| Jump Point Search | Route on an 8-connected grid graph | Every route it returns uses only graph edges, but routes are not always the shortest ([LIMITATIONS.md](LIMITATIONS.md)) | 3 cases |
+| Jump Point Search | Least-cost route on a uniform-cost grid graph | Optimal on its supported domain: one node per integer cell; edges exactly the orthogonal moves (weight s) and, if enabled, the diagonal moves that cut no corner (weight s·√2). Any other graph is rejected with `std::invalid_argument` ([domain and validation](TECHNICAL_NOTES.md#jump-point-search-domain-rules-and-validation)) | 16 cases, including 7,200 seeded queries checked against Dijkstra |
 
 A\*, Dijkstra and BFS accept an optional, read-only `SearchObserver` that receives their expansions and
 frontier pushes in execution order ([TECHNICAL_NOTES.md](TECHNICAL_NOTES.md#search-observer); 9 test
@@ -31,7 +31,9 @@ route, except depth-first search, which throws `std::invalid_argument` for an un
 ## Navigation and path operations
 
 - **`NavigationCore`** plans a route, through waypoints if given. It follows the route one node per
-  step and replans around obstacles reported on the way, keeping the part already travelled.
+  step and replans around obstacles reported on the way, keeping the part already travelled. Its
+  state (`IDLE`, `ACTIVE`, `PAUSED`, `COMPLETED`, `BLOCKED`) and what each state means for the
+  route are [documented](TECHNICAL_NOTES.md#navigation-states-and-failed-replanning); 12 cases.
 - **`DynamicReplanner`** keeps the current route while it stays clear. Otherwise it runs A\* on a copy
   of the graph with the blocked nodes removed ([cost of that](TECHNICAL_NOTES.md#where-a-replans-time-goes)).
   A blocked goal has no route.
@@ -47,6 +49,10 @@ route, except depth-first search, which throws `std::invalid_argument` for an un
   resume, and an emergency stop.
 - **`EnvironmentManager`** switches between graphs, keeps a short history, and saves environments to
   files and restores them.
+- **Graph operations:** `GraphBuilder` builds grid, random (seeded), maze and coordinate graphs and
+  connects nodes by radius or k nearest neighbours; `NodeManager` adds, moves and renames nodes;
+  `EdgeManager` edits edges and returns a minimum spanning forest; `ConnectivityAnalyzer` finds
+  components, cut vertices and bridges. `CostCalculator` saves and loads its cost model. 15 cases.
 - **Reporting:** a console path printer, an ASCII renderer, SVG export, a logger and a timer.
 
 ## The demo program
@@ -123,7 +129,7 @@ src/
   reporting/               logging, timing, console, ASCII and SVG output
   main.cpp                 the demo
 tests/
-  core_tests/  algorithm_tests/  integration_tests/  performance_tests/
+  core_tests/  algorithm_tests/  integration_tests/  api_tests/  performance_tests/
 tools/evidence/            scenario files, exporter, benchmark and figure scripts for the README
 docs/                      these notes; data/ and assets/ hold the README's measured data and figures
 ```

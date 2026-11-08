@@ -10,19 +10,21 @@ from. Reproduction commands are at the [end](#reproduce).
 tools/evidence/scenarios/*.txt ─┐
                                 ├─ evidence_export (C++, trace mode) ──> docs/data/{hero,search,failure_*}.json
 docs/data/workloads/*.txt ──────┤
-                                └─ evidence_bench  (C++, measurement mode) ──> docs/data/bench/*.csv, *.json
+                                └─ load gate, then evidence_bench (C++, measurement mode) ──> docs/data/bench/
                                           │
             summarize.py  ── docs/data/summary.json ──> render/*.py ──> docs/assets/*.png, *.gif
             provenance.py ── docs/data/manifest.json
-            check_outputs.py ── re-checks routes, workload fingerprints and the README's numbers
+            history.py    ── docs/data/history/ (every benchmark run, kept)
+            check_outputs.py ── re-checks routes, raw results, the history and the README's numbers
 ```
 
-`python tools/evidence/regenerate.py` runs these stages in that order (`tools/evidence/README.md`).
+`python tools/evidence/regenerate.py` runs these stages in that order
+([tools/evidence/README.md](../tools/evidence/README.md)).
 
 - **The library does all the planning.** Both C++ tools link the `NavigationEngine` library and build
   every graph through `Graph::addNode` and `Graph::addEdge`. Routes come from `NavigationCore`,
-  `DynamicReplanner`, `AStar`, `Dijkstra` and `BFS`. The Python scripts compute percentiles and draw;
-  they never search a graph.
+  `DynamicReplanner`, `AStar`, `Dijkstra` and `BFS`. The Python scripts compute percentiles, draw and
+  check; they never search a graph.
 - **Two modes, two programs.** `evidence_export` attaches search observers and times nothing.
   `evidence_bench` times and attaches no observer. The source of `evidence_bench` never calls
   `setSearchObserver`.
@@ -52,7 +54,9 @@ tracing changes nothing:
 "Expansions" in the figures always means `onExpand` events. The definitions differ by at most one
 node between planners (the goal), as the table says.
 
-## Measurement mode: what is timed
+## Measurement protocol
+
+### What is timed
 
 | Quantity | Timed region | Excluded |
 |---|---|---|
@@ -62,49 +66,148 @@ node between planners (the goal), as the table says.
 | Replan parts | `Graph` copy constructor; `Graph::removeNode` for each blocked node; `AStar` constructor + first `findPath` on the copy; a second `findPath` on the same object. These are the operations `DynamicReplanner::planAvoidingObstacles` performs, timed one at a time. | as above |
 | Hero plan / replan | `NavigationCore::startNavigation` on a new navigator; `handleObstacles` after 9 steps | the 9 steps |
 
+### Sample structure
+
+| Workload | Queries | Timed query calls (4 planners × 5 repeats) | Replan events | Timed replans (× 5 repeats) |
+|---|---:|---:|---:|---:|
+| `warehouse_s`, 1,107 nodes | 1,000 | 20,000 | 300 | 1,500 |
+| `warehouse_m`, 8,943 nodes | 1,000 | 20,000 | 300 | 1,500 |
+| `warehouse_l`, 33,786 nodes | 500 | 10,000 | 200 | 1,000 |
+| hero map, 744 nodes | — | — | 1 | 1,000 |
+
+- **Repeats.** Each query runs once per planner as a warm-up, then 5 timed times. A query's latency is
+  the median of its 5. Each replan event runs once as a warm-up, then 5 times; each repetition times
+  the end-to-end replan and then each of its parts. The hero's plan and replan are timed 1,000 times
+  after 5 warm-ups.
+- **Statistics.** Percentiles are taken across queries (or replan events), by nearest rank, from the
+  per-query medians. p99 is reported only when there are at least 1,000 values, so not for the large
+  warehouse's queries.
+- **Fixed workloads.** The queries and replan events are saved files generated from fixed seeds
+  ([Workloads](#workloads)); every run times the same inputs, and `check_outputs.py` requires each run
+  record's graph fingerprint to match the saved workload.
+
+### Controls
+
 - **Clock.** `std::chrono::steady_clock`, read immediately before and after the timed call. Its step
   on the test machine is 100 ns (`clock_step_ns` in every run record).
-- **Repeats.** Each query runs once as warm-up, then 5 timed times. A query's latency is the median of
-  its 5. Percentiles are taken across queries, by nearest rank. p99 is reported only when there are at
-  least 1,000 queries, so it is not reported for the large warehouse (500 queries). Each replan event
-  runs once as warm-up, then 5 times. The hero plan and replan are timed 1,000 times after 5 warm-ups.
 - **Pairing and order.** For each query, the four planners run back to back, in an order rotated by
-  query and repetition, so drift and cache effects spread evenly. Ratios such as "Dijkstra ÷ A*" are
-  per query (paired), then summarised.
-- **Solver reuse.** One solver object per planner is reused for all queries on a graph, as an
-  application would. A*'s scale pass is paid before timing starts and reported on its own.
+  query and repetition, so drift and cache effects spread evenly over the planners. Ratios such as
+  "Dijkstra ÷ A\*" are computed per query from the per-query medians (paired), then summarised.
+- **Setup outside the timed region.** Graph construction, workload loading, route validation and file
+  output happen outside it. One solver object per planner is reused for all queries on a graph, as an
+  application would; A\*'s scale pass is paid before timing starts and reported on its own. The
+  replan parts are timed separately from the end-to-end replan.
 - **Logging.** The library prints to `std::cout` in many places. Every benchmark runs with `std::cout`
   holding no stream buffer, so each print returns after a stream-state check. `BFS::findPath` has
   per-node print statements that the API cannot switch off, so they stay in its timed loop. Their
   formatting is skipped but the calls are not, and **BFS's latency includes that residue**.
-- **Machine.** One run on one laptop, recorded in `docs/data/manifest.json`. Intel Core Ultra 7
-  165H (Dell Precision 5690), Windows 11 Pro 10.0.26200, AC power, *Balanced* power plan (left as
-  the user had it). The benchmark thread is pinned to one logical processor of the fastest core class
-  and runs at raised priority (`pinning` in each run record). Timings from other machines, compilers
-  or power settings will differ. The comparisons between planners on the same machine are the point.
-  Background processes were not stopped. During the published run, file sync, antivirus scanning and
-  other processes kept several cores busy.
-- **Build.** CMake Release with MSVC 19.51.36260: `/O2 /Ob2 /DNDEBUG /EHsc /GR /MD -std:c++17`.
-  The exact compile commands are in the manifest.
-- **Noise.** Per query, the spread of the 5 timed runs is (max − min) ÷ median. Its median over
-  queries is 21–40% for most planner/size pairs in the published run, and 44–48% for A\* on the small
-  and medium warehouses, whose sub-millisecond queries are the most exposed to scheduling noise
-  (`repeat_spread_median` in `summary.json`). A quieter run of the same protocol earlier that day
-  had 6–17% for most pairs. Taking each query's median of 5 damps this, and the README's comparisons
-  are paired per query.
-- **What moved between runs.** Three full runs were made that day; the published one is the last,
-  at the committed source.
-  - Absolute times moved with machine load. Dijkstra's and BFS's per-query times, whose code never
-    changed, were 16–43% higher in the published run than in the first (median of paired ratios).
-    The large warehouse's median replan went from 30.4 ms to 37.5 ms to 44.9 ms.
-  - The search share of a replan stayed within 12–18%.
-  - Dijkstra ÷ A\* went from 9.4–10.6× (first run, before the A\* fix) to 10.0–13.0×. Part of that
-    is the fix, which made A\* 11–17% faster
-    ([interleaved timing](TECHNICAL_NOTES.md#a-tie-bug-found-by-the-traces)), and part is load.
+- **Pinning.** The benchmark thread is pinned to one logical processor of the fastest core class and
+  runs at raised priority (`pinning` in each run record).
+- **Build.** CMake Release with MSVC 19.51.36260: `/O2 /Ob2 /DNDEBUG /EHsc /GR /MD -std:c++17`. The
+  exact compile commands are in the manifest.
 
-Sample sizes: 1,000 / 1,000 / 500 queries for the small, medium and large warehouses; 300 / 300 / 200
-replan events. Failures are reported with denominators: every run record counts invalid routes, and
-`summary.json` lists found, valid and optimal routes per planner.
+### Machine and background load
+
+One laptop, recorded in `docs/data/manifest.json`: Intel Core Ultra 7 165H (Dell Precision 5690),
+22 logical processors, Windows 11 Pro 10.0.26200, AC power, *Balanced* power plan (left as the owner
+had it). Timings from other machines, compilers or power settings will differ; the comparisons between
+planners on the same machine are the point.
+
+The machine is not dedicated to benchmarking, and nothing running on it was stopped. Two measures make
+the load visible instead:
+
+- **Load gate.** Before timing, `regenerate.py` samples the machine's CPU load (the CPU time of all
+  processes as a share of all logical processors) in 10-second windows. It starts the benchmark once
+  two windows in a row are at or below a threshold (10% by default), or when a time limit (900 s by
+  default) runs out. The benchmark runs either way; `docs/data/bench/environment.json` keeps every
+  window and whether the gate was met.
+- **Background load per command.** Each run record stores `background_cpu_load`: the CPU time of all
+  other processes while that command ran, divided by its wall time × the number of logical processors.
+  It is recorded, not subtracted from any timing.
+
+**In the published run** the gate was not met: in 900 s, no two consecutive windows were at or below
+10%; the 90 windows measured 20–51%. The benchmark then ran from 19:39 to 19:48 UTC on 8 November 2026.
+During its commands other processes used 16–24% of the machine's capacity: 18%, 24% and 24% during the
+small, medium and large query runs; 16%, 23% and 21% during the replan runs; 18% during the hero
+timing. A sample of the busiest processes taken during the run showed Docker Desktop with its WSL 2
+virtual machine, OneDrive, local development servers and other analysis jobs, none of them part of this
+benchmark.
+
+### Variability
+
+Two kinds of variation are reported separately, per planner and warehouse (`summary.json`):
+
+- **Measurement variation:** how much repeated timings of the same query differ. Per query, the spread
+  of its 5 timed repeats is (max − min) ÷ median; `repeat_spread_median` and `repeat_spread_p95` are
+  its median and 95th percentile over queries. For replans, `end_to_end_repeat_spread_median` is the
+  same median for the end-to-end time.
+- **Workload variation:** how much queries differ from each other. `workload_p95_over_p50` is the 95th
+  percentile of the per-query medians divided by their median.
+
+In the published run:
+
+| Warehouse | Planner | p50 latency | p95 latency | Repeat spread, median | Repeat spread, p95 | p95 ÷ p50 across queries |
+|---|---|---:|---:|---:|---:|---:|
+| small | A\* | 0.045 ms | 0.187 ms | 15% | 112% | 4.13 |
+| small | A\*, *h* = 0 | 0.191 ms | 0.360 ms | 12% | 122% | 1.88 |
+| small | Dijkstra | 0.485 ms | 0.530 ms | 13% | 99% | 1.09 |
+| small | BFS | 0.358 ms | 0.693 ms | 10% | 127% | 1.94 |
+| medium | A\* | 0.612 ms | 2.810 ms | 48% | 115% | 4.59 |
+| medium | A\*, *h* = 0 | 2.191 ms | 5.241 ms | 35% | 90% | 2.39 |
+| medium | Dijkstra | 5.795 ms | 8.092 ms | 22% | 64% | 1.40 |
+| medium | BFS | 3.267 ms | 7.239 ms | 26% | 87% | 2.22 |
+| large | A\* | 3.646 ms | 21.786 ms | 34% | 103% | 5.98 |
+| large | A\*, *h* = 0 | 17.723 ms | 45.770 ms | 31% | 71% | 2.58 |
+| large | Dijkstra | 47.592 ms | 57.643 ms | 23% | 42% | 1.21 |
+| large | BFS | 19.902 ms | 45.066 ms | 36% | 74% | 2.26 |
+
+- **Measurement variation is large** under this load: the median query's repeats spread by 10–48% of
+  their median, and one query in twenty by 42–127%, a single repeat slowed by preemption or frequency
+  changes. Taking each query's median of 5 removes single outliers; it does not remove a slowdown that
+  lasts through all 5 repeats. Replans spread by 17%, 22% and 33% (median, end to end).
+- **Workload variation is a property of the planner**, not noise: Dijkstra settles every reachable node
+  whatever the query, so its p95 is within 1.1–1.4× its median, while A\*'s work grows with the
+  distance to the goal (4.1–6.0×).
+- **Paired ratios are less exposed** than absolute times, because a slowdown that lasts through one
+  query's back-to-back calls affects all four planners. They are not immune: a slowdown that starts or
+  stops between two planners' calls does not cancel.
+
+### Run history and selection rule
+
+Every full run of the benchmark is kept in [`docs/data/history`](data/history): `index.json` lists each
+run with its source state, compiler, machine, load-gate result, background load and headline numbers,
+and each run's folder keeps its `summary.json`, `manifest.json` and run records. A later run never
+replaces an earlier one.
+
+**Selection rule**, stated in `index.json`: the README, `docs/data/summary.json` and the figures use the
+newest complete benchmark run made at the published source revision; every run stays in the history,
+whatever its results. `check_outputs.py` requires the published run records to be the newest complete
+run in the history. The rule was declared before the fourth run was made.
+
+| Run (UTC) | Source | Load gate | Background load | Large replan p50 | Hero replan p50 | Search share of a replan | Dijkstra ÷ A\*, paired p50 | A\* at Dijkstra's cost |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| 2026-11-08 04:30 | `57c9805` + uncommitted | not used | not measured | 30.4 ms | 0.44 ms | 12–18% | 9.4–10.6× | 985/1,000, 976/1,000, 489/500 |
+| 2026-11-08 11:13 (partial) | `57c9805` + uncommitted | not used | not measured | 37.5 ms | 0.50 ms | 13–17% | 10.4–12.4× | 1,000/1,000, 1,000/1,000, 500/500 |
+| 2026-11-08 11:46 | `d732311` | not used | not measured | 44.9 ms | 0.42 ms | 14–16% | 10.0–13.0× | 1,000/1,000, 1,000/1,000, 500/500 |
+| 2026-11-08 19:49 (published) | `361f788` | not met in 900 s | 16–24% | 36.7 ms | 0.35 ms | 13–16% | 9.8–12.1× | 1,000/1,000, 1,000/1,000, 500/500 |
+
+- **Run 1 predates the A\* open-list fix**, which explains its A\* misses. Run 2 is a partial record: its
+  files were overwritten by run 3 before the history existed, and only the headline values printed at
+  the time remain. Runs 1–3 predate the load gate and the background-load records.
+- **Code that changed between runs.** Run 1 → 2: the A\* open-list fix. Run 3 → 4: `NavigationCore`
+  (explicit states), which is inside the end-to-end replan and the hero timings. The query planners,
+  `Graph` and the replan parts are the same code in runs 2, 3 and 4.
+- **What moved.** Dijkstra's median query time, whose code never changed, was 0.47, 0.68 and 0.49 ms on
+  the small warehouse and 34.5, 48.3 and 47.6 ms on the large one in runs 1, 3 and 4: absolute times
+  moved by up to 45% between runs on the same machine. The search share of a replan stayed within
+  12–18%, and Dijkstra ÷ A\* within 9.4–13.0×.
+- **Figures redrawn after the run.** After the run at `361f788`, six Python evidence scripts changed:
+  two drawing fixes (the failure panel's console text, `66fd15a`; the spacing of the latency figure's
+  labels, `4d7687a`), the mutation test's copy of the evidence (`3accd2f`, `0a8f807`), and hashes that
+  do not depend on line endings for the history check and the manifest (`ff7a16a`, `27da527`). The
+  figures and the manifest were then regenerated with `--skip-bench` from the same run records, so
+  `docs/data/manifest.json` names `27da527`, while the history keeps the run's own manifest. The
+  library, the tests and the benchmark programs are the same at both commits.
 
 ## Validation runs (not part of the regeneration)
 
@@ -124,9 +227,10 @@ measurable cost, and the small differences in favour of the working tree are wit
 noise. The HEAD build also returns non-optimal A\* routes on the same 15 small-warehouse queries, so
 the [tie bug](TECHNICAL_NOTES.md#a-tie-bug-found-by-the-traces) predates this work.
 
-**Same results with another compiler and standard library.** After the A\* fix, everything was
-rebuilt with GCC 14.2.0 (libstdc++) and all four exports were rerun. Every exporter check passed, and
-the output matches the MSVC 19.51 run in every respect apart from the compiler's name:
+**Same traces with another compiler and standard library.** After the A\* fix (at `d732311`),
+everything was rebuilt with GCC 14.2.0 (libstdc++) and all four exports were rerun. Every exporter
+check passed, and the output matched the MSVC 19.51 run in every respect apart from the compiler's
+name:
 
 - the graph fingerprint;
 - every route, node for node;
@@ -135,10 +239,11 @@ the output matches the MSVC 19.51 run in every respect apart from the compiler's
 
 Before the fix the two builds matched in the same way, including the node A\* dropped in the hero
 query and the 8 it dropped in the failure case. The two A\* regression tests failed with GCC on the
-pre-fix code, as with MSVC, and pass with the fix.
+pre-fix code, as with MSVC, and pass with the fix. `compare_traces.py` now repeats this comparison
+for the current code ([Checks](#checks)).
 
 **The replan finding with GCC.** `evidence_bench replans` and `hero` were rerun with the GCC build
-after the fix (same protocol, not published as the main data):
+after the fix (at `d732311`, same protocol, not published as the main data):
 
 | Warehouse | Replan p50 | Search alone p50 | Search share of a replan |
 |---|---:|---:|---:|
@@ -147,7 +252,7 @@ after the fix (same protocol, not published as the main data):
 | medium, 8,943 nodes | 3.74 ms | 0.61 ms | 17% |
 | large, 33,786 nodes | 23.5 ms | 3.18 ms | 15% |
 
-- The finding holds: the search is 15–17% of a replan, against 14–16% with MSVC.
+- The finding holds: the search is 15–17% of a replan, against 13–16% with MSVC in the published run.
 - Every replan returns the optimal route cost: 300, 300 and 200 events.
 - The absolute times cannot be compared with MSVC's. The runs were made at different times, on a
   machine whose background load varied.
@@ -188,7 +293,10 @@ workloads` from fixed seeds with splitmix64, which gives the same numbers on eve
   - A\* and Dijkstra expand every node they pushed with priority below the optimum;
   - BFS's edge count equals the fewest possible (Dijkstra on unit weights);
   - failure cases agree with an independent reachability test, and when the goal is cut off, A\*
-    expands the whole reachable component before giving up.
+    expands the whole reachable component before giving up;
+  - after a failed replan the navigator is `BLOCKED`, stays on its node, refuses to step, returns only
+    the travelled part from `getCurrentPath()` and the abandoned route from `getInvalidatedRoute()`,
+    reports an infinite remaining distance, and fails `retryNavigation()` while the blockage stands.
 
   The results are stored in each JSON file under `checks`.
 - **`evidence_bench`** validates every route it times. It also counts A\* routes that are valid but
@@ -203,11 +311,19 @@ workloads` from fixed seeds with splitmix64, which gives the same numbers on eve
   - that each A\* miss recorded before the
     [open-list fix](TECHNICAL_NOTES.md#a-tie-bug-found-by-the-traces) (`astar_fix_before.json`) is
     the same query as now, answered at Dijkstra's cost;
-  - that every number the README quotes equals the value in `summary.json`, and that every README
-    link target exists.
+  - the failure states listed above, from the exported values;
+  - the run history: a stated selection rule, runs in time order, a summary and manifest kept for
+    every complete run, and the published run records as the newest complete run;
+  - that every number the README quotes from `summary.json` and the history is stated as computed, and
+    that every README link target exists.
 
-  Run against the data from before the fix, the new checks fail exactly where the bug showed: the
+  Run against the data from before the A\* fix, these checks fail exactly where the bug showed: the
   dropped node in the hero query, the failure case, and all 50 queries and 23 replans.
+- **In CI**, the *Evidence checks* job runs `check_outputs.py`; then `test_check_outputs.py`, which
+  corrupts a copy of the evidence six ways and requires the checker to fail on each; then it builds
+  `evidence_export` on Ubuntu with GCC, and `compare_traces.py` requires the four committed traces
+  back exactly, apart from the fields naming the compiler and the scenario path. CI never runs the
+  benchmark.
 
 ## Artifact map
 
@@ -217,7 +333,7 @@ workloads` from fixed seeds with splitmix64, which gives the same numbers on eve
 | `replan-cost-*.png` | `render/perf.py` | `summary.json`, from `bench/*.replan_times.csv` and `bench/hero.times.csv` | `evidence_bench replans` and `hero` |
 | `search-comparison-*.png` | `render/search.py` | `search.json` (`expand_events` in recorded order, returned routes) | `evidence_export search` |
 | `perf-latency-*.png` | `render/perf.py` | `summary.json` and `bench/*.query_results.csv`, from `bench/*.query_times.csv` | `evidence_bench queries` on `workloads/` |
-| `failure-panel-*.png` | `render/failure.py` | `failure_goal_blocked.json`, `failure_disconnected.json` | `evidence_export failure` |
+| `failure-panel-*.png` | `render/failure.py` | `failure_goal_blocked.json`, `failure_disconnected.json` (state, travelled and invalidated routes, console message, status, retry result) | `evidence_export failure` |
 | `how-it-fits-*.png` | `render/diagram.py` | `hero.json` (node, blocked-node and step counts); the call path is `NavigationCore` → `DynamicReplanner` as written in `src/` | — |
 
 Data files in `docs/data/`:
@@ -226,16 +342,18 @@ Data files in `docs/data/`:
 |---|---|
 | `hero.json` | Scenario, full graph (nodes, edges with weights), routes before and after the replan, per-step timeline (step, node, route version, remaining cost), status strings, checks |
 | `search.json` | The replanner's query; for each planner: route, cost, length, edges, ordered expansion and push events; the shortest-by-distance reference route; checks |
-| `failure_*.json` | Navigator state before and after the blockage, the console message, the replanner's result, reachability, A*'s expansion count, checks |
+| `failure_*.json` | Navigator state before and after the blockage, the console message, the travelled and invalidated routes, the refused step, the retry result, the replanner's result, reachability, A*'s expansion count, checks |
 | `workloads/` | Benchmark scenarios, queries, replan events and `workloads.json` (sizes, seeds, fingerprints) |
 | `bench/*.query_times.csv` | One row per timed call: query, planner, repetition, nanoseconds |
 | `bench/*.query_results.csv` | One row per query and planner: found, valid, cost, edges, length, A* expansions, cost ÷ Dijkstra's |
 | `bench/*.replan_times.csv`, `*.replan_results.csv` | Replan phases per event and repetition; outcome per event |
 | `bench/hero.times.csv` | The hero's plan, replan and replan parts, 1,000 runs |
-| `bench/*_run.json`, `hero.run.json` | Run records: compiler, clock step, pinning, repeats, graph fingerprint, sample and invalid counts |
+| `bench/*_run.json`, `hero.run.json` | Run records: compiler, clock step, pinning, repeats, graph fingerprint, sample and invalid counts, logical processors, background CPU load |
+| `bench/environment.json` | The load gate's threshold, windows, wait and result, and the benchmark's start and end times |
+| `history/` | `index.json` (every benchmark run, its environment and headline numbers, and the selection rule) and one folder per complete run with its summary, manifest and run records |
 | `astar_fix_before.json` | Frozen reference, not regenerated: every A\* query and replan that missed the optimum before the open-list fix, with its start, goal and costs, and the source state of that run |
-| `summary.json` | Every number the README quotes, computed from the files above |
-| `manifest.json` | Git revision, dirty-state id and modified files, CMake cache and compile commands, machine, Python package versions, SHA-256 of every data and asset file |
+| `summary.json` | Every number the README quotes from this run, computed from the files above |
+| `manifest.json` | Git revision, dirty-state id and modified files, CMake cache and compile commands, machine, Python package versions, SHA-256 of every data and asset file (text files with LF line endings, as git stores them) |
 
 ## Units
 
@@ -258,20 +376,33 @@ python tools/evidence/regenerate.py --cxx cl       # MSVC, from the x64 Native T
 python tools/evidence/regenerate.py --cxx g++      # or GCC / Clang
 ```
 
-On the test machine a full run takes 9–12 minutes:
-- about 20 s to build from scratch;
-- 7.5–10 minutes of benchmark, depending on background load;
-- 50–90 s to render.
+On the test machine the published run took about 11 minutes after the load gate:
+
+- about 12 s to build the evidence tools;
+- 9 minutes 12 s of benchmark;
+- about 90 s to summarise, render, record and check.
+
+Before the benchmark, the load gate waits up to 15 minutes for a quiet machine.
 
 Useful options:
 
 - `--skip-bench` reuses the saved timings and re-renders in one to two minutes.
+- `--load-gate 0.05`, `--load-gate-timeout 1800` and `--no-load-gate` change or skip the wait.
+- `--history-note "..."` stores a note with the run in `docs/data/history/index.json`.
 - `--quick` takes one timed repeat with no warm-up. It is for checking the pipeline, not for
-  publishing.
+  publishing, and is not recorded in the history.
 - `--regenerate-workloads` rewrites the workload files from their seeds. The fingerprints in
   `workloads.json` show whether anything changed.
 
+The checks alone, with Python's standard library and no build:
+
+```bash
+python tools/evidence/check_outputs.py
+python tools/evidence/test_check_outputs.py
+```
+
 Equal-cost ties could resolve differently between standard libraries, because `std::priority_queue`
 leaves the order of equal elements unspecified. A route might then differ on another compiler while
-its cost stays the same. The exporter's checks therefore compare costs, not node lists. (MSVC and GCC
-happen to agree node for node on these scenarios; see the validation runs above.)
+its cost stays the same. The exporter's checks therefore compare costs, not node lists, and
+`compare_traces.py`, which compares node lists and event order, is run with a single toolchain in CI.
+MSVC and GCC happen to agree node for node on these scenarios (see the validation runs above).

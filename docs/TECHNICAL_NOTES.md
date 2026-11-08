@@ -5,8 +5,9 @@ Design decisions, the measured findings behind the README, and what they imply. 
 
 - [Why the default A\* heuristic is safe](#why-the-default-a-heuristic-is-safe)
 - [A\* tie bug found by the traces](#a-tie-bug-found-by-the-traces)
+- [Jump Point Search: domain, rules and validation](#jump-point-search-domain-rules-and-validation)
 - [Where a replan's time goes](#where-a-replans-time-goes)
-- [What the navigator reports when no route is left](#what-the-navigator-reports-when-no-route-is-left)
+- [Navigation states and failed replanning](#navigation-states-and-failed-replanning)
 - [Search observer](#search-observer)
 - [Units](#units)
 - [Failure contract of the searches](#failure-contract-of-the-searches)
@@ -136,6 +137,70 @@ A\*'s median query time fell by 11–17%. The unchanged planners moved by up to 
 runs, which bounds the noise. A drop of this size fits what the fix removed: a hash-set insert on
 every push, and a lookup and erase on every pop. These raw runs are kept locally, not in `docs/data`.
 
+## Jump Point Search: domain, rules and validation
+
+**What was wrong.** The previous implementation was compared with Dijkstra on a seeded probe of 3,568
+queries on 300 grids whose edges were exactly the grid moves without corner cutting:
+
+| Grid | Queries | No route returned, one existed | Costlier route than Dijkstra's |
+|---|---:|---:|---:|
+| 8-connected | 2,379 | 1,319 | 0 |
+| 4-connected (diagonals disabled) | 1,189 | 303 | 323 |
+
+Three causes:
+
+- **Corner cutting.** Diagonal jumps never checked the two cells beside the move. The grid route then
+  contained diagonals the graph had no edge for, and the final edge check discarded the whole route.
+- **Mixed variants.** The forced-neighbour test for straight moves came from the variant without corner
+  cutting; the diagonal test and moves came from the variant with it.
+- **Straight jumps never turned on 4-connected grids.** With diagonal movement disabled, a straight jump
+  stopped only at a forced neighbour, so a goal off the start's row and column was reached late or not
+  at all.
+
+**Supported domain, checked before every search** (once per graph revision, grid size and movement
+mode):
+
+- every node on its own integer cell inside the grid;
+- the edges are exactly the grid moves between cells that hold nodes, in both directions;
+- orthogonal moves weigh s;
+- with diagonal movement enabled, diagonal moves are allowed only when both side cells hold nodes, and
+  weigh s·√2;
+- the same s > 0 throughout, with a relative tolerance of 10⁻⁹.
+
+A graph outside this domain makes `findPath` throw `std::invalid_argument` naming the first violation:
+weighted cells, a corner-cutting diagonal, a longer or one-way edge, or a diagonal when diagonals are
+disabled. `supportsGraph` reports it without throwing. Cells marked with `addObstacle` are closed: no
+route enters them and no diagonal passes their corner.
+
+**Search.** Best-first over jump points:
+
+- **Ordering.** f = g + h, with h the octile distance times s, or the Manhattan distance times s with
+  diagonals disabled. Both are consistent on this domain.
+- **Stale entries.** Rejected by comparing g; a closed cell reopens only if a strictly cheaper route
+  reaches it.
+- **Successors.** From the start, every legal move. After a diagonal move (dx, dy), the directions (dx,
+  0), (0, dy) and (dx, dy). After a straight move (dx, 0), the direction (dx, 0), plus (0, ±1) and
+  (dx, ±1) wherever (x, y±1) is open and (x−dx, y±1) is closed (a forced neighbour); vertical moves
+  likewise. A diagonal has no forced neighbours: its two side cells must be open, so every cell it could
+  force is reachable as cheaply without it.
+- **Jumps.** A straight jump stops at the goal or at a cell with a forced neighbour. A diagonal jump stops
+  where a straight jump from its current cell would stop. With diagonals disabled, vertical jumps take
+  the diagonal's role and stop where a horizontal jump would stop.
+
+**Validation, not a proof.** The rules follow the canonical-ordering argument of Harabor and Grastien.
+The implementation is checked differentially:
+
+- **Seeded corpus.** `test_jump_point_search` runs 600 grids: 5–40 by 5–30 cells, 0–40% of cells
+  blocked, two thirds 8-connected, step weight 1 or 2.5, and every fourth grid with cells marked through
+  `addObstacle`. Of the 7,200 queries, 6,285 have a route. Every result matches Dijkstra's reachability
+  and least cost on the graph of open cells. Every returned step is checked: the endpoints, membership
+  of the graph's edges, a legal grid move, no corner cut and no marked cell.
+- **Regression maps.** The three smallest failing maps from the probe are fixed test cases, alongside
+  the domain rejections.
+- **The probe.** Rerun on the new implementation, all 3,568 queries agree with Dijkstra.
+
+The corpus is a reproducible sample of the domain, not a proof for every grid. JPS was not timed against A\*.
+
 ## Where a replan's time goes
 
 `DynamicReplanner::planAvoidingObstacles` runs whenever a reported obstacle lies on the route ahead.
@@ -148,19 +213,20 @@ It does four things:
    query scans every edge again.
 4. Searches.
 
-Timed one by one, the search is 14–16% of a replan on the three benchmark warehouses, from 1,107
-to 33,786 nodes, and 16% for the README's own replan. On the benchmark warehouses:
+Timed one by one, the search is 13–16% of a replan on the three benchmark warehouses, from 1,107
+to 33,786 nodes, and 15% for the README's own replan. On the benchmark warehouses:
 
-- copying is 28–41%;
-- removal is 14–18% (33% for the README's 14-node blockage);
-- the scale pass is 22–31%.
+- copying is 28–40%;
+- removal is 13–18% (33% for the README's 14-node blockage);
+- the scale pass is 22–29%.
 
-On the large warehouse that is 44.9 ms per replan at p50, against 5.94 ms for the search alone.
-(Numbers from the run in `docs/data`; [EVIDENCE.md](EVIDENCE.md) explains the split. The parts are
-timed separately, so they add up to 86–98% of the end-to-end time. The remainder is navigator
-bookkeeping and cache effects; nothing on this path prints.) Absolute times moved with machine load
-across three full runs that day (30.4 ms, 37.5 ms and 44.9 ms on the large warehouse), but the search
-share stayed within 12–18%.
+On the large warehouse that is 36.7 ms per replan at p50, against 4.63 ms for the search alone.
+(Numbers from the published run in `docs/data`, medians of per-event shares; [EVIDENCE.md](EVIDENCE.md)
+explains the split. The parts are timed separately, so they add up to 85–97% of the end-to-end time.
+The remainder is navigator bookkeeping and cache effects; nothing on this path prints.) Across the 4
+runs in `docs/data/history`, the large warehouse's median replan was 30.4, 37.5, 44.9 and 36.7 ms,
+under different machine loads and, between the third and fourth, a rewritten `NavigationCore`; the
+search share stayed within 12–18%.
 
 **What would remove most of it, not implemented.**
 
@@ -169,32 +235,57 @@ share stayed within 12–18%.
 - Reuse the original `AStar`'s scale. Removing nodes only removes edges, which can only raise the
   minimum cost-per-length ratio, so the old *k* stays admissible and consistent on the reduced graph.
 
-## What the navigator reports when no route is left
+## Navigation states and failed replanning
 
-`NavigationCore::handleObstacles` asks the replanner for a route from the current node. When none
-exists, it:
+`NavigationCore` has an explicit state, `NavigationState`:
 
-- prints `[NAVIGATION] No route around the reported obstacles; navigation halted`;
-- sets itself inactive.
+| From | Event | To |
+|---|---|---|
+| `IDLE` | `startNavigation` finds a route of two or more nodes (one node: `COMPLETED`) | `ACTIVE` |
+| `ACTIVE` | `executeNavigationStep` reaches the goal | `COMPLETED` |
+| `ACTIVE` | `pauseNavigation`, `emergencyStop` | `PAUSED` |
+| `PAUSED` | `resumeNavigation` | `ACTIVE` |
+| `ACTIVE`, `PAUSED` | `handleObstacles` finds no route from the current node to the goal | `BLOCKED` |
+| `BLOCKED` | `retryNavigation` finds a route | `ACTIVE` |
+| any | `stopNavigation`, `updateEnvironment` | `IDLE` |
 
-From then on:
+A successful `startNavigation` replaces the current navigation in any state; a failed one changes nothing.
 
-- `executeNavigationStep()` returns false, and the position does not change. The navigator never
-  steps into a blocked node.
-- `getNavigationStatus()` reports `IDLE`, the same word as before navigation starts. There is no
-  distinct "no route" state.
-- `getCurrentPath()` still returns the old route, through the blocked nodes, and
-  `getRemainingDistance()` still sums it.
+**Route ownership after a failed replan.** In `BLOCKED` the route ahead is no longer executable, and the
+interface says so:
 
-A caller has to read the status, not the path, to learn that navigation stopped. Both behaviours are
-in the README's failure panel, captured from the engine. A clearer contract (a `BLOCKED` status,
-clearing the path) would be an API change and is not made here.
+- `getCurrentPath()` returns only the travelled part: start to current node.
+- `getInvalidatedRoute()` returns the abandoned route ahead, from the current node to the goal, as it
+  was. It is diagnostic history, not a plan.
+- `executeNavigationStep()` returns false and does not move.
+- `getRemainingDistance()` returns infinity.
+- `getNavigationStatus()` starts with `BLOCKED`.
+- Reported obstacles stay known to the replanner. More reports while `BLOCKED` are recorded and change
+  nothing else.
+
+**Recovery.** `clearObstacles` or `clearAllObstacles` updates what the replanner knows; neither replans.
+`retryNavigation()` then plans from the current node to the same goal. On success the route becomes the
+travelled part plus the new route, and the state `ACTIVE`; a failed retry changes nothing. A new
+`startNavigation` also leaves `BLOCKED`.
+
+**Evidence.**
+
+- **Unit tests.** `test_navigation_states` (12 cases) covers a blocked goal, a cut-off goal, refusal to
+  advance, pause, resume and emergency stop while `BLOCKED`, repeated failures, recovery by retry (ending
+  in `COMPLETED`), recovery by a new start, a failed start, an obstacle reported while `PAUSED`, and
+  `stopNavigation`.
+- **Failure panel.** The README's failure panel shows the two warehouse scenarios as the engine reports
+  them. The exporter checks each one: the state, the travelled path, the invalidated route, the refused
+  step, the infinite remaining distance and the failed retry.
+
+`BLOCKED` is a reported state, not a safety mechanism. The library stops advancing its simulated
+position because it has no route; it controls nothing physical.
 
 ## Search observer
 
-`SearchObserver` ([header](../include/pathfinding_algorithms/SearchObserver.hpp)) is one of the two
-changes this work made to the library; the other is the [A\* open-list fix](#a-tie-bug-found-by-the-traces),
-which the observer's traces made necessary. The observer is opt-in and read-only:
+`SearchObserver` ([header](../include/pathfinding_algorithms/SearchObserver.hpp)) exposes a search's
+expansions and frontier pushes in execution order; its traces exposed the
+[A\* open-list bug](#a-tie-bug-found-by-the-traces). It is opt-in and read-only:
 
 - `AStar`, `Dijkstra` and `BFS` gain `setSearchObserver(SearchObserver*)`.
 - They call `onExpand` and `onFrontierPush` where they do the work.
@@ -227,5 +318,6 @@ The searches report "no route" as an empty vector. That covers:
 - an unreachable goal;
 - in Bellman–Ford, a negative cycle.
 
-Exceptions mark inputs an algorithm cannot handle, such as a negative weight in A\* or Dijkstra.
-Depth-first search does not follow this yet: it throws for an unknown start or goal.
+Exceptions mark inputs an algorithm cannot handle: a negative weight in A\* or Dijkstra, or a graph
+outside Jump Point Search's supported domain. Depth-first search does not follow this yet: it throws
+for an unknown start or goal.
