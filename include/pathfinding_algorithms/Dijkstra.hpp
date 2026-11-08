@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Graph.hpp"
+#include "pathfinding_algorithms/SearchObserver.hpp"
 #include <vector>
 #include <unordered_map>
 #include <memory>
@@ -34,6 +35,8 @@ class Dijkstra
         std::unique_ptr<DistanceRelaxationManager> relaxationManager;
         std::unique_ptr<PriorityQueueManager> pqManager;
         std::unique_ptr<ShortestPathTreeManager> treeManager;
+
+        SearchObserver* searchObserver = nullptr;  // optional, read-only; see setSearchObserver()
 
         struct DijkstraNode
         {
@@ -99,4 +102,8 @@ class Dijkstra
         double getShortestDistance(int startId, int goalId);
         bool hasPath(int startId, int goalId);
         void printAlgorithmSteps(bool enable);
+
+        // Attaches a read-only observer that later searches report their expansions and frontier
+        // pushes to, in execution order; nullptr (the default) detaches it.
+        void setSearchObserver(SearchObserver* observer);
 };

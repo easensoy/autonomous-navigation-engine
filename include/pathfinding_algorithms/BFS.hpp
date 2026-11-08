@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Graph.hpp"
+#include "pathfinding_algorithms/SearchObserver.hpp"
 #include <vector>
 #include <queue>
 #include <unordered_set>
@@ -19,6 +20,7 @@ class BFS
         std::unique_ptr<UnweightedPathfinder> unweightedPathfinder;
         
         bool traversalLogging;
+        SearchObserver* searchObserver = nullptr;  // optional, read-only; see setSearchObserver()
 
         std::vector<int> reconstructPath(const std::unordered_map<int, int>& parent, int startId, int goalId) const;
         void findAllPathsRecursive(int current, int goal, std::vector<int>& currentPath,
@@ -61,4 +63,8 @@ class BFS
         std::vector<int> getNodesAtDistance(int startId, int distance);
 
         void printTraversalOrder(bool enable);
+
+        // Attaches a read-only observer that findPath reports its dequeues and enqueues to, in
+        // execution order; nullptr (the default) detaches it.
+        void setSearchObserver(SearchObserver* observer);
 };

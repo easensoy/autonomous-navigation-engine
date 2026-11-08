@@ -35,7 +35,10 @@ std::vector<int> BFS::findPath(int startId, int goalId) {
     frontier.push(startId);
     visited.insert(startId);
     parent[startId] = -1;
-    
+    if (searchObserver) {
+        searchObserver->onFrontierPush(startId, -1, 0.0, 0.0);
+    }
+
     std::cout << "[BFS] Beginning breadth-first exploration from node " << startId << std::endl;
     
     int explorationLevel = 0;
@@ -46,8 +49,11 @@ std::vector<int> BFS::findPath(int startId, int goalId) {
         int current = frontier.front();
         frontier.pop();
         nodesAtCurrentLevel--;
-        
-        std::cout << "[BFS] Exploring node " << current 
+        if (searchObserver) {
+            searchObserver->onExpand(current, explorationLevel, explorationLevel);
+        }
+
+        std::cout << "[BFS] Exploring node " << current
                   << " at level " << explorationLevel << std::endl;
         
         if (current == goalId) {
@@ -65,7 +71,11 @@ std::vector<int> BFS::findPath(int startId, int goalId) {
                 parent[neighbor] = current;
                 frontier.push(neighbor);
                 nodesAtNextLevel++;
-                
+                if (searchObserver) {
+                    searchObserver->onFrontierPush(neighbor, current, explorationLevel + 1.0,
+                                                   explorationLevel + 1.0);
+                }
+
                 std::cout << "[BFS] Added node " << neighbor 
                           << " to frontier (parent: " << current << ")" << std::endl;
                 
@@ -234,6 +244,10 @@ std::vector<int> BFS::getNodesAtDistance(int startId, int distance) {
     
     std::cout << "[BFS] Found " << result.size() << " nodes at distance " << distance << std::endl;
     return result;
+}
+
+void BFS::setSearchObserver(SearchObserver* observer) {
+    searchObserver = observer;
 }
 
 void BFS::printTraversalOrder(bool enable) {

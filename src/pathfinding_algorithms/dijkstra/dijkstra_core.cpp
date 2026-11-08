@@ -37,6 +37,9 @@ std::unordered_map<int, double> Dijkstra::findShortestDistances(int startId) {
     initializePriorityQueue();
     clearShortestPathTree();  // a tree built for a previous source is no longer valid
     addToPriorityQueue(DijkstraNode(startId, 0.0));
+    if (searchObserver) {
+        searchObserver->onFrontierPush(startId, -1, 0.0, 0.0);
+    }
 
     std::unordered_set<int> settled;
     while (!isPriorityQueueEmpty()) {
@@ -49,6 +52,10 @@ std::unordered_map<int, double> Dijkstra::findShortestDistances(int startId) {
         if (!settled.insert(current).second) {
             continue;
         }
+        if (searchObserver) {
+            const double distance = getCurrentDistance(current);
+            searchObserver->onExpand(current, distance, distance);
+        }
 
         for (const Edge& edge : graph->getEdgesFrom(current)) {
             if (edge.getWeight() < 0.0) {
@@ -57,6 +64,10 @@ std::unordered_map<int, double> Dijkstra::findShortestDistances(int startId) {
             const int neighbor = edge.getToNode();
             if (settled.count(neighbor) == 0 && relaxEdge(current, neighbor, edge.getWeight())) {
                 addToPriorityQueue(DijkstraNode(neighbor, getCurrentDistance(neighbor), current));
+                if (searchObserver) {
+                    const double distance = getCurrentDistance(neighbor);
+                    searchObserver->onFrontierPush(neighbor, current, distance, distance);
+                }
             }
         }
     }
@@ -104,6 +115,10 @@ bool Dijkstra::hasPath(int startId, int goalId) {
     }
     findShortestDistances(startId);
     return isNodeReachable(goalId);
+}
+
+void Dijkstra::setSearchObserver(SearchObserver* observer) {
+    searchObserver = observer;
 }
 
 void Dijkstra::printAlgorithmSteps(bool enable) {
