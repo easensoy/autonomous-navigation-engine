@@ -13,9 +13,12 @@
   "graph_nodes": 744,
   "graph_edges": 2249,
   "graph_fingerprint": "b4bf8609545fc730",
-  "graph_build_ns": 1102500,
+  "graph_build_ns": 1132700,
   "samples": 6000,
   "invalid_routes": 0,
+  "logical_processors": 22,
+  "background_cpu_load": 0.17660461890479015,
+  "background_cpu_load_definition": "CPU time of all other processes during this command / (wall time x logical processors); -1 if the platform does not report it",
   "phases": "plan = NavigationCore::startNavigation on a new navigator; replan = NavigationCore::handleObstacles after block_step steps; copy, remove, search_first, search_cached = the replan's operations timed apart",
   "blocked_nodes": 14,
   "final_route_hops": 49
