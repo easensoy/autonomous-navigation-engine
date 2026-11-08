@@ -137,16 +137,20 @@ def render_latency(theme_name: str):
             ax.plot([x, x], [lo, hi], color=color, lw=1.4, alpha=0.8, zorder=2)
             ax.plot([x], [hi], marker="_", ms=8, mew=1.6, color=color, zorder=2)
         label_y[v] = math.log10(p50[-1])
-    # Direct labels at the right end, nudged apart so none overlap (in decades of the log axis).
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    # Direct labels at the right end, nudged apart so none overlap. The minimum gap is one 9-pt line
+    # plus a quarter, converted to decades of this axis's autoscaled range.
+    lo, hi = ax.get_ylim()
+    height_pt = fig.get_figheight() * 72 * ax.get_position().height
+    min_gap = 1.25 * 9 * (math.log10(hi) - math.log10(lo)) / height_pt
     placed = sorted(label_y.items(), key=lambda kv: kv[1])
     for k in range(1, len(placed)):
-        if placed[k][1] - placed[k - 1][1] < 0.13:
-            placed[k] = (placed[k][0], placed[k - 1][1] + 0.13)
+        if placed[k][1] - placed[k - 1][1] < min_gap:
+            placed[k] = (placed[k][0], placed[k - 1][1] + min_gap)
     for v, ly in placed:
         ax.text(nodes[-1] * 1.35, 10 ** ly, SERIES_LABEL[v], color=t.series[v], fontsize=9, va="center",
                 ha="left")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
     ax.set_xlim(nodes[0] / 1.6, nodes[-1] * 4.2)
     ax.set_xticks(nodes)
     ax.set_xticklabels([f"{n:,}" for n in nodes])
