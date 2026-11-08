@@ -1,0 +1,1066 @@
+{
+  "schema": "ane-evidence/summary/1",
+  "percentiles": "nearest rank; latency = per-query median over repeats, percentiles across queries; p99 only when n >= 1000",
+  "hero": {
+    "graph": {
+      "nodes": 744,
+      "edges": 2249,
+      "fingerprint": "b4bf8609545fc730"
+    },
+    "blocked_nodes": 14,
+    "block_step": 9,
+    "initial": {
+      "nodes": null,
+      "cost": 46.65685424949237,
+      "length": 46.65685424949237,
+      "hops": 45
+    },
+    "abandoned_remainder": {
+      "nodes": null,
+      "cost": 37.65685424949237,
+      "length": 37.65685424949237,
+      "hops": 36
+    },
+    "new_remainder": {
+      "nodes": null,
+      "cost": 43.31370849898475,
+      "length": 43.31370849898475,
+      "hops": 40
+    },
+    "traversed": {
+      "nodes": null,
+      "cost": 52.313708498984745,
+      "length": 52.313708498984745,
+      "hops": 49
+    },
+    "steps": 49,
+    "replan_position": 527,
+    "nodes_ahead_to_block": 11,
+    "timing_runs": 1000,
+    "background_cpu_load": 0.17660461890479015,
+    "timing_ms": {
+      "plan": {
+        "n": 1000,
+        "min": 0.1074,
+        "p50": 0.1163,
+        "p95": 0.1497,
+        "max": 0.6296999999999999,
+        "mean": 0.1236847,
+        "p99": 0.22039999999999998
+      },
+      "replan": {
+        "n": 1000,
+        "min": 0.3126,
+        "p50": 0.3493,
+        "p95": 0.5115999999999999,
+        "max": 1.0899999999999999,
+        "mean": 0.3849431,
+        "p99": 0.8771
+      },
+      "copy": {
+        "n": 1000,
+        "min": 0.0696,
+        "p50": 0.07819999999999999,
+        "p95": 0.15,
+        "max": 0.6285,
+        "mean": 0.09817089999999999,
+        "p99": 0.2223
+      },
+      "remove": {
+        "n": 1000,
+        "min": 0.1045,
+        "p50": 0.11489999999999999,
+        "p95": 0.1363,
+        "max": 0.9067999999999999,
+        "mean": 0.12025519999999999,
+        "p99": 0.1772
+      },
+      "search_first": {
+        "n": 1000,
+        "min": 0.1013,
+        "p50": 0.1124,
+        "p95": 0.1603,
+        "max": 0.86,
+        "mean": 0.12496049999999999,
+        "p99": 0.2284
+      },
+      "search_cached": {
+        "n": 1000,
+        "min": 0.048999999999999995,
+        "p50": 0.053899999999999997,
+        "p95": 0.06899999999999999,
+        "max": 0.47309999999999997,
+        "mean": 0.0566744,
+        "p99": 0.08449999999999999
+      }
+    },
+    "replan_share_median": {
+      "search": 0.15355199186470575,
+      "scale_pass": 0.16686443332899198,
+      "copy": 0.22615158828678678,
+      "remove": 0.32823740595083767,
+      "parts_over_end_to_end": 0.8881384170848398
+    },
+    "checks_passed": true,
+    "search": {
+      "dijkstra": {
+        "label": "Dijkstra",
+        "cost": 43.31370849898475,
+        "length": 43.31370849898475,
+        "hops": 40,
+        "expansions": 730,
+        "pushes": 794,
+        "never_expanded_below_optimum": 0
+      },
+      "astar_zero": {
+        "label": "A*, h = 0",
+        "cost": 43.31370849898475,
+        "length": 43.31370849898475,
+        "hops": 40,
+        "expansions": 712,
+        "pushes": 790,
+        "never_expanded_below_optimum": 0
+      },
+      "astar": {
+        "label": "A*, default heuristic",
+        "cost": 43.31370849898475,
+        "length": 43.31370849898475,
+        "hops": 40,
+        "expansions": 158,
+        "pushes": 262,
+        "never_expanded_below_optimum": 0
+      },
+      "bfs": {
+        "label": "BFS",
+        "cost": 63.89949493661166,
+        "length": 39.89949493661166,
+        "hops": 37,
+        "expansions": 645,
+        "pushes": 680,
+        "never_expanded_below_optimum": 0
+      },
+      "shortest_length_reference": {
+        "cost": 62.242640687119284,
+        "length": 38.242640687119284,
+        "hops": 37
+      },
+      "optimum": 43.31370849898475,
+      "checks_passed": true
+    }
+  },
+  "failures": {
+    "failure_goal_blocked": {
+      "goal_blocked": true,
+      "status_before": "ACTIVE | mode GLOBAL_ONLY | at node 527 (10/46) | remaining 37.6569",
+      "status_after": "BLOCKED | mode GLOBAL_ONLY | at node 527 after 9 steps | no route to goal 797",
+      "state_after": "BLOCKED",
+      "console_message": "[NAVIGATION] No route from node 527 to goal 797 around the reported obstacles; navigation blocked",
+      "execute_step_after": false,
+      "retry_after": false,
+      "state_after_retry": "BLOCKED",
+      "remaining_after_is_infinite": true,
+      "invalidated_route_blocked_nodes": 1,
+      "reachable": false,
+      "astar_expansions": 0,
+      "astar_pushed_nodes": 0,
+      "reachable_component_nodes": 743,
+      "reduced_graph_nodes": 743,
+      "current_path_after_nodes": 10,
+      "invalidated_route_nodes": 37,
+      "replanner_route_empty": true,
+      "astar_route_empty": true,
+      "astar_pushed_never_expanded": 0,
+      "blocked_nodes": 1,
+      "checks_passed": true
+    },
+    "failure_disconnected": {
+      "goal_blocked": false,
+      "status_before": "ACTIVE | mode GLOBAL_ONLY | at node 527 (10/39) | remaining 30.2426",
+      "status_after": "BLOCKED | mode GLOBAL_ONLY | at node 527 after 9 steps | no route to goal 789",
+      "state_after": "BLOCKED",
+      "console_message": "[NAVIGATION] No route from node 527 to goal 789 around the reported obstacles; navigation blocked",
+      "execute_step_after": false,
+      "retry_after": false,
+      "state_after_retry": "BLOCKED",
+      "remaining_after_is_infinite": true,
+      "invalidated_route_blocked_nodes": 1,
+      "reachable": false,
+      "astar_expansions": 728,
+      "astar_pushed_nodes": 728,
+      "reachable_component_nodes": 728,
+      "reduced_graph_nodes": 740,
+      "current_path_after_nodes": 10,
+      "invalidated_route_nodes": 30,
+      "replanner_route_empty": true,
+      "astar_route_empty": true,
+      "astar_pushed_never_expanded": 0,
+      "blocked_nodes": 4,
+      "checks_passed": true
+    }
+  },
+  "queries": {
+    "warehouse_s": {
+      "nodes": 1107,
+      "edges": 3214,
+      "fingerprint": "3ce74c023df9fb3d",
+      "queries": 1000,
+      "repeats": 5,
+      "warmup": 1,
+      "graph_build_ms": 1.5858,
+      "astar_first_query_ms": 0.3518,
+      "astar_cached_query_ms": 0.2553,
+      "background_cpu_load": 0.17866593325545146,
+      "variants": {
+        "astar": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0017,
+            "p50": 0.0453,
+            "p95": 0.1872,
+            "max": 0.4165,
+            "mean": 0.0665542,
+            "p99": 0.2782
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0000000000000002,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.151442915447683,
+          "repeat_spread_p95": 1.12,
+          "workload_p95_over_p50": 4.132450331125828,
+          "expansions": {
+            "n": 1000,
+            "min": 2.0,
+            "p50": 107.0,
+            "p95": 457.0,
+            "max": 1093.0,
+            "mean": 157.809,
+            "p99": 629.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "astar_zero": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0013,
+            "p50": 0.1913,
+            "p95": 0.3598,
+            "max": 0.6239,
+            "mean": 0.1910947,
+            "p99": 0.38889999999999997
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.11896878212411405,
+          "repeat_spread_p95": 1.2227334235453315,
+          "workload_p95_over_p50": 1.8808154730789337,
+          "expansions": {
+            "n": 1000,
+            "min": 2.0,
+            "p50": 558.0,
+            "p95": 1055.0,
+            "max": 1107.0,
+            "mean": 566.179,
+            "p99": 1099.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "dijkstra": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.4396,
+            "p50": 0.4846,
+            "p95": 0.5304,
+            "max": 0.8663,
+            "mean": 0.4918099,
+            "p99": 0.7778999999999999
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.1257709840846647,
+          "repeat_spread_p95": 0.9860021208907741,
+          "workload_p95_over_p50": 1.0945109368551382
+        },
+        "bfs": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0024,
+            "p50": 0.358,
+            "p95": 0.6934,
+            "max": 1.2832999999999999,
+            "mean": 0.36466109999999996,
+            "p99": 0.7526999999999999
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 349,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0330900522377067,
+            "p95": 1.6347794007034195,
+            "max": 2.3311017015452964,
+            "mean": 1.1394895129820592,
+            "p99": 1.9546401772901094
+          },
+          "repeat_spread_median": 0.1018754212964573,
+          "repeat_spread_p95": 1.270033496521515,
+          "workload_p95_over_p50": 1.9368715083798882,
+          "costlier_than_optimal": 651
+        }
+      },
+      "dijkstra_over_astar_paired": {
+        "n": 1000,
+        "min": 1.1815126050420168,
+        "p50": 10.679151061173533,
+        "p95": 63.46666666666667,
+        "max": 295.5,
+        "mean": 19.221205496440785,
+        "p99": 141.31428571428572
+      },
+      "astar_zero_over_astar_paired": {
+        "n": 1000,
+        "min": 0.7647058823529411,
+        "p50": 3.2478485370051633,
+        "p95": 7.495798319327731,
+        "max": 13.99561403508772,
+        "mean": 3.711653188199397,
+        "p99": 11.033846153846154
+      }
+    },
+    "warehouse_m": {
+      "nodes": 8943,
+      "edges": 25370,
+      "fingerprint": "a5e2482b674069db",
+      "queries": 1000,
+      "repeats": 5,
+      "warmup": 1,
+      "graph_build_ms": 27.9581,
+      "astar_first_query_ms": 3.1763,
+      "astar_cached_query_ms": 2.0362,
+      "background_cpu_load": 0.23865287022308473,
+      "variants": {
+        "astar": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0070999999999999995,
+            "p50": 0.6117,
+            "p95": 2.8095999999999997,
+            "max": 7.770099999999999,
+            "mean": 0.8553244999999999,
+            "p99": 3.7102999999999997
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0000000000000002,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.47730326976460996,
+          "repeat_spread_p95": 1.1546076313894889,
+          "workload_p95_over_p50": 4.593101193395455,
+          "expansions": {
+            "n": 1000,
+            "min": 4.0,
+            "p50": 786.0,
+            "p95": 3461.0,
+            "max": 6137.0,
+            "mean": 1133.573,
+            "p99": 4960.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "astar_zero": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0138,
+            "p50": 2.191,
+            "p95": 5.2414,
+            "max": 9.2435,
+            "mean": 2.425172,
+            "p99": 7.0573999999999995
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.3509399581350081,
+          "repeat_spread_p95": 0.9008651766402307,
+          "workload_p95_over_p50": 2.3922409858512097,
+          "expansions": {
+            "n": 1000,
+            "min": 24.0,
+            "p50": 4355.0,
+            "p95": 8494.0,
+            "max": 8940.0,
+            "mean": 4429.489,
+            "p99": 8863.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "dijkstra": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 4.7475,
+            "p50": 5.7953,
+            "p95": 8.0916,
+            "max": 14.100499999999998,
+            "mean": 6.0773989,
+            "p99": 10.032399999999999
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.21738670639062774,
+          "repeat_spread_p95": 0.6424405052928401,
+          "workload_p95_over_p50": 1.3962348799889566
+        },
+        "bfs": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0162,
+            "p50": 3.2674,
+            "p95": 7.2387999999999995,
+            "max": 11.8319,
+            "mean": 3.5100824999999998,
+            "p99": 9.2689
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 187,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.2103918519972672,
+            "p95": 1.708003481214575,
+            "max": 2.1157027104219828,
+            "mean": 1.2456963522001698,
+            "p99": 1.9651111705531612
+          },
+          "repeat_spread_median": 0.25550427956191957,
+          "repeat_spread_p95": 0.8732224896084008,
+          "workload_p95_over_p50": 2.2154618350982433,
+          "costlier_than_optimal": 813
+        }
+      },
+      "dijkstra_over_astar_paired": {
+        "n": 1000,
+        "min": 1.2465219237847647,
+        "p50": 9.773052058523307,
+        "p95": 101.80430528375734,
+        "max": 780.2394366197183,
+        "mean": 27.179064351611697,
+        "p99": 250.87209302325581
+      },
+      "astar_zero_over_astar_paired": {
+        "n": 1000,
+        "min": 0.9603227288975131,
+        "p50": 3.4802578565672846,
+        "p95": 8.945800316957211,
+        "max": 20.921724333522405,
+        "mean": 4.135519083829203,
+        "p99": 15.598009950248755
+      }
+    },
+    "warehouse_l": {
+      "nodes": 33786,
+      "edges": 95183,
+      "fingerprint": "1f674d17f679915b",
+      "queries": 500,
+      "repeats": 5,
+      "warmup": 1,
+      "graph_build_ms": 308.2234,
+      "astar_first_query_ms": 12.9459,
+      "astar_cached_query_ms": 3.1894,
+      "background_cpu_load": 0.2430331021956651,
+      "variants": {
+        "astar": {
+          "latency_ms": {
+            "n": 500,
+            "min": 0.032799999999999996,
+            "p50": 3.6462,
+            "p95": 21.786099999999998,
+            "max": 40.1691,
+            "mean": 6.3693802
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 500,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "repeat_spread_median": 0.3427203867228973,
+          "repeat_spread_p95": 1.0257187780772687,
+          "workload_p95_over_p50": 5.9750150841972465,
+          "expansions": {
+            "n": 500,
+            "min": 28.0,
+            "p50": 2757.0,
+            "p95": 14046.0,
+            "max": 22613.0,
+            "mean": 4320.738
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "astar_zero": {
+          "latency_ms": {
+            "n": 500,
+            "min": 0.06949999999999999,
+            "p50": 17.7227,
+            "p95": 45.7701,
+            "max": 59.7624,
+            "mean": 21.015568
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 500,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "repeat_spread_median": 0.3102416678033971,
+          "repeat_spread_p95": 0.7107742106793784,
+          "workload_p95_over_p50": 2.5825692473494444,
+          "expansions": {
+            "n": 500,
+            "min": 111.0,
+            "p50": 15040.0,
+            "p95": 32357.0,
+            "max": 33673.0,
+            "mean": 16449.008
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "dijkstra": {
+          "latency_ms": {
+            "n": 500,
+            "min": 32.8474,
+            "p50": 47.5918,
+            "p95": 57.643299999999996,
+            "max": 68.1816,
+            "mean": 47.4940856
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 500,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "repeat_spread_median": 0.22563941416399175,
+          "repeat_spread_p95": 0.4226427745153661,
+          "workload_p95_over_p50": 1.2112023499846611
+        },
+        "bfs": {
+          "latency_ms": {
+            "n": 500,
+            "min": 0.0799,
+            "p50": 19.9022,
+            "p95": 45.066199999999995,
+            "max": 60.528,
+            "mean": 21.652375
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 58,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.2267310029605218,
+            "p95": 1.590061889113756,
+            "max": 2.0256603941404228,
+            "mean": 1.2430352176627593
+          },
+          "repeat_spread_median": 0.3560704920039305,
+          "repeat_spread_p95": 0.7393678792253853,
+          "workload_p95_over_p50": 2.2643828320487183,
+          "costlier_than_optimal": 442
+        }
+      },
+      "dijkstra_over_astar_paired": {
+        "n": 500,
+        "min": 1.3726236573253703,
+        "p50": 12.126494114784514,
+        "p95": 301.9623955431755,
+        "max": 1230.2315175097276,
+        "mean": 55.31323564995067
+      },
+      "astar_zero_over_astar_paired": {
+        "n": 500,
+        "min": 1.2770068988942491,
+        "p50": 4.1902742836682965,
+        "p95": 16.549460118425635,
+        "max": 56.80169799878714,
+        "mean": 6.327706234681513
+      }
+    }
+  },
+  "replans": {
+    "warehouse_s": {
+      "events": 300,
+      "repeats": 5,
+      "background_cpu_load": 0.1569270771051932,
+      "end_to_end_repeat_spread_median": 0.16856346315868959,
+      "on_route": 296,
+      "replanned": 296,
+      "found": 300,
+      "valid": 300,
+      "avoids_blocked": 300,
+      "optimal": 300,
+      "blocked_nodes": {
+        "n": 300,
+        "min": 6.0,
+        "p50": 6.0,
+        "p95": 9.0,
+        "max": 9.0,
+        "mean": 6.886666666666667
+      },
+      "phases_ms": {
+        "end_to_end": {
+          "n": 300,
+          "min": 0.0005,
+          "p50": 0.4583,
+          "p95": 0.6562,
+          "max": 0.8608,
+          "mean": 0.47804766666666665
+        },
+        "copy": {
+          "n": 300,
+          "min": 0.1181,
+          "p50": 0.12589999999999998,
+          "p95": 0.2163,
+          "max": 0.2905,
+          "mean": 0.13629366666666665
+        },
+        "remove": {
+          "n": 300,
+          "min": 0.0705,
+          "p50": 0.0833,
+          "p95": 0.11249999999999999,
+          "max": 0.1205,
+          "mean": 0.08682733333333333
+        },
+        "search_first": {
+          "n": 300,
+          "min": 0.1117,
+          "p50": 0.1661,
+          "p95": 0.31539999999999996,
+          "max": 0.4319,
+          "mean": 0.18611733333333333
+        },
+        "search_cached": {
+          "n": 300,
+          "min": 0.012499999999999999,
+          "p50": 0.0673,
+          "p95": 0.2123,
+          "max": 0.3221,
+          "mean": 0.08703699999999999
+        }
+      },
+      "share_of_end_to_end_median": {
+        "search": 0.15030988016669639,
+        "scale_pass": 0.2152303949186567,
+        "copy": 0.2841274649802679,
+        "remove": 0.1829433204339056,
+        "parts_over_end_to_end": 0.8520753977973969
+      }
+    },
+    "warehouse_m": {
+      "events": 300,
+      "repeats": 5,
+      "background_cpu_load": 0.22743190154634366,
+      "end_to_end_repeat_spread_median": 0.22413488010122612,
+      "on_route": 257,
+      "replanned": 257,
+      "found": 300,
+      "valid": 300,
+      "avoids_blocked": 300,
+      "optimal": 300,
+      "blocked_nodes": {
+        "n": 300,
+        "min": 6.0,
+        "p50": 6.0,
+        "p95": 9.0,
+        "max": 9.0,
+        "mean": 6.843333333333334
+      },
+      "phases_ms": {
+        "end_to_end": {
+          "n": 300,
+          "min": 0.001,
+          "p50": 4.2703,
+          "p95": 6.5301,
+          "max": 9.9485,
+          "mean": 4.062961
+        },
+        "copy": {
+          "n": 300,
+          "min": 1.1851,
+          "p50": 1.8268,
+          "p95": 2.9651,
+          "max": 3.9202999999999997,
+          "mean": 1.9099943333333331
+        },
+        "remove": {
+          "n": 300,
+          "min": 0.5683,
+          "p50": 0.6805,
+          "p95": 0.9435,
+          "max": 1.7207999999999999,
+          "mean": 0.7230416666666666
+        },
+        "search_first": {
+          "n": 300,
+          "min": 1.1069,
+          "p50": 1.7968,
+          "p95": 3.3219,
+          "max": 6.2467999999999995,
+          "mean": 1.9843173333333333
+        },
+        "search_cached": {
+          "n": 300,
+          "min": 0.0499,
+          "p50": 0.6362,
+          "p95": 2.0288,
+          "max": 4.843999999999999,
+          "mean": 0.7955773333333334
+        }
+      },
+      "share_of_end_to_end_median": {
+        "search": 0.15726526809697644,
+        "scale_pass": 0.2669457899093398,
+        "copy": 0.40370926786523875,
+        "remove": 0.16303473018979828,
+        "parts_over_end_to_end": 0.9742885667221132
+      }
+    },
+    "warehouse_l": {
+      "events": 200,
+      "repeats": 5,
+      "background_cpu_load": 0.21476271278803877,
+      "end_to_end_repeat_spread_median": 0.3260074914195916,
+      "on_route": 177,
+      "replanned": 177,
+      "found": 200,
+      "valid": 200,
+      "avoids_blocked": 200,
+      "optimal": 200,
+      "blocked_nodes": {
+        "n": 200,
+        "min": 6.0,
+        "p50": 6.0,
+        "p95": 9.0,
+        "max": 9.0,
+        "mean": 6.69
+      },
+      "phases_ms": {
+        "end_to_end": {
+          "n": 200,
+          "min": 0.002,
+          "p50": 36.6645,
+          "p95": 57.3548,
+          "max": 83.2166,
+          "mean": 35.430448999999996
+        },
+        "copy": {
+          "n": 200,
+          "min": 11.0473,
+          "p50": 14.184999999999999,
+          "p95": 16.641199999999998,
+          "max": 20.3307,
+          "mean": 14.163915
+        },
+        "remove": {
+          "n": 200,
+          "min": 2.5781,
+          "p50": 4.8709999999999996,
+          "p95": 6.957599999999999,
+          "max": 8.8652,
+          "mean": 5.001397
+        },
+        "search_first": {
+          "n": 200,
+          "min": 8.9397,
+          "p50": 15.110199999999999,
+          "p95": 27.296899999999997,
+          "max": 44.951,
+          "mean": 16.9628385
+        },
+        "search_cached": {
+          "n": 200,
+          "min": 0.29669999999999996,
+          "p50": 4.6309,
+          "p95": 17.5792,
+          "max": 32.5846,
+          "mean": 6.5579054999999995
+        }
+      },
+      "share_of_end_to_end_median": {
+        "search": 0.1329669662513947,
+        "scale_pass": 0.2918126985551474,
+        "copy": 0.3789990941756501,
+        "remove": 0.13156726186874998,
+        "parts_over_end_to_end": 0.925320629370042
+      }
+    }
+  },
+  "astar_fix": {
+    "before": {
+      "source": {
+        "head": "57c9805ca11f1cc5d152a4d8ab5cbbe125a29fb7",
+        "dirty_state_id": "999180972288abbe",
+        "manifest_generated_utc": "2026-11-08T04:30:32+00:00",
+        "manifest_sha256": "1282124235eb11c8c1ef99c90d76e78ba51fa816cda1a7a7b8d7ac67a28cb434"
+      },
+      "query_counts": {
+        "warehouse_s": {
+          "costlier": 15,
+          "queries": 1000
+        },
+        "warehouse_m": {
+          "costlier": 24,
+          "queries": 1000
+        },
+        "warehouse_l": {
+          "costlier": 11,
+          "queries": 500
+        }
+      },
+      "replan_counts": {
+        "warehouse_s": {
+          "costlier": 5,
+          "events": 300
+        },
+        "warehouse_m": {
+          "costlier": 8,
+          "events": 300
+        },
+        "warehouse_l": {
+          "costlier": 10,
+          "events": 200
+        }
+      },
+      "queries_without_route": 0,
+      "excess_cost": {
+        "n": 50,
+        "min": 0.5147186257614322,
+        "p50": 0.5857864376269077,
+        "p95": 1.4142135623730923,
+        "max": 1.4142135623731065,
+        "mean": 0.6769134213489929
+      },
+      "cost_ratio": {
+        "n": 50,
+        "min": 1.0019446781179742,
+        "p50": 1.0068467909535586,
+        "p95": 1.0478480462342754,
+        "max": 1.0775224150181086,
+        "mean": 1.0117588486400177
+      },
+      "search_replan_query_astar": {
+        "expansions": 157,
+        "never_expanded_below_optimum": 1
+      },
+      "failure_disconnected_astar": {
+        "expansions": 720,
+        "reachable_component_nodes": 728,
+        "pushed_never_expanded": 8
+      }
+    },
+    "after": {
+      "queries": 2500,
+      "queries_optimal": 2500,
+      "replans": 800,
+      "replans_optimal": 800
+    }
+  },
+  "environment": {
+    "schema": "ane-evidence/bench-environment/1",
+    "started_utc": "2026-11-08T19:39:05Z",
+    "finished_utc": "2026-11-08T19:48:17Z",
+    "quick": false,
+    "load_gate": {
+      "threshold": 0.1,
+      "window_s": 10.0,
+      "consecutive_windows": 2,
+      "timeout_s": 900.0,
+      "waited_s": 900.2,
+      "window_loads": [
+        0.2765,
+        0.3686,
+        0.3935,
+        0.3882,
+        0.2993,
+        0.3638,
+        0.3327,
+        0.3066,
+        0.3069,
+        0.3769,
+        0.5109,
+        0.2969,
+        0.2806,
+        0.3567,
+        0.3256,
+        0.2525,
+        0.2587,
+        0.3456,
+        0.333,
+        0.2696,
+        0.2532,
+        0.2667,
+        0.2851,
+        0.2697,
+        0.3726,
+        0.3684,
+        0.3525,
+        0.2726,
+        0.2909,
+        0.3512,
+        0.3541,
+        0.2964,
+        0.2864,
+        0.3352,
+        0.2794,
+        0.3024,
+        0.2776,
+        0.3149,
+        0.2799,
+        0.3027,
+        0.4379,
+        0.3547,
+        0.3029,
+        0.3516,
+        0.3233,
+        0.2522,
+        0.2208,
+        0.2882,
+        0.2875,
+        0.3119,
+        0.2837,
+        0.2411,
+        0.1962,
+        0.2268,
+        0.2327,
+        0.217,
+        0.2626,
+        0.2453,
+        0.2118,
+        0.2166,
+        0.242,
+        0.2564,
+        0.2794,
+        0.2847,
+        0.2883,
+        0.2441,
+        0.2373,
+        0.2216,
+        0.1984,
+        0.2233,
+        0.2314,
+        0.3067,
+        0.2988,
+        0.3215,
+        0.3668,
+        0.2727,
+        0.259,
+        0.2465,
+        0.2948,
+        0.4045,
+        0.3517,
+        0.276,
+        0.2644,
+        0.3544,
+        0.2886,
+        0.2587,
+        0.2339,
+        0.2797,
+        0.223,
+        0.2026
+      ],
+      "met": false,
+      "definition": "share of all logical processors' time in use by any process, per window, sampled before the benchmark starts"
+    }
+  }
+}
