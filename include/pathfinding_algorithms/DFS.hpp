@@ -42,12 +42,6 @@ class DFS
         void clearStack();
         void printStackStatistics() const;
         
-        void initializeRecursiveSearch();
-        size_t getMaxRecursionDepth() const;
-        size_t getTotalRecursiveCalls() const;
-        void resetRecursiveStatistics();
-        void setRecursiveLogging(bool enabled);
-        void printRecursiveStatistics() const;
 
     public:
         explicit DFS(const Graph* environment);

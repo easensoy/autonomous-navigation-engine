@@ -23,9 +23,6 @@ class BFS
         SearchObserver* searchObserver = nullptr;  // optional, read-only; see setSearchObserver()
 
         std::vector<int> reconstructPath(const std::unordered_map<int, int>& parent, int startId, int goalId) const;
-        void findAllPathsRecursive(int current, int goal, std::vector<int>& currentPath,
-                                 std::unordered_set<int>& pathVisited, 
-                                 std::vector<std::vector<int>>& allPaths) const;
         
         void initializeQueue();
         void enqueueNode(int nodeId);
@@ -38,11 +35,6 @@ class BFS
         void clearQueue();
         void printQueueStatistics() const;
         
-        std::vector<int> findOptimalUnweightedPath(int startId, int goalId);
-        std::unordered_map<int, int> computeAllDistances(int startId);
-        std::vector<std::vector<int>> findAllShortestPaths(int startId, int goalId);
-        std::vector<int> getNodesAtExactDistance(int startId, int targetDistance);
-        bool hasPathWithMaxLength(int startId, int goalId, int maxLength);
     
     public:
         explicit BFS(const Graph* environment);

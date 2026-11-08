@@ -41,7 +41,6 @@ public:
     std::unordered_map<std::string, std::any> getSection(const std::string& section) const;
     
     bool validateConfiguration() const;
-    void setDefaultValues();
     void mergeConfiguration(const ConfigManager& other);
     
     void exportToJSON(const std::string& filename) const;

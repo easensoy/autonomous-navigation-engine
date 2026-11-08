@@ -39,9 +39,6 @@ public:
     
     double getAverageExecutionTime(const std::string& operationName) const;
     size_t getTotalMemoryUsage() const;
-    void setBenchmarkBaseline(const std::string& operationName);
     
-    void enableContinuousProfiling(bool enable);
-    void setMemoryTrackingPrecision(int precision);
     bool isProfilingActive() const;
 };
