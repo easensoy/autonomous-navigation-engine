@@ -57,8 +57,6 @@ set(PATHFINDING_SOURCES
     src/pathfinding_algorithms/bellman_ford/negative_cycle_detection.cpp
     src/pathfinding_algorithms/bellman_ford/edge_relaxation.cpp
     src/pathfinding_algorithms/jump_point_search/jps_core.cpp
-    src/pathfinding_algorithms/jump_point_search/jump_point_identification.cpp
-    src/pathfinding_algorithms/jump_point_search/grid_pruning.cpp
 )
 
 set(NAVIGATION_SOURCES
@@ -88,6 +86,7 @@ set(GRAPH_OPERATIONS_SOURCES
     src/graph_operations/edge_operations/remove_edge.cpp
     src/graph_operations/edge_operations/update_edge_weight.cpp
     src/graph_operations/edge_operations/edge_contraction.cpp
+    src/graph_operations/graph_building/graph_builder.cpp
     src/graph_operations/graph_building/grid_graph_generator.cpp
     src/graph_operations/graph_building/random_graph_generator.cpp
     src/graph_operations/graph_building/delaunay_triangulation.cpp
@@ -123,9 +122,7 @@ set(ENVIRONMENT_SOURCES
     src/environment/environment_management/set_environment.cpp
     src/environment/environment_management/environment_persistence.cpp
     src/environment/environment_management/environment_switching.cpp
-    src/environment/map_updates/incremental_map_update.cpp
     src/environment/map_updates/map_synchronization.cpp
-    src/environment/map_updates/sensor_data_integration.cpp
     src/environment/obstacle_detection/static_obstacle_detection.cpp
     src/environment/obstacle_detection/dynamic_obstacle_tracking.cpp
     src/environment/obstacle_detection/collision_prediction.cpp
@@ -213,6 +210,8 @@ if(BUILD_TESTS)
     
     set(TEST_SOURCES
         tests/core_tests/test_graph.cpp
+        tests/api_tests/test_graph_operations_api.cpp
+        tests/api_tests/test_api_link_coverage.cpp
         tests/algorithm_tests/test_a_star.cpp
         tests/algorithm_tests/test_dijkstra.cpp
         tests/algorithm_tests/test_bfs.cpp
@@ -220,6 +219,7 @@ if(BUILD_TESTS)
         tests/algorithm_tests/test_jump_point_search.cpp
         tests/algorithm_tests/test_search_observer.cpp
         tests/integration_tests/test_full_navigation.cpp
+        tests/integration_tests/test_navigation_states.cpp
         tests/integration_tests/test_environment_switching.cpp
         tests/integration_tests/test_emergency_stop.cpp
         tests/performance_tests/algorithm_benchmarks.cpp
