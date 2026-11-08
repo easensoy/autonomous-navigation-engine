@@ -13,9 +13,12 @@
   "graph_nodes": 33786,
   "graph_edges": 95183,
   "graph_fingerprint": "1f674d17f679915b",
-  "graph_build_ns": 302085400,
+  "graph_build_ns": 308981600,
   "samples": 5000,
   "invalid_routes": 0,
+  "logical_processors": 22,
+  "background_cpu_load": 0.21476271278803877,
+  "background_cpu_load_definition": "CPU time of all other processes during this command / (wall time x logical processors); -1 if the platform does not report it",
   "events": 200,
   "replans_not_optimal": 0,
   "phases": "end_to_end = NavigationCore::handleObstacles; copy = Graph copy constructor; remove = Graph::removeNode per blocked node; search_first = AStar constructor + first findPath on the copy; search_cached = second findPath on the same AStar"
