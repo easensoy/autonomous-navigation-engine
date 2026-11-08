@@ -55,7 +55,11 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
     std::unordered_map<int, double> gScore;
     std::unordered_map<int, int> cameFrom;
     gScore[startId] = 0.0;
-    openListManager->push(AStarNode(startId, 0.0, heuristic(startId, goalId), -1));
+    const double startPriority = heuristic(startId, goalId);
+    openListManager->push(AStarNode(startId, 0.0, startPriority, -1));
+    if (searchObserver) {
+        searchObserver->onFrontierPush(startId, -1, 0.0, startPriority);
+    }
 
     std::vector<int> path;
     while (!openListManager->empty()) {
@@ -71,6 +75,9 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
         }
         closedListManager->add(current.nodeId, current.gScore, current.fScore);
         ++nodesExplored;
+        if (searchObserver) {
+            searchObserver->onExpand(current.nodeId, current.gScore, current.fScore);
+        }
 
         if (current.nodeId == goalId) {
             path = reconstructPath(cameFrom, goalId);
@@ -84,8 +91,11 @@ std::vector<int> AStar::findPath(int startId, int goalId) const {
             if (known == gScore.end() || tentative < known->second) {
                 gScore[neighbor] = tentative;
                 cameFrom[neighbor] = current.nodeId;
-                openListManager->push(AStarNode(neighbor, tentative, tentative + heuristic(neighbor, goalId),
-                                                current.nodeId));
+                const double priority = tentative + heuristic(neighbor, goalId);
+                openListManager->push(AStarNode(neighbor, tentative, priority, current.nodeId));
+                if (searchObserver) {
+                    searchObserver->onFrontierPush(neighbor, current.nodeId, tentative, priority);
+                }
             }
         }
     }
@@ -140,6 +150,10 @@ double AStar::getLastSearchExecutionTime() const {
 
 void AStar::enableSearchStatistics(bool enable) {
     searchStatisticsEnabled = enable;
+}
+
+void AStar::setSearchObserver(SearchObserver* observer) {
+    searchObserver = observer;
 }
 
 std::vector<int> AStar::getLastSearchExploredNodes() const {

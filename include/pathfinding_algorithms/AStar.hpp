@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Graph.hpp"
+#include "pathfinding_algorithms/SearchObserver.hpp"
 #include <vector>
 #include <unordered_map>
 #include <functional>
@@ -67,7 +68,9 @@ private:
     mutable bool costPerLengthKnown = false;
     mutable std::uint64_t costPerLengthRevision = 0;
     mutable double costPerLength = 0.0;
-    
+
+    SearchObserver* searchObserver = nullptr;  // optional, read-only; see setSearchObserver()
+
     double calculateHeuristic(int nodeId, int goalId) const;
     // Smallest edge cost per unit of straight-line length (0 when no edge has a length). The default
     // heuristic is straight-line distance times this, which never overestimates.
@@ -169,6 +172,13 @@ public:
     size_t getLastSearchNodesExplored() const;
     double getLastSearchExecutionTime() const;
     void enableSearchStatistics(bool enable);
+
+    /**
+     * Attaches a read-only observer that later searches report their expansions and frontier pushes
+     * to, in execution order; nullptr (the default) detaches it. Searches return the same routes
+     * either way.
+     */
+    void setSearchObserver(SearchObserver* observer);
     
     /**
      * Retrieves list of all nodes explored during the most recent search.

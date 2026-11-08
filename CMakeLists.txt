@@ -197,6 +197,10 @@ set_target_properties(NavigationEngine PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
+# Several components start std::thread workers; link the platform's thread library.
+find_package(Threads REQUIRED)
+target_link_libraries(NavigationEngine PUBLIC Threads::Threads)
+
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
     add_executable(AutonomousNavigationEngine src/main.cpp)
     target_link_libraries(AutonomousNavigationEngine NavigationEngine)
@@ -214,6 +218,7 @@ if(BUILD_TESTS)
         tests/algorithm_tests/test_bfs.cpp
         tests/algorithm_tests/test_bellman_ford.cpp
         tests/algorithm_tests/test_jump_point_search.cpp
+        tests/algorithm_tests/test_search_observer.cpp
         tests/integration_tests/test_full_navigation.cpp
         tests/integration_tests/test_environment_switching.cpp
         tests/integration_tests/test_emergency_stop.cpp
@@ -227,6 +232,12 @@ if(BUILD_TESTS)
         target_link_libraries(${TEST_NAME} NavigationEngine)
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     endforeach()
+endif()
+
+# Tools that regenerate the README figures from the library's own output (off by default).
+option(BUILD_EVIDENCE_TOOLS "Build tools/evidence (README figures and measurements)" OFF)
+if(BUILD_EVIDENCE_TOOLS)
+    add_subdirectory(tools/evidence)
 endif()
 
 install(TARGETS NavigationEngine
