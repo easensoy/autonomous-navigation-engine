@@ -660,15 +660,21 @@ int runFailure(const std::string& scenarioPath, const std::string& outPath) {
         message.pop_back();
     }
     const std::string statusAfter = nav.getNavigationStatus();
+    const NavigationState stateAfter = nav.getNavigationState();
     const int positionAfter = nav.getCurrentPosition();
     const std::vector<int> routeAfter = nav.getCurrentPath();
+    const std::vector<int> invalidated = nav.getInvalidatedRoute();
     const double remainingAfter = nav.getRemainingDistance();
     bool stepped;
+    bool retried;
     {
         CoutSilencer quiet;
         stepped = nav.executeNavigationStep();
+        retried = nav.retryNavigation();  // the blockage still stands, so this must fail
     }
     const int positionAfterStep = nav.getCurrentPosition();
+    const NavigationState stateAfterRetry = nav.getNavigationState();
+    const std::vector<int> travelledBefore(routeBefore.begin(), routeBefore.begin() + s.blockStep + 1);
 
     // Independent evidence that no route exists: BFS reachability and A* on the reduced graph.
     const Graph reduced = withoutNodes(g, without(blocked, position));
@@ -720,10 +726,17 @@ int runFailure(const std::string& scenarioPath, const std::string& outPath) {
                    std::to_string(astarEvents.expands.size()) + " expansions, " + std::to_string(component) +
                        " reachable, " + std::to_string(neverExpanded.size()) + " pushed but never expanded");
     }
-    checks.add("navigation is no longer active", statusAfter.rfind("ACTIVE", 0) != 0, statusAfter);
+    checks.add("the navigator enters BLOCKED", stateAfter == NavigationState::BLOCKED &&
+                                                   statusAfter.rfind("BLOCKED", 0) == 0, statusAfter);
     checks.add("the navigator stays on its node", positionAfter == position && positionAfterStep == position);
     checks.add("executeNavigationStep refuses to move", !stepped);
-    checks.add("the old route is still returned by getCurrentPath", routeAfter == routeBefore);
+    checks.add("getCurrentPath returns only the travelled part, ending at the current node",
+               routeAfter == travelledBefore && !routeAfter.empty() && routeAfter.back() == position);
+    checks.add("getInvalidatedRoute returns the abandoned route ahead",
+               invalidated == remainingBefore && !routeAvoids(invalidated, blocked));
+    checks.add("getRemainingDistance is infinite", std::isinf(remainingAfter));
+    checks.add("retryNavigation fails while the blockage stands",
+               !retried && stateAfterRetry == NavigationState::BLOCKED);
 
     std::ofstream out = openOutput(outPath);
     JsonWriter j(out);
@@ -740,11 +753,17 @@ int runFailure(const std::string& scenarioPath, const std::string& outPath) {
     j.key("replanner_route").ints(replannerResult);
     j.key("console_message").value(message);
     j.key("status_after").value(statusAfter);
+    j.key("state_after").value(std::string(navigationStateName(stateAfter)));
     j.key("position_after").value(positionAfter);
-    j.key("route_after_is_route_before").value(routeAfter == routeBefore);
-    j.key("route_after_contains_blocked").value(!routeAvoids(routeAfter, blocked));
-    j.key("remaining_cost_after").value(remainingAfter);
+    j.key("current_path_after").ints(routeAfter);
+    j.key("invalidated_route").ints(invalidated);
+    j.key("invalidated_route_blocked_nodes").value(invalidated.size() - static_cast<size_t>(std::count_if(
+        invalidated.begin(), invalidated.end(),
+        [&](int n) { return std::find(blocked.begin(), blocked.end(), n) == blocked.end(); })));
+    j.key("remaining_after_is_infinite").value(std::isinf(remainingAfter));
     j.key("execute_step_after").value(stepped);
+    j.key("retry_after").value(retried);
+    j.key("state_after_retry").value(std::string(navigationStateName(stateAfterRetry)));
     j.key("reachable").value(reachable);
     j.key("astar_route").ints(astarRoute);
     j.key("astar_expansions").value(astarEvents.expands.size());

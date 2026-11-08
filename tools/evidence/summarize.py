@@ -65,7 +65,8 @@ def summarize_queries(bench: Path, name: str) -> dict:
            "queries": run["queries"], "repeats": run["repeats"], "warmup": run["warmup"],
            "graph_build_ms": run["graph_build_ns"] / 1e6,
            "astar_first_query_ms": median(run["astar_first_query_ns"]) / 1e6,
-           "astar_cached_query_ms": median(run["astar_cached_query_ns"]) / 1e6, "variants": {}}
+           "astar_cached_query_ms": median(run["astar_cached_query_ns"]) / 1e6,
+           "background_cpu_load": run.get("background_cpu_load"), "variants": {}}
     dijkstra = results["dijkstra"]
     for v in VARIANTS:
         lat = list(per_query[v].values())
@@ -80,7 +81,11 @@ def summarize_queries(bench: Path, name: str) -> dict:
         entry = {"latency_ms": dist_summary(lat, scale=1e-6), "found": found, "valid": valid,
                  "reachable": reachable, "optimal": optimal,
                  "cost_ratio": dist_summary(ratios) if ratios else None,
-                 "repeat_spread_median": median(spread[v]) if spread[v] else None}
+                 # Measurement variation: (max - min) / median of one query's timed repeats, over queries.
+                 "repeat_spread_median": median(spread[v]) if spread[v] else None,
+                 "repeat_spread_p95": percentile(spread[v], 95) if spread[v] else None,
+                 # Workload variation: how much queries differ, from the per-query medians.
+                 "workload_p95_over_p50": (percentile(lat, 95) / percentile(lat, 50)) if lat else None}
         if v in ("astar", "astar_zero"):
             exps = [int(r["astar_expansions"]) for r in res.values() if r["astar_expansions"]]
             entry["expansions"] = dist_summary(exps)
@@ -107,11 +112,16 @@ def summarize_replans(bench: Path, name: str) -> dict:
     for row in read_csv(bench / f"{name}.replan_times.csv"):
         samples[(int(row["event"]), row["phase"])].append(int(row["ns"]))
     per_event = defaultdict(dict)
+    repeat_spread = []
     for (e, phase), xs in samples.items():
         per_event[phase][e] = median(xs)
+        if phase == "end_to_end" and len(xs) > 1 and median(xs) > 0:
+            repeat_spread.append((max(xs) - min(xs)) / median(xs))
     rows = read_csv(bench / f"{name}.replan_results.csv")
     run = json.loads((bench / f"{name}.replan_run.json").read_text())
     out = {"events": len(rows), "repeats": run["repeats"],
+           "background_cpu_load": run.get("background_cpu_load"),
+           "end_to_end_repeat_spread_median": median(repeat_spread) if repeat_spread else None,
            "on_route": sum(r["on_route"] == "1" for r in rows),
            "replanned": sum(r["replanned"] == "1" for r in rows),
            "found": sum(r["found"] == "1" for r in rows),
@@ -172,6 +182,7 @@ def summarize_hero(data: Path, bench: Path) -> dict:
         "replan_position": replan["position"],
         "nodes_ahead_to_block": None,
         "timing_runs": run["repeats"],
+        "background_cpu_load": run.get("background_cpu_load"),
         "timing_ms": {phase: dist_summary(xs, scale=1e-6) for phase, xs in times.items()},
         "replan_share_median": {k: median(v) for k, v in shares.items()},
         "checks_passed": all(c["pass"] for c in hero["checks"]),
@@ -199,9 +210,11 @@ def summarize_failures(data: Path) -> dict:
     for name in ("failure_goal_blocked", "failure_disconnected"):
         d = json.loads((data / f"{name}.json").read_text())
         out[name] = {k: d[k] for k in (
-            "goal_blocked", "status_before", "status_after", "console_message", "execute_step_after",
-            "route_after_is_route_before", "route_after_contains_blocked", "remaining_cost_after", "reachable",
-            "astar_expansions", "astar_pushed_nodes", "reachable_component_nodes", "reduced_graph_nodes")}
+            "goal_blocked", "status_before", "status_after", "state_after", "console_message", "execute_step_after",
+            "retry_after", "state_after_retry", "remaining_after_is_infinite", "invalidated_route_blocked_nodes",
+            "reachable", "astar_expansions", "astar_pushed_nodes", "reachable_component_nodes", "reduced_graph_nodes")}
+        out[name]["current_path_after_nodes"] = len(d["current_path_after"])
+        out[name]["invalidated_route_nodes"] = len(d["invalidated_route"])
         out[name]["replanner_route_empty"] = not d["replanner_route"]
         out[name]["astar_route_empty"] = not d["astar_route"]
         out[name]["astar_pushed_never_expanded"] = len(d["astar_pushed_never_expanded"])
@@ -252,6 +265,8 @@ def write_summary(data: Path, out_path: Path):
         "queries": queries,
         "replans": replans,
         "astar_fix": summarize_astar_fix(data, queries, replans),
+        "environment": (json.loads((bench / "environment.json").read_text(encoding="utf-8"))
+                        if (bench / "environment.json").exists() else None),
     }
     out_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out_path}")

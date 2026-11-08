@@ -8,12 +8,19 @@
 Stages (each writes only under docs/data, docs/assets or build/):
   build     configure + build tools/evidence in build/evidence (CMake, Release, -DBUILD_EVIDENCE_TOOLS=ON)
   export    evidence_export: hero, search comparison, failure cases  -> docs/data/*.json
-  bench     evidence_bench: queries, replans, hero timings            -> docs/data/bench/*.csv, *.json
+  bench     load gate, then evidence_bench: queries, replans, hero    -> docs/data/bench/*.csv, *.json
   summary   percentiles and headline numbers from the raw files      -> docs/data/summary.json
   render    figures (light and dark)                                 -> docs/assets/*.png, *.gif
   manifest  provenance: git revision and dirty state, compiler, flags, hardware, output hashes
                                                                      -> docs/data/manifest.json
+  history   keeps this run's summary, manifest and run records       -> docs/data/history/
   check     re-validates exported routes and the README's numbers against the data
+
+Load gate: before timing, the bench stage samples the machine's CPU load in 10 s windows and waits
+until two windows in a row stay at or below --load-gate (default 10% of all logical processors), for
+at most --load-gate-timeout seconds. The benchmark starts either way; docs/data/bench/environment.json
+records the samples and whether the gate was met, and every run record stores the CPU share other
+processes used while it ran.
 
 Run it from a shell where CMake, Ninja (or another generator) and a C++17 compiler are on PATH: on
 Windows the "x64 Native Tools Command Prompt for VS" for MSVC, or a shell with MSYS2 UCRT64 g++.
@@ -23,6 +30,7 @@ Python needs numpy, matplotlib and pillow (see tools/evidence/requirements.txt).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import shutil
@@ -82,14 +90,26 @@ def stage_export(args):
 
 
 def stage_bench(args):
+    import history
+
     BENCH.mkdir(parents=True, exist_ok=True)
     tool = exe(args.build_dir, "evidence_bench")
     repeats = "1" if args.quick else "5"
     warmup = "0" if args.quick else "1"
+    gate = None
+    if not args.quick and args.load_gate is not None:
+        print(f"waiting for CPU load <= {args.load_gate:.0%} (at most {args.load_gate_timeout:.0f} s)", flush=True)
+        gate = history.wait_for_quiet(args.load_gate, timeout=args.load_gate_timeout)
+        print(f"  load gate {'met' if gate['met'] else 'NOT met'} after {gate['waited_s']} s: {gate['window_loads']}")
+    started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     for name in ("warehouse_s", "warehouse_m", "warehouse_l"):
         run([tool, "queries", WORKLOADS, name, BENCH, repeats, warmup])
         run([tool, "replans", WORKLOADS, name, BENCH, repeats])
     run([tool, "hero", SCENARIOS / "hero_replan.txt", BENCH, "100" if args.quick else "1000"])
+    environment = {"schema": "ane-evidence/bench-environment/1", "started_utc": started,
+                   "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "quick": args.quick,
+                   "load_gate": gate}
+    (BENCH / "environment.json").write_text(json.dumps(environment, indent=1) + "\n", encoding="utf-8")
 
 
 def stage_manifest(args):
@@ -111,6 +131,16 @@ def stage_render(args):
     render_all.main(themes=args.themes, gif=not args.no_gif)
 
 
+def stage_history(args):
+    import history
+
+    if args.quick:
+        print("quick run: not recorded in docs/data/history")
+        return
+    folder = history.record_run(DATA, note=args.history_note)
+    print(f"recorded as docs/data/history/{folder}" if folder else "this run is already in docs/data/history")
+
+
 def stage_check(args):
     import check_outputs
 
@@ -125,6 +155,7 @@ STAGES = {
     "summary": stage_summary,
     "render": stage_render,
     "manifest": stage_manifest,
+    "history": stage_history,
     "check": stage_check,
 }
 
@@ -142,6 +173,12 @@ def main():
     parser.add_argument("--only", nargs="+", choices=list(STAGES), help="run only these stages, in order")
     parser.add_argument("--themes", nargs="+", default=["light", "dark"])
     parser.add_argument("--no-gif", action="store_true", help="skip the animation (fast re-render)")
+    parser.add_argument("--load-gate", type=float, default=0.10,
+                        help="wait for CPU load at or below this share before timing (default 0.10)")
+    parser.add_argument("--no-load-gate", dest="load_gate", action="store_const", const=None,
+                        help="start timing without waiting for a quiet machine")
+    parser.add_argument("--load-gate-timeout", type=float, default=900.0, help="seconds to wait at most (default 900)")
+    parser.add_argument("--history-note", default="", help="note stored with this run in docs/data/history")
     args = parser.parse_args()
     args.build_dir = args.build_dir.resolve()
 

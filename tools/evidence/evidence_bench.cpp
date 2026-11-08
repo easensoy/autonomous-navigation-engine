@@ -30,10 +30,15 @@
 #include <string>
 #include <vector>
 
+#include <thread>
+
 #if defined(_WIN32)
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#elif defined(__linux__)
+#include <sys/resource.h>
+#include <unistd.h>
 #endif
 
 namespace {
@@ -43,6 +48,79 @@ using Clock = std::chrono::steady_clock;
 
 long long nanosecondsBetween(Clock::time_point a, Clock::time_point b) {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(b - a).count();
+}
+
+// CPU time that other processes used while this benchmark command ran, as a fraction of the machine's
+// whole CPU capacity (every logical processor for the whole wall time). Recorded in each run record so
+// that a run made under background load can be recognised; it is not subtracted from any timing.
+class BackgroundLoad {
+public:
+    BackgroundLoad() : start(sample()) {}
+
+    // In [0, 1]; -1 when the platform does not report system CPU times.
+    double fraction() const {
+        const Sample end = sample();
+        const double wall = end.wallSeconds - start.wallSeconds;
+        if (!start.valid || !end.valid || wall <= 0.0 || logicalProcessors() <= 0) {
+            return -1.0;
+        }
+        const double others = (end.systemBusySeconds - start.systemBusySeconds) - (end.ownSeconds - start.ownSeconds);
+        return std::clamp(others / (wall * logicalProcessors()), 0.0, 1.0);
+    }
+
+    static int logicalProcessors() {
+#if defined(_WIN32)
+        return static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+#else
+        return static_cast<int>(std::thread::hardware_concurrency());
+#endif
+    }
+
+private:
+    struct Sample {
+        bool valid = false;
+        double wallSeconds = 0.0;
+        double systemBusySeconds = 0.0;  // all processes, summed over logical processors
+        double ownSeconds = 0.0;         // this process
+    };
+
+    static Sample sample() {
+        Sample s;
+        s.wallSeconds = std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
+#if defined(_WIN32)
+        FILETIME idle, kernel, user, created, exited, ownKernel, ownUser;
+        auto seconds = [](const FILETIME& t) {
+            return static_cast<double>((static_cast<unsigned long long>(t.dwHighDateTime) << 32) | t.dwLowDateTime) * 1e-7;
+        };
+        if (GetSystemTimes(&idle, &kernel, &user) &&
+            GetProcessTimes(GetCurrentProcess(), &created, &exited, &ownKernel, &ownUser)) {
+            s.systemBusySeconds = seconds(kernel) + seconds(user) - seconds(idle);  // kernel time includes idle
+            s.ownSeconds = seconds(ownKernel) + seconds(ownUser);
+            s.valid = true;
+        }
+#elif defined(__linux__)
+        std::ifstream stat("/proc/stat");
+        std::string cpu;
+        unsigned long long user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0;
+        rusage own{};
+        if (stat >> cpu >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal && cpu == "cpu" &&
+            getrusage(RUSAGE_SELF, &own) == 0) {
+            const double tick = 1.0 / static_cast<double>(sysconf(_SC_CLK_TCK));
+            s.systemBusySeconds = static_cast<double>(user + nice + system + irq + softirq + steal) * tick;
+            s.ownSeconds = static_cast<double>(own.ru_utime.tv_sec + own.ru_stime.tv_sec) +
+                           static_cast<double>(own.ru_utime.tv_usec + own.ru_stime.tv_usec) * 1e-6;
+            s.valid = true;
+        }
+#endif
+        return s;
+    }
+
+    Sample start;
+};
+
+const BackgroundLoad& commandLoad() {
+    static const BackgroundLoad load;  // first used at the start of main
+    return load;
 }
 
 // Smallest step of the clock as seen by this process, in nanoseconds.
@@ -200,6 +278,11 @@ void writeRunRecord(const std::string& path, const std::string& command, const s
     j.key("graph_fingerprint").value(graphFingerprint(graph));
     j.key("graph_build_ns").value(buildNs);
     j.key("samples").value(samples).key("invalid_routes").value(invalid);
+    j.key("logical_processors").value(BackgroundLoad::logicalProcessors());
+    j.key("background_cpu_load").value(commandLoad().fraction());
+    j.key("background_cpu_load_definition")
+        .value("CPU time of all other processes during this command / (wall time x logical processors); -1 if "
+               "the platform does not report it");
     extra(j);
     j.endObject();
 }
@@ -525,6 +608,7 @@ int main(int argc, char** argv) {
         return usage();
     }
     const std::string command = argv[1];
+    commandLoad();  // starts the background-load measurement for this command
     try {
         if (command == "queries" && argc >= 5) {
             return runQueries(argv[2], argv[3], argv[4], argc > 5 ? std::atoi(argv[5]) : 5, argc > 6 ? std::atoi(argv[6]) : 1);
