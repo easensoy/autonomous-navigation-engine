@@ -1,0 +1,917 @@
+{
+  "schema": "ane-evidence/summary/1",
+  "percentiles": "nearest rank; latency = per-query median over repeats, percentiles across queries; p99 only when n >= 1000",
+  "hero": {
+    "graph": {
+      "nodes": 744,
+      "edges": 2249,
+      "fingerprint": "b4bf8609545fc730"
+    },
+    "blocked_nodes": 14,
+    "block_step": 9,
+    "initial": {
+      "nodes": null,
+      "cost": 46.65685424949237,
+      "length": 46.65685424949237,
+      "hops": 45
+    },
+    "abandoned_remainder": {
+      "nodes": null,
+      "cost": 37.65685424949237,
+      "length": 37.65685424949237,
+      "hops": 36
+    },
+    "new_remainder": {
+      "nodes": null,
+      "cost": 43.31370849898475,
+      "length": 43.31370849898475,
+      "hops": 40
+    },
+    "traversed": {
+      "nodes": null,
+      "cost": 52.313708498984745,
+      "length": 52.313708498984745,
+      "hops": 49
+    },
+    "steps": 49,
+    "replan_position": 527,
+    "nodes_ahead_to_block": 11,
+    "timing_runs": 1000,
+    "timing_ms": {
+      "plan": {
+        "n": 1000,
+        "min": 0.12359999999999999,
+        "p50": 0.141,
+        "p95": 0.1929,
+        "max": 0.5675,
+        "mean": 0.14652389999999998,
+        "p99": 0.2271
+      },
+      "replan": {
+        "n": 1000,
+        "min": 0.35969999999999996,
+        "p50": 0.4184,
+        "p95": 0.5690999999999999,
+        "max": 1.1140999999999999,
+        "mean": 0.4470876,
+        "p99": 0.688
+      },
+      "copy": {
+        "n": 1000,
+        "min": 0.07909999999999999,
+        "p50": 0.09269999999999999,
+        "p95": 0.16749999999999998,
+        "max": 0.3337,
+        "mean": 0.1114435,
+        "p99": 0.21869999999999998
+      },
+      "remove": {
+        "n": 1000,
+        "min": 0.11739999999999999,
+        "p50": 0.1348,
+        "p95": 0.1633,
+        "max": 0.2296,
+        "mean": 0.1375678,
+        "p99": 0.2099
+      },
+      "search_first": {
+        "n": 1000,
+        "min": 0.1163,
+        "p50": 0.1379,
+        "p95": 0.2009,
+        "max": 0.32889999999999997,
+        "mean": 0.14785120000000002,
+        "p99": 0.245
+      },
+      "search_cached": {
+        "n": 1000,
+        "min": 0.055999999999999994,
+        "p50": 0.0667,
+        "p95": 0.0824,
+        "max": 0.1658,
+        "mean": 0.06883360000000001,
+        "p99": 0.11
+      }
+    },
+    "replan_share_median": {
+      "search": 0.1600135270266007,
+      "scale_pass": 0.16705337987161806,
+      "copy": 0.22525139204310873,
+      "remove": 0.3264888884828139,
+      "parts_over_end_to_end": 0.8873648442510165
+    },
+    "checks_passed": true,
+    "search": {
+      "dijkstra": {
+        "label": "Dijkstra",
+        "cost": 43.31370849898475,
+        "length": 43.31370849898475,
+        "hops": 40,
+        "expansions": 730,
+        "pushes": 794,
+        "never_expanded_below_optimum": 0
+      },
+      "astar_zero": {
+        "label": "A*, h = 0",
+        "cost": 43.31370849898475,
+        "length": 43.31370849898475,
+        "hops": 40,
+        "expansions": 712,
+        "pushes": 790,
+        "never_expanded_below_optimum": 0
+      },
+      "astar": {
+        "label": "A*, default heuristic",
+        "cost": 43.31370849898475,
+        "length": 43.31370849898475,
+        "hops": 40,
+        "expansions": 158,
+        "pushes": 262,
+        "never_expanded_below_optimum": 0
+      },
+      "bfs": {
+        "label": "BFS",
+        "cost": 63.89949493661166,
+        "length": 39.89949493661166,
+        "hops": 37,
+        "expansions": 645,
+        "pushes": 680,
+        "never_expanded_below_optimum": 0
+      },
+      "shortest_length_reference": {
+        "cost": 62.242640687119284,
+        "length": 38.242640687119284,
+        "hops": 37
+      },
+      "optimum": 43.31370849898475,
+      "checks_passed": true
+    }
+  },
+  "failures": {
+    "failure_goal_blocked": {
+      "goal_blocked": true,
+      "status_before": "ACTIVE | mode GLOBAL_ONLY | at node 527 (10/46) | remaining 37.6569",
+      "status_after": "IDLE | mode GLOBAL_ONLY | at node 527 (10/46) | remaining 37.6569",
+      "console_message": "[NAVIGATION] No route around the reported obstacles; navigation halted",
+      "execute_step_after": false,
+      "route_after_is_route_before": true,
+      "route_after_contains_blocked": true,
+      "remaining_cost_after": 37.65685424949237,
+      "reachable": false,
+      "astar_expansions": 0,
+      "astar_pushed_nodes": 0,
+      "reachable_component_nodes": 743,
+      "reduced_graph_nodes": 743,
+      "replanner_route_empty": true,
+      "astar_route_empty": true,
+      "astar_pushed_never_expanded": 0,
+      "blocked_nodes": 1,
+      "checks_passed": true
+    },
+    "failure_disconnected": {
+      "goal_blocked": false,
+      "status_before": "ACTIVE | mode GLOBAL_ONLY | at node 527 (10/39) | remaining 30.2426",
+      "status_after": "IDLE | mode GLOBAL_ONLY | at node 527 (10/39) | remaining 30.2426",
+      "console_message": "[NAVIGATION] No route around the reported obstacles; navigation halted",
+      "execute_step_after": false,
+      "route_after_is_route_before": true,
+      "route_after_contains_blocked": true,
+      "remaining_cost_after": 30.242640687119287,
+      "reachable": false,
+      "astar_expansions": 728,
+      "astar_pushed_nodes": 728,
+      "reachable_component_nodes": 728,
+      "reduced_graph_nodes": 740,
+      "replanner_route_empty": true,
+      "astar_route_empty": true,
+      "astar_pushed_never_expanded": 0,
+      "blocked_nodes": 4,
+      "checks_passed": true
+    }
+  },
+  "queries": {
+    "warehouse_s": {
+      "nodes": 1107,
+      "edges": 3214,
+      "fingerprint": "3ce74c023df9fb3d",
+      "queries": 1000,
+      "repeats": 5,
+      "warmup": 1,
+      "graph_build_ms": 1.7719,
+      "astar_first_query_ms": 0.4772,
+      "astar_cached_query_ms": 0.3723,
+      "variants": {
+        "astar": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0019,
+            "p50": 0.0744,
+            "p95": 0.3091,
+            "max": 0.8071999999999999,
+            "mean": 0.1062407,
+            "p99": 0.5
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0000000000000002,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.43683133586670564,
+          "expansions": {
+            "n": 1000,
+            "min": 2.0,
+            "p50": 107.0,
+            "p95": 457.0,
+            "max": 1093.0,
+            "mean": 157.809,
+            "p99": 629.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "astar_zero": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0015999999999999999,
+            "p50": 0.2691,
+            "p95": 0.6961999999999999,
+            "max": 1.1233,
+            "mean": 0.2997224,
+            "p99": 0.8691
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.40107985898221954,
+          "expansions": {
+            "n": 1000,
+            "min": 2.0,
+            "p50": 558.0,
+            "p95": 1055.0,
+            "max": 1107.0,
+            "mean": 566.179,
+            "p99": 1099.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "dijkstra": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.42479999999999996,
+            "p50": 0.6839,
+            "p95": 1.3008,
+            "max": 1.641,
+            "mean": 0.7698589,
+            "p99": 1.4619
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.3292046345540541
+        },
+        "bfs": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0024,
+            "p50": 0.5267999999999999,
+            "p95": 1.3296,
+            "max": 2.1631,
+            "mean": 0.573369,
+            "p99": 1.605
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 349,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0330900522377067,
+            "p95": 1.6347794007034195,
+            "max": 2.3311017015452964,
+            "mean": 1.1394895129820592,
+            "p99": 1.9546401772901094
+          },
+          "repeat_spread_median": 0.392578851146856,
+          "costlier_than_optimal": 651
+        }
+      },
+      "dijkstra_over_astar_paired": {
+        "n": 1000,
+        "min": 1.1124790151091215,
+        "p50": 10.3247344461305,
+        "p95": 64.31868131868131,
+        "max": 271.1578947368421,
+        "mean": 18.681739789270804,
+        "p99": 140.26415094339623
+      },
+      "astar_zero_over_astar_paired": {
+        "n": 1000,
+        "min": 0.6086956521739131,
+        "p50": 3.1863560732113143,
+        "p95": 7.066666666666666,
+        "max": 13.661654135338345,
+        "mean": 3.6242691347753317,
+        "p99": 10.9375
+      }
+    },
+    "warehouse_m": {
+      "nodes": 8943,
+      "edges": 25370,
+      "fingerprint": "a5e2482b674069db",
+      "queries": 1000,
+      "repeats": 5,
+      "warmup": 1,
+      "graph_build_ms": 29.2381,
+      "astar_first_query_ms": 3.1192,
+      "astar_cached_query_ms": 2.0021,
+      "variants": {
+        "astar": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0091,
+            "p50": 0.638,
+            "p95": 2.7721999999999998,
+            "max": 5.374099999999999,
+            "mean": 0.8825495,
+            "p99": 4.2277
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0000000000000002,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.48485453984734395,
+          "expansions": {
+            "n": 1000,
+            "min": 4.0,
+            "p50": 786.0,
+            "p95": 3461.0,
+            "max": 6137.0,
+            "mean": 1133.573,
+            "p99": 4960.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "astar_zero": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0149,
+            "p50": 2.3342,
+            "p95": 5.5615,
+            "max": 9.7494,
+            "mean": 2.5531254999999997,
+            "p99": 7.616499999999999
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.36891937871729774,
+          "expansions": {
+            "n": 1000,
+            "min": 24.0,
+            "p50": 4355.0,
+            "p95": 8494.0,
+            "max": 8940.0,
+            "mean": 4429.489,
+            "p99": 8863.0
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "dijkstra": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 4.7646999999999995,
+            "p50": 5.8728,
+            "p95": 9.6391,
+            "max": 15.7568,
+            "mean": 6.3456994,
+            "p99": 12.0891
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 1000,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0,
+            "p99": 1.0
+          },
+          "repeat_spread_median": 0.24186151532544287
+        },
+        "bfs": {
+          "latency_ms": {
+            "n": 1000,
+            "min": 0.0159,
+            "p50": 3.5726999999999998,
+            "p95": 7.5626,
+            "max": 13.719299999999999,
+            "mean": 3.7310934999999996,
+            "p99": 10.641
+          },
+          "found": 1000,
+          "valid": 1000,
+          "reachable": 1000,
+          "optimal": 187,
+          "cost_ratio": {
+            "n": 1000,
+            "min": 1.0,
+            "p50": 1.2103918519972672,
+            "p95": 1.708003481214575,
+            "max": 2.1157027104219828,
+            "mean": 1.2456963522001698,
+            "p99": 1.9651111705531612
+          },
+          "repeat_spread_median": 0.27064899313014257,
+          "costlier_than_optimal": 813
+        }
+      },
+      "dijkstra_over_astar_paired": {
+        "n": 1000,
+        "min": 1.3277934207815398,
+        "p50": 10.014998469543924,
+        "p95": 108.57042253521126,
+        "max": 562.1442307692307,
+        "mean": 27.800237724439313,
+        "p99": 261.36199095022624
+      },
+      "astar_zero_over_astar_paired": {
+        "n": 1000,
+        "min": 0.8818130253184139,
+        "p50": 3.5039928129367137,
+        "p95": 9.45578231292517,
+        "max": 21.33745583038869,
+        "mean": 4.237746746720884,
+        "p99": 15.888412017167383
+      }
+    },
+    "warehouse_l": {
+      "nodes": 33786,
+      "edges": 95183,
+      "fingerprint": "1f674d17f679915b",
+      "queries": 500,
+      "repeats": 5,
+      "warmup": 1,
+      "graph_build_ms": 370.3328,
+      "astar_first_query_ms": 16.9743,
+      "astar_cached_query_ms": 4.2969,
+      "variants": {
+        "astar": {
+          "latency_ms": {
+            "n": 500,
+            "min": 0.042499999999999996,
+            "p50": 3.7512999999999996,
+            "p95": 23.3374,
+            "max": 39.351,
+            "mean": 6.3393904
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 500,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "repeat_spread_median": 0.33508245480835874,
+          "expansions": {
+            "n": 500,
+            "min": 28.0,
+            "p50": 2757.0,
+            "p95": 14046.0,
+            "max": 22613.0,
+            "mean": 4320.738
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "astar_zero": {
+          "latency_ms": {
+            "n": 500,
+            "min": 0.08889999999999999,
+            "p50": 17.952099999999998,
+            "p95": 45.0531,
+            "max": 61.962399999999995,
+            "mean": 20.7671188
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 500,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "repeat_spread_median": 0.3125549153105546,
+          "expansions": {
+            "n": 500,
+            "min": 111.0,
+            "p50": 15040.0,
+            "p95": 32357.0,
+            "max": 33673.0,
+            "mean": 16449.008
+          },
+          "miss_excess_cost": null,
+          "miss_ratio": null
+        },
+        "dijkstra": {
+          "latency_ms": {
+            "n": 500,
+            "min": 34.3534,
+            "p50": 48.2782,
+            "p95": 56.7444,
+            "max": 77.1916,
+            "mean": 48.4252968
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 500,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "repeat_spread_median": 0.2075551580362436
+        },
+        "bfs": {
+          "latency_ms": {
+            "n": 500,
+            "min": 0.11699999999999999,
+            "p50": 20.1238,
+            "p95": 46.5899,
+            "max": 56.398599999999995,
+            "mean": 22.130205399999998
+          },
+          "found": 500,
+          "valid": 500,
+          "reachable": 500,
+          "optimal": 58,
+          "cost_ratio": {
+            "n": 500,
+            "min": 1.0,
+            "p50": 1.2267310029605218,
+            "p95": 1.590061889113756,
+            "max": 2.0256603941404228,
+            "mean": 1.2430352176627593
+          },
+          "repeat_spread_median": 0.31643559311749336,
+          "costlier_than_optimal": 442
+        }
+      },
+      "dijkstra_over_astar_paired": {
+        "n": 500,
+        "min": 1.2074897889675258,
+        "p50": 13.018739781159603,
+        "p95": 285.4770909090909,
+        "max": 1060.2794117647059,
+        "mean": 55.40459433612904
+      },
+      "astar_zero_over_astar_paired": {
+        "n": 500,
+        "min": 1.2835569524861818,
+        "p50": 4.292124050049896,
+        "p95": 17.246877691645132,
+        "max": 62.89211935730681,
+        "mean": 6.200674776690996
+      }
+    }
+  },
+  "replans": {
+    "warehouse_s": {
+      "events": 300,
+      "repeats": 5,
+      "on_route": 296,
+      "replanned": 296,
+      "found": 300,
+      "valid": 300,
+      "avoids_blocked": 300,
+      "optimal": 300,
+      "blocked_nodes": {
+        "n": 300,
+        "min": 6.0,
+        "p50": 6.0,
+        "p95": 9.0,
+        "max": 9.0,
+        "mean": 6.886666666666667
+      },
+      "phases_ms": {
+        "end_to_end": {
+          "n": 300,
+          "min": 0.0006,
+          "p50": 0.48179999999999995,
+          "p95": 0.6633,
+          "max": 0.8305,
+          "mean": 0.49690866666666667
+        },
+        "copy": {
+          "n": 300,
+          "min": 0.12,
+          "p50": 0.13169999999999998,
+          "p95": 0.209,
+          "max": 0.2562,
+          "mean": 0.139557
+        },
+        "remove": {
+          "n": 300,
+          "min": 0.0749,
+          "p50": 0.0837,
+          "p95": 0.11829999999999999,
+          "max": 0.16899999999999998,
+          "mean": 0.09156933333333332
+        },
+        "search_first": {
+          "n": 300,
+          "min": 0.1147,
+          "p50": 0.1741,
+          "p95": 0.33649999999999997,
+          "max": 0.3966,
+          "mean": 0.19619833333333334
+        },
+        "search_cached": {
+          "n": 300,
+          "min": 0.0127,
+          "p50": 0.0717,
+          "p95": 0.2306,
+          "max": 0.3054,
+          "mean": 0.09302833333333332
+        }
+      },
+      "share_of_end_to_end_median": {
+        "search": 0.1523904501071684,
+        "scale_pass": 0.21551205134199858,
+        "copy": 0.2817043736686594,
+        "remove": 0.1828806652626008,
+        "parts_over_end_to_end": 0.8567725472380983
+      }
+    },
+    "warehouse_m": {
+      "events": 300,
+      "repeats": 5,
+      "on_route": 257,
+      "replanned": 257,
+      "found": 300,
+      "valid": 300,
+      "avoids_blocked": 300,
+      "optimal": 300,
+      "blocked_nodes": {
+        "n": 300,
+        "min": 6.0,
+        "p50": 6.0,
+        "p95": 9.0,
+        "max": 9.0,
+        "mean": 6.843333333333334
+      },
+      "phases_ms": {
+        "end_to_end": {
+          "n": 300,
+          "min": 0.001,
+          "p50": 4.715,
+          "p95": 8.9851,
+          "max": 14.678099999999999,
+          "mean": 4.801062333333332
+        },
+        "copy": {
+          "n": 300,
+          "min": 1.1989999999999998,
+          "p50": 2.069,
+          "p95": 3.6403999999999996,
+          "max": 4.46,
+          "mean": 2.2292806666666665
+        },
+        "remove": {
+          "n": 300,
+          "min": 0.5869,
+          "p50": 0.7595,
+          "p95": 1.2068999999999999,
+          "max": 1.7735999999999998,
+          "mean": 0.8121083333333333
+        },
+        "search_first": {
+          "n": 300,
+          "min": 1.1338,
+          "p50": 2.1078,
+          "p95": 4.1198999999999995,
+          "max": 7.015899999999999,
+          "mean": 2.359757
+        },
+        "search_cached": {
+          "n": 300,
+          "min": 0.0525,
+          "p50": 0.7091999999999999,
+          "p95": 2.5494,
+          "max": 3.8234,
+          "mean": 0.9244036666666666
+        }
+      },
+      "share_of_end_to_end_median": {
+        "search": 0.15608775416001508,
+        "scale_pass": 0.27371731767135155,
+        "copy": 0.4142328447094099,
+        "remove": 0.15645041161603335,
+        "parts_over_end_to_end": 0.9811523418992627
+      }
+    },
+    "warehouse_l": {
+      "events": 200,
+      "repeats": 5,
+      "on_route": 177,
+      "replanned": 177,
+      "found": 200,
+      "valid": 200,
+      "avoids_blocked": 200,
+      "optimal": 200,
+      "blocked_nodes": {
+        "n": 200,
+        "min": 6.0,
+        "p50": 6.0,
+        "p95": 9.0,
+        "max": 9.0,
+        "mean": 6.69
+      },
+      "phases_ms": {
+        "end_to_end": {
+          "n": 200,
+          "min": 0.0021,
+          "p50": 44.9319,
+          "p95": 75.536,
+          "max": 95.1078,
+          "mean": 44.1578865
+        },
+        "copy": {
+          "n": 200,
+          "min": 11.8493,
+          "p50": 14.892299999999999,
+          "p95": 22.0793,
+          "max": 24.7853,
+          "mean": 15.957445499999999
+        },
+        "remove": {
+          "n": 200,
+          "min": 2.9335,
+          "p50": 6.0824,
+          "p95": 9.1695,
+          "max": 11.5853,
+          "mean": 6.297979
+        },
+        "search_first": {
+          "n": 200,
+          "min": 11.2346,
+          "p50": 20.871499999999997,
+          "p95": 39.856,
+          "max": 60.638999999999996,
+          "mean": 22.8364425
+        },
+        "search_cached": {
+          "n": 200,
+          "min": 0.3757,
+          "p50": 5.9384,
+          "p95": 25.1401,
+          "max": 43.7022,
+          "mean": 8.855663999999999
+        }
+      },
+      "share_of_end_to_end_median": {
+        "search": 0.1409197340048501,
+        "scale_pass": 0.3084326520422141,
+        "copy": 0.3469302866464188,
+        "remove": 0.13516554709437284,
+        "parts_over_end_to_end": 0.911900987358498
+      }
+    }
+  },
+  "astar_fix": {
+    "before": {
+      "source": {
+        "head": "57c9805ca11f1cc5d152a4d8ab5cbbe125a29fb7",
+        "dirty_state_id": "999180972288abbe",
+        "manifest_generated_utc": "2026-11-08T04:30:32+00:00",
+        "manifest_sha256": "1282124235eb11c8c1ef99c90d76e78ba51fa816cda1a7a7b8d7ac67a28cb434"
+      },
+      "query_counts": {
+        "warehouse_s": {
+          "costlier": 15,
+          "queries": 1000
+        },
+        "warehouse_m": {
+          "costlier": 24,
+          "queries": 1000
+        },
+        "warehouse_l": {
+          "costlier": 11,
+          "queries": 500
+        }
+      },
+      "replan_counts": {
+        "warehouse_s": {
+          "costlier": 5,
+          "events": 300
+        },
+        "warehouse_m": {
+          "costlier": 8,
+          "events": 300
+        },
+        "warehouse_l": {
+          "costlier": 10,
+          "events": 200
+        }
+      },
+      "queries_without_route": 0,
+      "excess_cost": {
+        "n": 50,
+        "min": 0.5147186257614322,
+        "p50": 0.5857864376269077,
+        "p95": 1.4142135623730923,
+        "max": 1.4142135623731065,
+        "mean": 0.6769134213489929
+      },
+      "cost_ratio": {
+        "n": 50,
+        "min": 1.0019446781179742,
+        "p50": 1.0068467909535586,
+        "p95": 1.0478480462342754,
+        "max": 1.0775224150181086,
+        "mean": 1.0117588486400177
+      },
+      "search_replan_query_astar": {
+        "expansions": 157,
+        "never_expanded_below_optimum": 1
+      },
+      "failure_disconnected_astar": {
+        "expansions": 720,
+        "reachable_component_nodes": 728,
+        "pushed_never_expanded": 8
+      }
+    },
+    "after": {
+      "queries": 2500,
+      "queries_optimal": 2500,
+      "replans": 800,
+      "replans_optimal": 800
+    }
+  }
+}
