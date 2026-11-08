@@ -25,6 +25,7 @@
 #include <mach/task.h>
 #elif __linux__
 #include <sys/resource.h>
+#include <unistd.h>  // getpagesize
 #include <fstream>
 #include <string>
 #endif
