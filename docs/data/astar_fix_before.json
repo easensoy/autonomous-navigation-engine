@@ -1,0 +1,635 @@
+{
+ "schema": "ane-evidence/astar-fix-before/1",
+ "note": "Recorded before the A* open-list fix and kept as a fixed reference; the current code cannot regenerate it. Each entry is a result of A* with its default heuristic that cost more than Dijkstra's optimum, taken from that run's raw results files (docs/data/bench at the time). The workloads, seeds and query order are unchanged, so check_outputs.py looks each entry up by index in the current results and requires the same start and goal and the optimal cost.",
+ "source": {
+  "head": "57c9805ca11f1cc5d152a4d8ab5cbbe125a29fb7",
+  "dirty_state_id": "999180972288abbe",
+  "manifest_generated_utc": "2026-11-08T04:30:32+00:00",
+  "manifest_sha256": "1282124235eb11c8c1ef99c90d76e78ba51fa816cda1a7a7b8d7ac67a28cb434"
+ },
+ "query_counts": {
+  "warehouse_s": {
+   "costlier": 15,
+   "queries": 1000
+  },
+  "warehouse_m": {
+   "costlier": 24,
+   "queries": 1000
+  },
+  "warehouse_l": {
+   "costlier": 11,
+   "queries": 500
+  }
+ },
+ "replan_counts": {
+  "warehouse_s": {
+   "costlier": 5,
+   "events": 300
+  },
+  "warehouse_m": {
+   "costlier": 8,
+   "events": 300
+  },
+  "warehouse_l": {
+   "costlier": 10,
+   "events": 200
+  }
+ },
+ "search_replan_query_astar": {
+  "expansions": 157,
+  "never_expanded_below_optimum": 1
+ },
+ "failure_disconnected_astar": {
+  "expansions": 720,
+  "reachable_component_nodes": 728,
+  "pushed_never_expanded": 8
+ },
+ "queries": [
+  {
+   "workload": "warehouse_s",
+   "query": 88,
+   "start": 251,
+   "goal": 520,
+   "astar_cost": 49.242640687119284,
+   "dijkstra_cost": 48.656854249492376
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 169,
+   "start": 1419,
+   "goal": 1089,
+   "astar_cost": 19.65685424949238,
+   "dijkstra_cost": 18.242640687119284
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 234,
+   "start": 50,
+   "goal": 676,
+   "astar_cost": 12.82842712474619,
+   "dijkstra_cost": 12.242640687119284
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 381,
+   "start": 1022,
+   "goal": 1737,
+   "astar_cost": 29.48528137423857,
+   "dijkstra_cost": 28.899494936611667
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 463,
+   "start": 50,
+   "goal": 1514,
+   "astar_cost": 66.14213562373094,
+   "dijkstra_cost": 65.55634918610403
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 507,
+   "start": 251,
+   "goal": 446,
+   "astar_cost": 59.82842712474619,
+   "dijkstra_cost": 59.242640687119284
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 509,
+   "start": 1575,
+   "goal": 1043,
+   "astar_cost": 46.071067811865476,
+   "dijkstra_cost": 45.48528137423857
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 552,
+   "start": 1575,
+   "goal": 881,
+   "astar_cost": 69.89949493661165,
+   "dijkstra_cost": 69.31370849898474
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 617,
+   "start": 1164,
+   "goal": 1444,
+   "astar_cost": 44.65685424949238,
+   "dijkstra_cost": 44.071067811865476
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 655,
+   "start": 1292,
+   "goal": 1034,
+   "astar_cost": 8.82842712474619,
+   "dijkstra_cost": 8.242640687119284
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 862,
+   "start": 834,
+   "goal": 1439,
+   "astar_cost": 55.071067811865476,
+   "dijkstra_cost": 54.48528137423857
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 885,
+   "start": 1622,
+   "goal": 569,
+   "astar_cost": 58.07106781186547,
+   "dijkstra_cost": 57.48528137423856
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 914,
+   "start": 1575,
+   "goal": 975,
+   "astar_cost": 37.071067811865476,
+   "dijkstra_cost": 36.48528137423857
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 991,
+   "start": 1134,
+   "goal": 1429,
+   "astar_cost": 45.82842712474619,
+   "dijkstra_cost": 45.242640687119284
+  },
+  {
+   "workload": "warehouse_s",
+   "query": 992,
+   "start": 189,
+   "goal": 798,
+   "astar_cost": 60.65685424949238,
+   "dijkstra_cost": 60.071067811865476
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 5,
+   "start": 6497,
+   "goal": 915,
+   "astar_cost": 112.62741699796949,
+   "dijkstra_cost": 112.04163056034257
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 93,
+   "start": 8772,
+   "goal": 6863,
+   "astar_cost": 93.48528137423857,
+   "dijkstra_cost": 92.89949493661166
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 121,
+   "start": 3429,
+   "goal": 5108,
+   "astar_cost": 38.071067811865476,
+   "dijkstra_cost": 37.48528137423857
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 182,
+   "start": 8705,
+   "goal": 8423,
+   "astar_cost": 105.65685424949237,
+   "dijkstra_cost": 105.07106781186546
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 227,
+   "start": 5120,
+   "goal": 4424,
+   "astar_cost": 158.72792206135784,
+   "dijkstra_cost": 157.89949493661166
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 235,
+   "start": 3705,
+   "goal": 1200,
+   "astar_cost": 78.89949493661165,
+   "dijkstra_cost": 78.31370849898474
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 251,
+   "start": 4710,
+   "goal": 4938,
+   "astar_cost": 51.07106781186547,
+   "dijkstra_cost": 49.656854249492376
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 356,
+   "start": 2561,
+   "goal": 4803,
+   "astar_cost": 145.89949493661166,
+   "dijkstra_cost": 145.31370849898474
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 437,
+   "start": 7991,
+   "goal": 7551,
+   "astar_cost": 86.14213562373092,
+   "dijkstra_cost": 85.55634918610401
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 470,
+   "start": 6159,
+   "goal": 8586,
+   "astar_cost": 57.89949493661165,
+   "dijkstra_cost": 57.313708498984745
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 539,
+   "start": 16139,
+   "goal": 4963,
+   "astar_cost": 72.24264068711929,
+   "dijkstra_cost": 71.65685424949237
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 553,
+   "start": 6864,
+   "goal": 8083,
+   "astar_cost": 74.55634918610401,
+   "dijkstra_cost": 73.14213562373092
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 617,
+   "start": 8966,
+   "goal": 14206,
+   "astar_cost": 87.7989898732233,
+   "dijkstra_cost": 87.2132034355964
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 637,
+   "start": 1187,
+   "goal": 3642,
+   "astar_cost": 85.48528137423857,
+   "dijkstra_cost": 84.89949493661165
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 648,
+   "start": 3947,
+   "goal": 9510,
+   "astar_cost": 94.7989898732233,
+   "dijkstra_cost": 94.2132034355964
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 657,
+   "start": 11479,
+   "goal": 6,
+   "astar_cost": 174.35533905932743,
+   "dijkstra_cost": 173.7695526217005
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 695,
+   "start": 3036,
+   "goal": 11209,
+   "astar_cost": 99.38477631085021,
+   "dijkstra_cost": 98.7989898732233
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 702,
+   "start": 10304,
+   "goal": 8723,
+   "astar_cost": 86.48528137423855,
+   "dijkstra_cost": 85.97056274847712
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 706,
+   "start": 9554,
+   "goal": 9690,
+   "astar_cost": 148.97056274847716,
+   "dijkstra_cost": 148.14213562373095
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 800,
+   "start": 12,
+   "goal": 5919,
+   "astar_cost": 75.38477631085021,
+   "dijkstra_cost": 74.7989898732233
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 822,
+   "start": 7076,
+   "goal": 10285,
+   "astar_cost": 102.7989898732233,
+   "dijkstra_cost": 102.2132034355964
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 871,
+   "start": 9486,
+   "goal": 12461,
+   "astar_cost": 154.2132034355964,
+   "dijkstra_cost": 153.3847763108502
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 883,
+   "start": 5765,
+   "goal": 2227,
+   "astar_cost": 74.14213562373094,
+   "dijkstra_cost": 73.55634918610403
+  },
+  {
+   "workload": "warehouse_m",
+   "query": 956,
+   "start": 1616,
+   "goal": 12312,
+   "astar_cost": 164.87005768508877,
+   "dijkstra_cost": 164.28427124746185
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 39,
+   "start": 53292,
+   "goal": 20747,
+   "astar_cost": 301.81118318204335,
+   "dijkstra_cost": 301.2253967444164
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 111,
+   "start": 22991,
+   "goal": 25784,
+   "astar_cost": 116.65685424949237,
+   "dijkstra_cost": 116.07106781186546
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 130,
+   "start": 13052,
+   "goal": 15124,
+   "astar_cost": 115.89949493661166,
+   "dijkstra_cost": 114.48528137423855
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 149,
+   "start": 39930,
+   "goal": 34942,
+   "astar_cost": 103.31370849898474,
+   "dijkstra_cost": 102.72792206135783
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 249,
+   "start": 2809,
+   "goal": 16859,
+   "astar_cost": 151.79898987322332,
+   "dijkstra_cost": 151.21320343559643
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 310,
+   "start": 32897,
+   "goal": 14919,
+   "astar_cost": 223.01219330881983,
+   "dijkstra_cost": 222.4264068711929
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 311,
+   "start": 24459,
+   "goal": 9722,
+   "astar_cost": 179.87005768508877,
+   "dijkstra_cost": 178.69848480983495
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 333,
+   "start": 3266,
+   "goal": 14065,
+   "astar_cost": 112.21320343559638,
+   "dijkstra_cost": 111.62741699796948
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 344,
+   "start": 24744,
+   "goal": 40954,
+   "astar_cost": 274.18376618407365,
+   "dijkstra_cost": 273.5979797464467
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 402,
+   "start": 54767,
+   "goal": 45585,
+   "astar_cost": 124.97056274847711,
+   "dijkstra_cost": 124.3847763108502
+  },
+  {
+   "workload": "warehouse_l",
+   "query": 431,
+   "start": 29712,
+   "goal": 3706,
+   "astar_cost": 281.1543289325509,
+   "dijkstra_cost": 280.568542494924
+  }
+ ],
+ "replans": [
+  {
+   "workload": "warehouse_s",
+   "event": 25,
+   "position": 35,
+   "goal": 1693,
+   "new_cost": 50.48528137423856,
+   "optimum": 49.07106781186547
+  },
+  {
+   "workload": "warehouse_s",
+   "event": 99,
+   "position": 1322,
+   "goal": 676,
+   "new_cost": 24.242640687119287,
+   "optimum": 23.65685424949238
+  },
+  {
+   "workload": "warehouse_s",
+   "event": 108,
+   "position": 744,
+   "goal": 66,
+   "new_cost": 55.071067811865476,
+   "optimum": 54.48528137423857
+  },
+  {
+   "workload": "warehouse_s",
+   "event": 190,
+   "position": 1386,
+   "goal": 791,
+   "new_cost": 47.65685424949238,
+   "optimum": 47.071067811865476
+  },
+  {
+   "workload": "warehouse_s",
+   "event": 203,
+   "position": 1212,
+   "goal": 73,
+   "new_cost": 37.828427124746185,
+   "optimum": 24.071067811865476
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 46,
+   "position": 14095,
+   "goal": 15087,
+   "new_cost": 93.72792206135784,
+   "optimum": 92.89949493661165
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 89,
+   "position": 7946,
+   "goal": 14657,
+   "new_cost": 90.55634918610403,
+   "optimum": 89.97056274847712
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 103,
+   "position": 3827,
+   "goal": 1341,
+   "new_cost": 115.89949493661165,
+   "optimum": 115.31370849898474
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 121,
+   "position": 14197,
+   "goal": 13929,
+   "new_cost": 109.48528137423855,
+   "optimum": 108.07106781186546
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 198,
+   "position": 1462,
+   "goal": 1174,
+   "new_cost": 111.89949493661166,
+   "optimum": 111.07106781186546
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 222,
+   "position": 5778,
+   "goal": 4015,
+   "new_cost": 79.72792206135784,
+   "optimum": 79.14213562373094
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 276,
+   "position": 14147,
+   "goal": 5985,
+   "new_cost": 117.2132034355964,
+   "optimum": 116.62741699796949
+  },
+  {
+   "workload": "warehouse_m",
+   "event": 288,
+   "position": 10315,
+   "goal": 4393,
+   "new_cost": 99.97056274847711,
+   "optimum": 99.3847763108502
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 3,
+   "position": 42925,
+   "goal": 20964,
+   "new_cost": 225.42640687119297,
+   "optimum": 224.84062043356607
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 41,
+   "position": 24485,
+   "goal": 9749,
+   "new_cost": 192.28427124746187,
+   "optimum": 191.69848480983495
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 49,
+   "position": 4326,
+   "goal": 24451,
+   "new_cost": 241.4264068711929,
+   "optimum": 240.84062043356602
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 64,
+   "position": 15236,
+   "goal": 8834,
+   "new_cost": 248.97056274847725,
+   "optimum": 248.38477631085033
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 78,
+   "position": 26651,
+   "goal": 23232,
+   "new_cost": 162.55634918610406,
+   "optimum": 161.14213562373095
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 80,
+   "position": 62495,
+   "goal": 38038,
+   "new_cost": 276.84062043356613,
+   "optimum": 276.2548339959392
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 106,
+   "position": 22794,
+   "goal": 7395,
+   "new_cost": 183.28427124746196,
+   "optimum": 182.69848480983507
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 114,
+   "position": 31678,
+   "goal": 4930,
+   "new_cost": 191.698484809835,
+   "optimum": 189.94112549695433
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 140,
+   "position": 22830,
+   "goal": 18918,
+   "new_cost": 302.284271247462,
+   "optimum": 301.4558441227158
+  },
+  {
+   "workload": "warehouse_l",
+   "event": 192,
+   "position": 31667,
+   "goal": 29023,
+   "new_cost": 282.6274169979696,
+   "optimum": 281.7989898732233
+  }
+ ]
+}
