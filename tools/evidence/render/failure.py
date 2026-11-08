@@ -1,8 +1,8 @@
 """Figure C: what the navigator does when a blockage leaves no route (docs/data/failure_*.json).
 
 The text under each map is the engine's own output for that state: the console line
-NavigationCore::handleObstacles printed, getNavigationStatus(), executeNavigationStep() and what
-getCurrentPath() still returns.
+NavigationCore::handleObstacles printed, getNavigationStatus(), executeNavigationStep(), what
+getCurrentPath() and getInvalidatedRoute() return, and the result of retryNavigation().
 """
 
 from __future__ import annotations
@@ -44,16 +44,16 @@ def render(theme_name: str):
             ys = [scene.xy[n][1] for n in d["unreachable_nodes"]]
             ax.scatter(xs, ys, marker="s", s=16, color=t.expand_hi, linewidths=0, zorder=3)
         draw_blocked(ax, scene, t, d["blocked_nodes"])
-        route = d["route_before"]["nodes"]
-        k = route.index(d["position"])
-        tx, ty = scene.route_xy(route[: k + 1])
+        travelled = d["current_path_after"]
+        invalidated = d["invalidated_route"]
+        tx, ty = scene.route_xy(travelled)
         ax.plot(tx, ty, color=t.route, lw=3.0, solid_capstyle="round", zorder=6)
-        sx, sy = scene.route_xy(route[k:])
+        sx, sy = scene.route_xy(invalidated)
         ax.plot(sx, sy, color=t.previous, lw=1.8, ls=(0, (4, 3)), zorder=5)
         px, py = scene.xy[d["position"]]
         ax.scatter([px], [py], s=70, color=t.marker, edgecolors=t.marker_ring, linewidths=1.6, zorder=9)
-        ax.annotate("halted", (px, py), xytext=(0, -11), textcoords="offset points", ha="center", va="top",
-                    fontsize=9, color=t.text, fontweight="bold", zorder=10)
+        ax.annotate(d["state_after"], (px, py), xytext=(0, -11), textcoords="offset points", ha="center",
+                    va="top", fontsize=9, color=t.text, fontweight="bold", zorder=10)
         gx, gy = scene.xy[d["goal"]]
         ax.scatter([gx], [gy], marker="o", s=110, facecolors="none", edgecolors=t.marker, linewidths=1.8, zorder=9)
         ax.scatter([gx], [gy], marker="o", s=18, color=t.marker, zorder=9)
@@ -61,11 +61,14 @@ def render(theme_name: str):
                     fontsize=9, color=t.text, zorder=10)
         fig.text(x0 + 0.01, 0.855, title, fontsize=11.5, fontweight="bold", va="bottom")
 
-        blocked_on_path = sum(1 for n in route[k:] if n in set(d["blocked_nodes"]))
         lines = [
-            ("status", d["status_after"]),
+            ("status", short_status(d["status_after"])),
             ("step()", f"{'true' if d['execute_step_after'] else 'false'}: stays at node {d['position']}"),
-            ("path", f"old route, {len(route)} nodes, {blocked_on_path} of them blocked"),
+            ("path", f"getCurrentPath(): the {len(travelled)} travelled nodes only"),
+            ("ahead", f"getInvalidatedRoute(): {len(invalidated)} nodes, "
+                      f"{d['invalidated_route_blocked_nodes']} blocked"),
+            ("retry", f"retryNavigation(): {'true' if d['retry_after'] else 'false'}, "
+                      f"state {d['state_after_retry']}"),
         ]
         if d["goal_blocked"]:
             lines.append(("why", "blocked goal: replanner returns [] without a search"))
@@ -73,18 +76,18 @@ def render(theme_name: str):
             lines.append(("why", f"no route: all {d['astar_expansions']} reachable nodes expanded"))
         else:
             lines.append(("why", f"no route: A* gives up after {d['astar_expansions']} expansions"))
-        y = 0.245
+        y = 0.255
         for label, text in lines:
             fig.text(x0 + 0.01, y, label, fontsize=7.3, color=t.muted, va="top", family=MONO)
             fig.text(x0 + 0.06, y, text, fontsize=7.3, color=t.text, va="top", family=MONO)
-            y -= 0.04
+            y -= 0.036
         console = d["console_message"]
     fig.text(0.025, 0.305, "handleObstacles() printed, in both cases:", fontsize=8.5, color=t.muted, va="top")
     fig.text(0.285, 0.305, f"\"{console}\"", fontsize=7.8, color=t.text, va="top", family=MONO)
 
     handles = [
-        Line2D([], [], color=t.route, lw=3.0, label="travelled"),
-        Line2D([], [], color=t.previous, lw=1.8, ls=(0, (4, 3)), label="route getCurrentPath() still returns"),
+        Line2D([], [], color=t.route, lw=3.0, label="travelled: getCurrentPath()"),
+        Line2D([], [], color=t.previous, lw=1.8, ls=(0, (4, 3)), label="invalidated: getInvalidatedRoute()"),
         Line2D([], [], color=t.blocked, marker="x", lw=0, markersize=6.5, markeredgewidth=1.5,
                label="reported blocked"),
         Line2D([], [], color=t.expand_hi, marker="s", lw=0, markersize=5.5, label="cut off from the navigator"),

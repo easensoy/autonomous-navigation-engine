@@ -60,7 +60,8 @@ def close(a, b, tol=1e-9):
 
 def check_route_record(r, g, record, label):
     nodes = record["nodes"]
-    r.check(f"{label}: follows exported edges", g.follows(nodes) or not nodes)
+    if not r.check(f"{label}: follows exported edges", g.follows(nodes) or not nodes):
+        return  # cost and length are undefined off the graph
     if nodes:
         r.check(f"{label}: cost recomputes", close(g.cost(nodes), record["cost"]), f"{g.cost(nodes)} vs {record['cost']}")
         r.check(f"{label}: length recomputes", close(g.length(nodes), record["length"]))
@@ -117,7 +118,13 @@ def check_exports(r):
         d = load(f"{name}.json")
         r.check(f"{name}: exporter checks all passed", all(c["pass"] for c in d["checks"]))
         r.check(f"{name}: replanner returned no route", d["replanner_route"] == [])
-        r.check(f"{name}: navigation stopped", not d["status_after"].startswith("ACTIVE") and not d["execute_step_after"])
+        route, step = d["route_before"]["nodes"], d["block_step"]
+        r.check(f"{name}: navigator is BLOCKED and does not step",
+                d["state_after"] == "BLOCKED" and d["status_after"].startswith("BLOCKED") and not d["execute_step_after"])
+        r.check(f"{name}: getCurrentPath is the travelled part only", d["current_path_after"] == route[: step + 1])
+        r.check(f"{name}: getInvalidatedRoute is the abandoned route ahead", d["invalidated_route"] == route[step:])
+        r.check(f"{name}: remaining distance infinite; retry fails while blocked",
+                d["remaining_after_is_infinite"] and not d["retry_after"] and d["state_after_retry"] == "BLOCKED")
         if not d["goal_blocked"]:
             r.check(f"{name}: A* expanded the whole reachable component before giving up",
                     d["astar_expansions"] == d["reachable_component_nodes"] and not d["astar_pushed_never_expanded"],
@@ -264,6 +271,19 @@ def readme_claims(s):
     claims.append(("A* h=0 / A* paired p50 range", f"{min(zero):.1f}–{max(zero):.1f}×"))
     bfs = [q[n]["variants"]["bfs"]["cost_ratio"]["p50"] for n in names]
     claims.append(("BFS median cost ratio range", f"×{min(bfs):.2f}–×{max(bfs):.2f}"))
+    # Measurement environment of the published run.
+    gate = (s.get("environment") or {}).get("load_gate")
+    if gate:
+        claims.append(("load gate threshold", f"{gate['threshold']:.0%}"))
+    loads = [x for x in [q[n].get("background_cpu_load") for n in names] + [rp[n].get("background_cpu_load") for n in names]
+             + [h.get("background_cpu_load")] if x is not None and x >= 0]
+    if loads:
+        low, high = f"{min(loads):.0%}", f"{max(loads):.0%}"
+        claims.append(("background CPU load range", low if low == high else f"{low[:-1]}–{high}"))
+    history = DATA / "history" / "index.json"
+    if history.exists():
+        runs = json.loads(history.read_text(encoding="utf-8"))["runs"]
+        claims.append(("benchmark runs in the history", f"{len(runs)} runs"))
     return claims
 
 
@@ -279,11 +299,38 @@ def check_readme(r):
             r.check(f"README link target exists: {target}", (REPO / target).exists())
 
 
+def check_history(r):
+    """The published run must be recorded in docs/data/history and be its newest complete run (the
+    declared selection rule); every recorded run keeps its summary and manifest."""
+    import history
+
+    index_path = DATA / "history" / "index.json"
+    if not r.check("history index exists", index_path.exists()):
+        return
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    runs = index.get("runs", [])
+    r.check("history states its selection rule", bool(index.get("selection_rule")))
+    stamps = [run["generated_utc"] for run in runs]
+    r.check("history runs are unique and in time order", len(set(stamps)) == len(stamps) and stamps == sorted(stamps))
+    complete = [run for run in runs if run.get("folder")]
+    for run in complete:
+        folder = DATA / "history" / run["folder"]
+        r.check(f"history {run['folder']}: summary and manifest kept",
+                (folder / "summary.json").exists() and (folder / "manifest.json").exists())
+    digest = history.records_digest(DATA / "bench")
+    r.check("the published run is the newest complete run in the history",
+            bool(complete) and complete[-1].get("bench_records_sha256") == digest)
+
+
 def main(repo: Path = REPO) -> bool:
+    global REPO, DATA
+    REPO = Path(repo)
+    DATA = REPO / "docs" / "data"
     r = Report()
     check_exports(r)
     check_bench(r)
     check_fix_record(r)
+    check_history(r)
     check_readme(r)
     for failure in r.failures:
         print(f"  FAIL {failure}")
