@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Graph.hpp"
+#include <unordered_set>
 #include <vector>
 
 enum class SmoothingMethod {
@@ -15,10 +16,8 @@ private:
     const Graph* environment;
     SmoothingMethod currentMethod;
     double smoothingFactor;
+    std::unordered_set<int> criticalWaypoints;  // never removed by smoothing
     
-    std::vector<int> bezierSmoothing(const std::vector<int>& roughPath);
-    std::vector<int> splineSmoothing(const std::vector<int>& roughPath);
-    std::vector<int> movingAverageSmoothing(const std::vector<int>& roughPath);
 
 public:
     explicit PathSmoother(const Graph* graph);
@@ -29,12 +28,11 @@ public:
     
     void setSmoothingMethod(SmoothingMethod method);
     void setSmoothingFactor(double factor);
-    void enableCornerSmoothing(bool enable);
     
     double calculateSmoothness(const std::vector<int>& path) const;
     std::vector<int> identifySharpCorners(const std::vector<int>& path) const;
     bool validateSmoothedPath(const std::vector<int>& originalPath, const std::vector<int>& smoothedPath) const;
     
-    void setMinimumSegmentLength(double minLength);
+    // Nodes that smoothing never removes from a path; replaces any earlier set (an empty list clears it).
     void preserveCriticalWaypoints(const std::vector<int>& criticalPoints);
 };

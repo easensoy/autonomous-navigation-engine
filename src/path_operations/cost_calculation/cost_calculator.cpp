@@ -1,6 +1,10 @@
 #include "path_operations/CostCalculator.hpp"
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <map>
+#include <sstream>
+#include <string>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -130,4 +134,109 @@ double CostCalculator::calculateCostVariance(const std::vector<int>& path) const
         variance += (value - mean) * (value - mean);
     }
     return variance / static_cast<double>(profile.size());
+}
+
+namespace {
+const std::pair<CostType, const char*> kCostTypeNames[] = {
+    {CostType::DISTANCE, "DISTANCE"}, {CostType::TIME, "TIME"}, {CostType::ENERGY, "ENERGY"},
+    {CostType::RISK, "RISK"}, {CostType::MONETARY, "MONETARY"}, {CostType::COMPOSITE, "COMPOSITE"}};
+
+std::string modelError(const std::string& file, int line, const std::string& what) {
+    return "CostCalculator::loadCostModel: " + file + ":" + std::to_string(line) + ": " + what;
+}
+}  // namespace
+
+void CostCalculator::saveCostModel(const std::string& modelFile) const {
+    std::ofstream out(modelFile, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("CostCalculator::saveCostModel: cannot write " + modelFile);
+    }
+    out.precision(std::numeric_limits<double>::max_digits10);
+    out << "cost-model 1\n";
+    for (const auto& [type, name] : kCostTypeNames) {
+        const auto weight = costWeights.find(type);
+        out << "weight " << name << " " << (weight == costWeights.end() ? 0.0 : weight->second) << "\n";
+    }
+    std::map<int, double> nodes(nodeCosts.begin(), nodeCosts.end());
+    for (const auto& [node, cost] : nodes) {
+        out << "node " << node << " " << cost << "\n";
+    }
+    std::map<std::pair<int, int>, double> edges(edgeCosts.begin(), edgeCosts.end());
+    for (const auto& [edge, cost] : edges) {
+        out << "edge " << edge.first << " " << edge.second << " " << cost << "\n";
+    }
+    if (!out.flush()) {
+        throw std::runtime_error("CostCalculator::saveCostModel: cannot write " + modelFile);
+    }
+}
+
+void CostCalculator::loadCostModel(const std::string& modelFile) {
+    std::ifstream in(modelFile, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("CostCalculator::loadCostModel: cannot read " + modelFile);
+    }
+    // Parse into a fresh model so that a malformed file leaves the current one untouched.
+    CostCalculator loaded(environment);
+    std::string line;
+    int lineNumber = 0;
+    bool sawHeader = false;
+    while (std::getline(in, line)) {
+        ++lineNumber;
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            continue;
+        }
+        std::istringstream fields(line);
+        std::string keyword;
+        fields >> keyword;
+        if (!sawHeader) {
+            int version = 0;
+            if (keyword != "cost-model" || !(fields >> version) || version != 1) {
+                throw std::runtime_error(modelError(modelFile, lineNumber, "expected the header 'cost-model 1'"));
+            }
+            sawHeader = true;
+        } else if (keyword == "weight") {
+            std::string name;
+            double value = 0.0;
+            if (!(fields >> name >> value) || !std::isfinite(value) || value < 0.0) {
+                throw std::runtime_error(
+                    modelError(modelFile, lineNumber, "expected 'weight <TYPE> <non-negative value>'"));
+            }
+            const auto type = std::find_if(std::begin(kCostTypeNames), std::end(kCostTypeNames),
+                                           [&name](const auto& entry) { return name == entry.second; });
+            if (type == std::end(kCostTypeNames)) {
+                throw std::runtime_error(modelError(modelFile, lineNumber, "unknown cost type '" + name + "'"));
+            }
+            loaded.costWeights[type->first] = value;
+        } else if (keyword == "node") {
+            int node = 0;
+            double cost = 0.0;
+            if (!(fields >> node >> cost) || !std::isfinite(cost)) {
+                throw std::runtime_error(modelError(modelFile, lineNumber, "expected 'node <id> <cost>'"));
+            }
+            loaded.nodeCosts[node] = cost;
+        } else if (keyword == "edge") {
+            int from = 0;
+            int to = 0;
+            double cost = 0.0;
+            if (!(fields >> from >> to >> cost) || !std::isfinite(cost)) {
+                throw std::runtime_error(modelError(modelFile, lineNumber, "expected 'edge <from> <to> <cost>'"));
+            }
+            loaded.edgeCosts[{from, to}] = cost;
+        } else {
+            throw std::runtime_error(modelError(modelFile, lineNumber, "unknown entry '" + keyword + "'"));
+        }
+        std::string extra;
+        if (fields >> extra) {
+            throw std::runtime_error(modelError(modelFile, lineNumber, "unexpected text '" + extra + "'"));
+        }
+    }
+    if (!sawHeader) {
+        throw std::runtime_error(modelError(modelFile, lineNumber, "empty file"));
+    }
+    costWeights = std::move(loaded.costWeights);
+    nodeCosts = std::move(loaded.nodeCosts);
+    edgeCosts = std::move(loaded.edgeCosts);
 }

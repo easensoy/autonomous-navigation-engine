@@ -37,22 +37,18 @@ private:
 public:
     explicit MapUpdater(Graph* graph);
     
-    void updateMap(const std::vector<MapUpdate>& updates);
     void addNode(int nodeId, const std::string& name, double x, double y);
     void removeNode(int nodeId);
     void updateEdgeWeight(int fromId, int toId, double newWeight);
     
-    void processSensorData(const std::vector<int>& sensorReadings);
     void integrateExternalMap(const Graph& externalMap);
     void synchronizeWithDatabase();
     
     std::vector<MapUpdate> getRecentUpdates(std::chrono::duration<double> timeWindow) const;
-    void rollbackUpdate(size_t updateIndex);
     void clearUpdateHistory();
     
     void enableRealTimeUpdates(bool enable);
     bool validateUpdateConsistency() const;
-    void optimizeMapStructure();
     
     size_t getUpdateCount() const;
     std::chrono::steady_clock::time_point getLastUpdateTime() const;

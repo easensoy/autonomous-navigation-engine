@@ -49,7 +49,8 @@ std::vector<int> PathSmoother::smoothWithMethod(const std::vector<int>& roughPat
         changed = false;
         for (size_t i = 1; i + 1 < path.size(); ++i) {
             const int a = path[i - 1], b = path[i], c = path[i + 1];
-            if (!environment->hasEdge(a, c) || turnAngle(*environment, a, b, c) <= minAngleToCut) {
+            if (criticalWaypoints.count(b) || !environment->hasEdge(a, c) ||
+                turnAngle(*environment, a, b, c) <= minAngleToCut) {
                 continue;
             }
             const double corner = environment->getEdgeWeight(a, b) + environment->getEdgeWeight(b, c);
@@ -114,4 +115,8 @@ bool PathSmoother::validateSmoothedPath(const std::vector<int>& originalPath,
         }
     }
     return true;
+}
+
+void PathSmoother::preserveCriticalWaypoints(const std::vector<int>& criticalPoints) {
+    criticalWaypoints = std::unordered_set<int>(criticalPoints.begin(), criticalPoints.end());
 }
