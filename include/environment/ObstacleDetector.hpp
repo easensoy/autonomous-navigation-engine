@@ -47,9 +47,7 @@ public:
     std::vector<int> getObstaclesNearPath(const std::vector<int>& path) const;
     
     void setDetectionSensitivity(double sensitivity);
-    void enableContinuousDetection(bool enable);
     void updateObstacleMap(const std::vector<int>& sensorData);
     
     double getObstacleDensity() const;
-    bool hasObstaclesChanged() const;
 };
