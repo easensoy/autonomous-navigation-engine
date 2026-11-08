@@ -21,8 +21,6 @@ class MultiGoalPlanner
         MultiGoalStrategy optimizationStrategy;
 
         std::vector<int> nearestNeighborTSP(int startId, std::vector<int> goals);
-        std::vector<int> geneticAlgorithmTSP(int startId, std::vector<int> goals);
-        std::vector<int> simulatedAnnealingTSP(int startId, std::vector<int> goals);
         double calculateTotalDistance(const std::vector<int>& tour);
 
     public:
@@ -33,11 +31,8 @@ class MultiGoalPlanner
         std::vector<std::vector<int>> planIndividualPaths(int startId, const std::vector<int>& goals);
 
         void setOptimizationStrategy(MultiGoalStrategy strategy);
-        void setPriorityGoals(const std::vector<std::pair<int, double>>& goalsWithPriority);
 
         double estimateTourCost(int startId, const std::vector<int>& goals);
         std::vector<int> getOptimalVisitationOrder(int startId,const std::vector<int>& goals);
 
-        void setTimeLimit(double maxSeconds);
-        void enableApproximation(bool enable);
 };  

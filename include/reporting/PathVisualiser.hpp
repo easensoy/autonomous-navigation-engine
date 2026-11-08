@@ -32,9 +32,6 @@ public:
     void setCanvasDimensions(int width, int height);
     void setScaleFactor(double scale);
     
-    void highlightNodes(const std::vector<int>& nodeIds) const;
-    void showAlgorithmExploration(const std::vector<int>& exploredNodes, const std::vector<int>& finalPath) const;
-    void animatePathExecution(const std::vector<int>& path, double stepDelay) const;
     
     std::string generatePathStatistics(const std::vector<int>& path) const;
     void comparePathVisualizations(const std::vector<int>& path1, const std::vector<int>& path2) const;

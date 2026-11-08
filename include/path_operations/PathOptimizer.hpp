@@ -32,7 +32,5 @@ public:
     std::vector<int> shortcutPath(const std::vector<int>& path);
     std::vector<int> interpolateWaypoints(const std::vector<int>& sparsePath, int maxSegmentLength);
     
-    void enableIterativeOptimization(bool enable);
-    void setOptimizationIterations(int maxIterations);
     bool isOptimizationNecessary(const std::vector<int>& path) const;
 };

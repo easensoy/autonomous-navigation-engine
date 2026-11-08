@@ -2,7 +2,6 @@
 #include "autonomous_navigator/PathExecutor.hpp"
 #include "autonomous_navigator/AlgorithmSelector.hpp"
 #include "navigation_strategies/GlobalPathPlanner.hpp"
-#include "navigation_strategies/LocalPathPlanner.hpp"
 #include "navigation_strategies/DynamicReplanner.hpp"
 #include "navigation_strategies/MultiGoalPlanner.hpp"
 #include "path_operations/PathValidator.hpp"
