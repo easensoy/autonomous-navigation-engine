@@ -1,5 +1,6 @@
 #include "graph_operations/GraphBuilder.hpp"
 #include <iostream>
+#include <cstdint>
 #include <random>
 #include <algorithm>
 #include <cmath>
@@ -14,6 +15,7 @@ private:
     
 public:
     RandomGraphGenerator(Graph* targetGraph) : graph(targetGraph), rng(std::random_device{}()) {}
+    RandomGraphGenerator(Graph* targetGraph, std::uint32_t seed) : graph(targetGraph), rng(seed) {}
     
     void generateErdosRenyi(int nodeCount, double probability) {
         std::cout << "[RANDOM_GENERATOR] Creating Erdős-Rényi graph with " << nodeCount 
@@ -35,7 +37,8 @@ public:
                 if (dist(rng) < probability) {
                     const Node& node1 = graph->getNode(i);
                     const Node& node2 = graph->getNode(j);
-                    double weight = node1.euclideanDistance(node2);
+                    // Straight-line coordinate distance, as everywhere in GraphBuilder
+                    double weight = std::hypot(node1.getX() - node2.getX(), node1.getY() - node2.getY());
                     graph->addEdge(i, j, weight, true);
                     edgesAdded++;
                 }
@@ -289,7 +292,7 @@ private:
     }
 };
 
-void GraphBuilder::buildRandomGraph(int nodeCount, double connectionProbability) {
+void GraphBuilder::buildRandomGraph(int nodeCount, double connectionProbability, std::uint32_t seed) {
     std::cout << "[GRAPH_BUILDER] Building random graph" << std::endl;
     
     if (!targetGraph) {
@@ -297,7 +300,7 @@ void GraphBuilder::buildRandomGraph(int nodeCount, double connectionProbability)
         return;
     }
     
-    RandomGraphGenerator generator(targetGraph);
+    RandomGraphGenerator generator(targetGraph, seed);
     generator.generateErdosRenyi(nodeCount, connectionProbability);
     
     std::cout << "[GRAPH_BUILDER] Random graph construction completed" << std::endl;

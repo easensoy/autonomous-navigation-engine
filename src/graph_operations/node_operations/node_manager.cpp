@@ -166,3 +166,30 @@ bool NodeManager::validateNodeConsistency() const {
     }
     return true;
 }
+
+bool NodeManager::moveNode(int nodeId, double newX, double newY) {
+    if (!graph->hasNode(nodeId)) {
+        return false;
+    }
+    const Node& current = static_cast<const Graph&>(*graph).getNode(nodeId);
+    if (current.getX() == newX && current.getY() == newY) {
+        return true;  // already there
+    }
+    if (!validateNodePlacement(newX, newY)) {
+        return false;  // not finite, or another node stands there
+    }
+    const std::string name = current.getName();
+    graph->getNode(nodeId) = Node(nodeId, name, newX, newY);  // non-const access advances the graph revision
+    return true;
+}
+
+bool NodeManager::renameNode(int nodeId, const std::string& newName) {
+    if (!graph->hasNode(nodeId)) {
+        return false;
+    }
+    const Node& current = static_cast<const Graph&>(*graph).getNode(nodeId);
+    const double x = current.getX();
+    const double y = current.getY();
+    graph->getNode(nodeId) = Node(nodeId, newName, x, y);
+    return true;
+}
