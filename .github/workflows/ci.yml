@@ -1,5 +1,6 @@
 # Builds the library, the demo and every test, then runs CTest and the demo:
 # on Windows with MSVC and with GCC from MSYS2, and on Ubuntu with GCC and Clang.
+# A fifth job checks the committed evidence (docs/data, docs/assets, README) without timing anything.
 name: CI
 
 on:
@@ -89,3 +90,26 @@ jobs:
 
       - name: Run the demo
         run: ./build/AutonomousNavigationEngine > demo-output.txt
+
+  # Correctness of the committed evidence (docs/data, docs/assets, README). No timing runs here: CI
+  # runners are shared machines, and their timings are never used as benchmark results.
+  evidence:
+    name: Evidence checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Check routes, raw results, history and README numbers
+        run: python3 tools/evidence/check_outputs.py
+
+      - name: Check that the checker detects corrupted evidence
+        run: python3 tools/evidence/test_check_outputs.py
+
+      - name: Build the evidence tools
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DBUILD_EVIDENCE_TOOLS=ON
+          cmake --build build --target evidence_export evidence_bench --parallel
+
+      - name: Reproduce the committed traces
+        run: python3 tools/evidence/compare_traces.py build/tools/evidence/evidence_export
