@@ -1,0 +1,11 @@
+# Starts a mission from the robot's current pose. The pose is associated with the nearest roadmap node
+# within the association radius; the engine plans the route (NavigationCore::startNavigation).
+string goal_station                 # roadmap station name; leave empty to use goal_node
+int32 goal_node -1
+---
+bool accepted
+string message
+int32 start_node
+int32 goal_node
+int32[] route
+float64 route_cost                  # sum of edge weights along the route

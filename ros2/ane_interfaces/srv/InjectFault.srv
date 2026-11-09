@@ -1,0 +1,6 @@
+# Starts a fault in the fault injector (a test instrument, transparent when no fault is active).
+string fault                        # odom_dropout: withhold pose feedback; drive_stall: send zero drive commands
+float64 duration_s                  # simulation seconds
+---
+bool accepted
+string message
