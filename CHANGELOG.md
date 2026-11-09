@@ -4,6 +4,24 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### ROS 2 and Gazebo integration (new, `ros2/`)
+
+- **Additive.** No engine source or public header changed. The integration links the engine as built
+  from this repository and drives it only through `NavigationCore`'s public API (`startNavigation`,
+  `executeNavigationStep`, `handleObstacles`, `pauseNavigation`/`resumeNavigation`, `emergencyStop`,
+  `retryNavigation`, the state and route getters).
+- **Packages (ROS 2 Jazzy):** `ane_interfaces` (navigator status and events, blockage reports, mission
+  start, fault injection), `ane_navigation` (the `graph_navigator` adapter, the `cmd_vel_gate` stop
+  mechanism, the `fault_injector` test instrument, and `core/`, a ROS-independent C++ library with its
+  own unit and closed-loop tests that also builds without ROS), `ane_description` (the `ane_amr`
+  differential-drive URDF/Xacro with Gazebo Harmonic plugins) and `ane_sim` (warehouse world and
+  roadmap generated from one layout file, launch files, RViz2 view, scenarios, trial and analysis
+  scripts).
+- **Environment:** `ros2/docker/Dockerfile` (ROS 2 Jazzy, Gazebo Harmonic, software rendering).
+  Documentation, contracts and results: [ros2/README.md](ros2/README.md).
+- **CI:** two jobs: the adapter core and the simulation evidence without ROS, and the ROS 2 packages
+  plus one headless Gazebo trial in the container image.
+
 ### `AStar`: open-list fix
 
 - **Behaviour.** `findPath` no longer drops a node whose stale and live frontier entries tie on f.

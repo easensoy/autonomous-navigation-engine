@@ -9,7 +9,9 @@ and tested ([CHANGELOG.md](../CHANGELOG.md) lists those changes).
 - **Graph planning only.** There is no time, kinematics, trajectory or vehicle model. A navigation step
   moves a simulated position to the next node of the route. Obstacles are node ids that the caller
   reports; there is no perception. `NavigationState::BLOCKED` reports that no route is left; it is not a
-  safety mechanism.
+  safety mechanism. The ROS 2 integration in [`ros2/`](../ros2/README.md) adds, outside the library, a
+  controller that drives a simulated differential-drive robot along the engine's routes in Gazebo and a
+  lidar-based blockage mapper; its own boundaries are listed [there](../ros2/README.md#boundaries).
 - **Costs are given, not learned or measured.** The README's picking-zone multiplier (cost ×3) is an
   assumption of the scenario, not measured traffic.
 - **Jump Point Search has a narrow domain.** It accepts only uniform-cost grid graphs without corner
@@ -70,5 +72,6 @@ and tested ([CHANGELOG.md](../CHANGELOG.md) lists those changes).
 - **Proposed extensions, not commitments:**
   - replan without copying the graph: skip blocked nodes inside the search and reuse the original
     A\* heuristic scale, which stays admissible when nodes are removed;
-  - timed trajectories with a simple vehicle model, evaluated in closed loop;
+  - timed trajectories inside the library (the ROS 2 integration closes the loop in simulation, but its
+    controller follows node routes without a time parametrisation);
   - a small learned scorer for candidate routes, evaluated against these planners as baselines.
