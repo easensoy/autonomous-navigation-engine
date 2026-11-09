@@ -209,6 +209,28 @@ run in the history. The rule was declared before the fourth run was made.
   `docs/data/manifest.json` names `27da527`, while the history keeps the run's own manifest. The
   library, the tests and the benchmark programs are the same at both commits.
 
+### Commit identifiers
+
+The commit identifiers in these documents and in the run records (for example `head` in the history
+manifests and `engine_commit` in the simulation campaigns) belong to the commits the work was done on.
+The published history was condensed afterwards: runs of consecutive commits were squashed into one
+commit each, and the content did not change, so these identifiers are not on GitHub. Where a squashed
+commit ends at a cited commit, the two have the same tree and the published commit can be checked out
+in its place. A cited commit inside a squashed commit has no published equivalent.
+
+| Cited | Published | Relation |
+|---|---|---|
+| `57c9805` | `1139328` | same tree |
+| `9509e4b` | inside `9224fa5` | no published commit has this tree |
+| `d732311` | `9224fa5` | same tree |
+| `361f788` | `a9d90a9` | same tree |
+| `66fd15a` | `cd29e75` | same tree |
+| `4d7687a` | `da74bf2` | same tree |
+| `3accd2f`, `0a8f807`, `ff7a16a` | inside `f667c70` | no published commit has these trees |
+| `27da527` | `f667c70` | same tree |
+| `5f0fc91` | `3a6630b` | same tree |
+| `fbe3278` | `8f786e3` | same tree |
+
 ## Validation runs (not part of the regeneration)
 
 **What the hooks cost with no observer attached.** Measured before the A\* open-list fix, so the two
