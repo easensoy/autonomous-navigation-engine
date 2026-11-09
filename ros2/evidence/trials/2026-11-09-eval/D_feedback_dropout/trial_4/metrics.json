@@ -1,0 +1,146 @@
+{
+ "schema": "ane-sim/trial-metrics/1",
+ "scenario": "D_feedback_dropout",
+ "trial": 4,
+ "seed": 4004,
+ "metrics": {
+  "outcome": "COMPLETED",
+  "runner_outcome": "COMPLETED",
+  "goal_reached": true,
+  "final_position_error_m": 0.04802808350319321,
+  "collisions": 0,
+  "min_clearance_m": 0.4943586594524456,
+  "waypoint_progress": 1.0,
+  "interventions": 0,
+  "max_cross_track_m": 0.029415276048339198,
+  "rms_cross_track_m": 0.005201871347787857,
+  "replans": 0,
+  "sensor_blockage_reports": 0,
+  "operator_blockage_reports": 0,
+  "blocked_nodes": [],
+  "detection_latency_s": null,
+  "detection_latency_from_trigger_s": null,
+  "replan_reaction_s": null,
+  "engine_call_ms": {
+   "ROUTE_PLANNED": [
+    0.047789
+   ],
+   "ROUTE_REPLACED": [],
+   "ROUTE_KEPT": [],
+   "ROUTE_BLOCKED": []
+  },
+  "blocked_nodes_entered": 0,
+  "route_matches_engine": true,
+  "published_routes_match_status": true,
+  "stop_time_after_terminal_s": 0.029999999999997584,
+  "drift_after_stop_m": 0.0,
+  "feedback_holds": 1,
+  "feedback_recoveries": 1,
+  "hold_detect_s": 0.2500000000000018,
+  "blind_travel_m": 0.25536412808974723,
+  "commands_zero_during_hold": true,
+  "failure_detect_s": null,
+  "commands_zero_after_terminal": true,
+  "robot_commands_zero_after_terminal": true,
+  "commands_within_limits": true,
+  "path_length_m": 12.956691666745003,
+  "executed_graph_cost": 13.0,
+  "planned_route_cost": 13.0,
+  "final_route_cost_ahead": 0.0,
+  "mission_time_s": 28.95,
+  "mission_wall_s": 33.720125827006996,
+  "real_time_factor": 0.8585377216123398,
+  "bag_receive_clock": "simulation",
+  "fault_window_s": [
+   15.85,
+   17.854
+  ]
+ },
+ "acceptance": [
+  {
+   "metric": "outcome",
+   "op": "==",
+   "target": "COMPLETED",
+   "value": "COMPLETED",
+   "pass": true
+  },
+  {
+   "metric": "goal_reached",
+   "op": "==",
+   "target": "true",
+   "value": true,
+   "pass": true
+  },
+  {
+   "metric": "final_position_error_m",
+   "op": "<=",
+   "target": "0.10",
+   "value": 0.04802808350319321,
+   "pass": true
+  },
+  {
+   "metric": "collisions",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "interventions",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "feedback_holds",
+   "op": "==",
+   "target": "1",
+   "value": 1,
+   "pass": true
+  },
+  {
+   "metric": "feedback_recoveries",
+   "op": "==",
+   "target": "1",
+   "value": 1,
+   "pass": true
+  },
+  {
+   "metric": "hold_detect_s",
+   "op": "<=",
+   "target": "0.35",
+   "value": 0.2500000000000018,
+   "pass": true
+  },
+  {
+   "metric": "blind_travel_m",
+   "op": "<=",
+   "target": "0.35",
+   "value": 0.25536412808974723,
+   "pass": true
+  }
+ ],
+ "accepted": true,
+ "consistency": {
+  "navigator_outcome_equals_runner": true,
+  "reported_final_error_matches_ground_truth": true,
+  "reached_nodes_follow_roadmap_and_route": true,
+  "every_engine_route_reproduced_offline": true,
+  "published_routes_are_engine_routes": true,
+  "commands_within_limits": true
+ },
+ "consistent": true,
+ "route_checks": [
+  {
+   "t": 2.101,
+   "type": "ROUTE_PLANNED",
+   "identical": true,
+   "engine_cost": 13.0,
+   "nodes": 27,
+   "blocked": []
+  }
+ ],
+ "navigator_reported_final_error_m": 0.04882448113769655,
+ "ground_truth_error_at_claim_m": 0.04822607209436125
+}
