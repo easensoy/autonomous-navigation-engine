@@ -1,0 +1,225 @@
+{
+ "schema": "ane-sim/trial-metrics/1",
+ "scenario": "C_disconnection",
+ "trial": 4,
+ "seed": 3004,
+ "metrics": {
+  "outcome": "BLOCKED",
+  "runner_outcome": "BLOCKED",
+  "goal_reached": false,
+  "final_position_error_m": 9.206398374192672,
+  "collisions": 0,
+  "min_clearance_m": 0.47084721943106267,
+  "waypoint_progress": 1.0,
+  "interventions": 0,
+  "max_cross_track_m": 0.06314511548121543,
+  "rms_cross_track_m": 0.02427257724604762,
+  "replans": 0,
+  "sensor_blockage_reports": 1,
+  "operator_blockage_reports": 2,
+  "blocked_nodes": [
+   22,
+   24,
+   25,
+   27,
+   28,
+   30,
+   31,
+   33,
+   34,
+   36,
+   37,
+   39,
+   40,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   48,
+   49,
+   50,
+   51,
+   52,
+   54,
+   55,
+   57,
+   58,
+   60,
+   61,
+   63,
+   64,
+   66
+  ],
+  "detection_latency_s": 0.21999999999999886,
+  "detection_latency_from_trigger_s": 0.23199999999999932,
+  "replan_reaction_s": 0.21999999999999886,
+  "engine_call_ms": {
+   "ROUTE_PLANNED": [
+    0.162177
+   ],
+   "ROUTE_REPLACED": [],
+   "ROUTE_KEPT": [
+    0.004129,
+    0.003693
+   ],
+   "ROUTE_BLOCKED": [
+    0.408677
+   ]
+  },
+  "blocked_nodes_entered": 0,
+  "route_matches_engine": true,
+  "published_routes_match_status": true,
+  "stop_time_after_terminal_s": 0.5679999999999996,
+  "drift_after_stop_m": 0.0,
+  "feedback_holds": 0,
+  "feedback_recoveries": 0,
+  "hold_detect_s": null,
+  "blind_travel_m": null,
+  "commands_zero_during_hold": null,
+  "failure_detect_s": null,
+  "commands_zero_after_terminal": true,
+  "robot_commands_zero_after_terminal": true,
+  "commands_within_limits": true,
+  "path_length_m": 3.638371645040265,
+  "executed_graph_cost": 3.5,
+  "planned_route_cost": 13.0,
+  "final_route_cost_ahead": null,
+  "mission_time_s": 8.432,
+  "mission_wall_s": 8.786440194002353,
+  "real_time_factor": 0.9596605466859839,
+  "bag_receive_clock": "simulation",
+  "fault_window_s": [
+   null,
+   null
+  ]
+ },
+ "acceptance": [
+  {
+   "metric": "outcome",
+   "op": "==",
+   "target": "BLOCKED",
+   "value": "BLOCKED",
+   "pass": true
+  },
+  {
+   "metric": "collisions",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "interventions",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "operator_blockage_reports",
+   "op": "==",
+   "target": "2",
+   "value": 2,
+   "pass": true
+  },
+  {
+   "metric": "sensor_blockage_reports",
+   "op": ">=",
+   "target": "1",
+   "value": 1,
+   "pass": true
+  },
+  {
+   "metric": "stop_time_after_terminal_s",
+   "op": "<=",
+   "target": "1.0",
+   "value": 0.5679999999999996,
+   "pass": true
+  },
+  {
+   "metric": "drift_after_stop_m",
+   "op": "<=",
+   "target": "0.05",
+   "value": 0.0,
+   "pass": true
+  },
+  {
+   "metric": "blocked_nodes_entered",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "route_matches_engine",
+   "op": "==",
+   "target": "true",
+   "value": true,
+   "pass": true
+  }
+ ],
+ "accepted": true,
+ "consistency": {
+  "navigator_outcome_equals_runner": true,
+  "reported_final_error_matches_ground_truth": true,
+  "reached_nodes_follow_roadmap_and_route": true,
+  "every_engine_route_reproduced_offline": true,
+  "published_routes_are_engine_routes": true,
+  "commands_within_limits": true
+ },
+ "consistent": true,
+ "route_checks": [
+  {
+   "t": 2.101,
+   "type": "ROUTE_PLANNED",
+   "identical": true,
+   "engine_cost": 13.0,
+   "nodes": 27,
+   "blocked": []
+  },
+  {
+   "t": 10.532,
+   "type": "ROUTE_BLOCKED",
+   "identical": true,
+   "blocked": [
+    24,
+    27,
+    30,
+    33,
+    36,
+    39,
+    42,
+    45,
+    48,
+    51,
+    54,
+    57,
+    60,
+    63,
+    66,
+    22,
+    25,
+    28,
+    31,
+    34,
+    37,
+    40,
+    43,
+    46,
+    49,
+    52,
+    55,
+    58,
+    61,
+    64,
+    44,
+    47,
+    50
+   ]
+  }
+ ],
+ "navigator_reported_final_error_m": null,
+ "ground_truth_error_at_claim_m": null
+}
