@@ -1,0 +1,87 @@
+{
+ "schema": "ane-sim/media/1",
+ "story": "mission",
+ "outputs": {
+  "simulation-mission-poster.png": {
+   "bytes": 666953,
+   "sha256": "634e5cd415bc904c4899509061e52f91bdc437558e52d841392e9bae6637ae1b"
+  },
+  "simulation-mission-preview.gif": {
+   "bytes": 6164202,
+   "sha256": "20e8b05c5c624926cbb42bafb2ed4aaf5a697c4784b8267b4b2c925dba174f13"
+  },
+  "simulation-mission.mp4": {
+   "bytes": 8827821,
+   "sha256": "7f2c2c239e701dff33f5a9f030cd4c6b60578de68d7494785246d263c2f27c93"
+  }
+ },
+ "recorded_trial": {
+  "campaign": "2026-11-09-capture",
+  "scenario": "B_aisle_blockage",
+  "scenario_file": "ros2/ane_sim/scenarios/B_aisle_blockage.txt",
+  "scenario_sha256": "4f40598746fbc880ba7e582566defe16c75d5dbb6fa49fcc9b46a532696fb7c0",
+  "trial": 0,
+  "seed": 2000,
+  "initial_pose": {
+   "x": -6.510308596417894,
+   "y": 0.08943274284681749,
+   "yaw": -0.010210669196965977
+  },
+  "engine_commit": "fbe3278f5ac24defe98d2856985f00fde9fc9598",
+  "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+  "mode": "capture (Gazebo GUI and RViz2 on Xvfb, screen recorded)"
+ },
+ "integration_tree_sha256": "f5a791131591df31e8b94643c0dded0481cf83160ff90c192ad74d7bbc8f83ea",
+ "image": {
+  "tag": "ane-sim:jazzy",
+  "id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56"
+ },
+ "trial_files": {
+  "trajectory.json": "956b47111c61a7515455ac959126be483c67d54f4966064d2f5cfa77d470f044",
+  "metrics.json": "375da4a04f89e0657bd9e157c6ab7d16dd7cf152360cde2bb1ba5f611219ab91",
+  "camera_log.csv": "06734c9077ef883ffa4e59a510ac483a7d3e00b2cfe1fc39dd9933477daeb10a"
+ },
+ "capture": {
+  "frames_captured": 1391,
+  "frames_mp4": 721,
+  "span_sim_s": [
+   23.6,
+   95.65
+  ],
+  "decisive_sim_s": [
+   32.7,
+   37.93
+  ],
+  "gazebo_box": [
+   0,
+   48,
+   1280,
+   720
+  ],
+  "rviz_box": [
+   1288,
+   71,
+   784,
+   490
+  ],
+  "rviz_render_area": [
+   1280,
+   62,
+   800,
+   509
+  ],
+  "screen_frames": "up to 10 per wall-clock second, each stamped with the container's monotonic clock (frames.csv) and placed on the simulation clock through capture_clock.csv",
+  "preview_playback": {
+   "decisive_window_sim_s": [
+    32.7,
+    37.93
+   ],
+   "decisive_speed": 1.0,
+   "other_speed": 10.0,
+   "gif_fps": 7,
+   "gif_width": 800
+  },
+  "full_recording_playback": "1x simulation time, 10 frames per simulated second"
+ },
+ "drawn_by_this_script": "header, panel labels, telemetry panel (values from trajectory.json 'status' and 'event_log'), captions and timeline (from recorded events and metrics.json), RViz2 aisle labels and legend. The Gazebo and RViz2 pixels are screen captures of the running trial."
+}
