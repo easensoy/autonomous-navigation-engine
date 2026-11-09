@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-08-eval",
+ "scenario": "F_drive_stall",
+ "scenario_file": "ros2/ane_sim/scenarios/F_drive_stall.txt",
+ "scenario_sha256": "d2087845ecbf816b09b48f4599d82e119b0c224ac9727255ed7b6d64f8ca7357",
+ "trial": 3,
+ "seed": 6003,
+ "initial_pose": {
+  "x": -6.416009363103819,
+  "y": 0.08424206120932601,
+  "yaw": 0.06001095947369667
+ },
+ "engine_commit": "5f0fc91a6602de5f64756ac9e3932911c509e2e5",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-08T22:10:27Z",
+ "mode": "headless"
+}
