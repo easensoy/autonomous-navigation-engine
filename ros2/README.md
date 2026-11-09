@@ -268,8 +268,9 @@ their sources (`ane/events`, `ane/scenario_events`).
 ## Results
 
 **Evaluation campaign `2026-11-09-eval`** (engine commit `fbe3278`, which contains this integration
-code; `campaign.json` records the integration-tree hash): 30 trials attempted, 30 met every acceptance
-criterion and passed every consistency check. Full tables: [`evidence/SUMMARY.md`](evidence/SUMMARY.md).
+code and is published as `8f786e3` with the same tree; `campaign.json` records the integration-tree
+hash): 30 trials attempted, 30 met every acceptance criterion and passed every consistency check. Full
+tables: [`evidence/SUMMARY.md`](evidence/SUMMARY.md).
 
 | Scenario | Outcome | Measurements (min–max over 5 trials) |
 |---|---|---|
