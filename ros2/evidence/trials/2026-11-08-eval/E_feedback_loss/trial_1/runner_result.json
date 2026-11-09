@@ -1,0 +1,92 @@
+{
+ "schema": "ane-sim/runner-result/1",
+ "scenario": "E_feedback_loss",
+ "scenario_title": "Feedback loss beyond the recovery window: hold, then localization failure",
+ "scenario_file": "E_feedback_loss.txt",
+ "scenario_sha256": "181382460ac94ccebcd164fbb50644f5d28fc4b7186fcda8346eca4d8a02e066",
+ "trial": 1,
+ "seed": 5001,
+ "initial_pose": {
+  "x": -6.48595,
+  "y": 0.025663,
+  "yaw": 0.095442
+ },
+ "mission": {
+  "requested_sim": 2.1,
+  "requested_mono": 219006.753417292,
+  "requested_wall": 1794175574.7367632,
+  "accepted": true,
+  "message": "route of 27 nodes",
+  "start_node": 0,
+  "goal_node": 88,
+  "route": [
+   0,
+   1,
+   2,
+   9,
+   17,
+   20,
+   23,
+   26,
+   29,
+   32,
+   35,
+   38,
+   41,
+   44,
+   47,
+   50,
+   53,
+   56,
+   59,
+   62,
+   65,
+   68,
+   71,
+   79,
+   86,
+   87,
+   88
+  ],
+  "route_cost": 13.0,
+  "truth_at_request": [
+   -6.48595,
+   0.025663,
+   0.09544200000000004
+  ]
+ },
+ "events": [
+  {
+   "trigger": "x_ge",
+   "trigger_value": 0.0,
+   "action": "odom_dropout",
+   "args": [
+    "6.0"
+   ],
+   "fired_sim": 15.9,
+   "fired_mono": 219020.55364635,
+   "fired_wall": 1794175587.125334,
+   "truth_at_fire": [
+    0.013298422252668167,
+    9.024411730891998e-11,
+    1.5436336202966413e-10
+   ],
+   "confirmed_sim": 15.901000000000002,
+   "confirmed_mono": 219020.555404282,
+   "ok": true,
+   "result": "odom_dropout for 6.000000 s"
+  }
+ ],
+ "runner_outcome": "FAILED_LOCALIZATION",
+ "terminal": {
+  "state": "FAILED_LOCALIZATION",
+  "sim": 20.3,
+  "mono": 219024.983961704,
+  "wall": 1794175591.5556493
+ },
+ "finished_sim": 26.3,
+ "finished_mono": 219030.991723477,
+ "finished_wall": 1794175597.5634117,
+ "mono_started": 219002.080550253,
+ "wall_started": 1794175570.0638928
+}
