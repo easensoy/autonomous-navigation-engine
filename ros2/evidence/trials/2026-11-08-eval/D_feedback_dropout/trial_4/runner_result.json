@@ -1,0 +1,92 @@
+{
+ "schema": "ane-sim/runner-result/1",
+ "scenario": "D_feedback_dropout",
+ "scenario_title": "Controlled feedback failure: 2 s pose dropout, hold and recovery",
+ "scenario_file": "D_feedback_dropout.txt",
+ "scenario_sha256": "7b81a513da02c6ffbd6509ac0e4863322f9347875be656c1465e34576cb6ba0f",
+ "trial": 4,
+ "seed": 4004,
+ "initial_pose": {
+  "x": -6.504872,
+  "y": -0.029009,
+  "yaw": 0.004168
+ },
+ "mission": {
+  "requested_sim": 2.1,
+  "requested_mono": 218919.243330299,
+  "requested_wall": 1794175491.4958584,
+  "accepted": true,
+  "message": "route of 27 nodes",
+  "start_node": 0,
+  "goal_node": 88,
+  "route": [
+   0,
+   1,
+   2,
+   9,
+   17,
+   20,
+   23,
+   26,
+   29,
+   32,
+   35,
+   38,
+   41,
+   44,
+   47,
+   50,
+   53,
+   56,
+   59,
+   62,
+   65,
+   68,
+   71,
+   79,
+   86,
+   87,
+   88
+  ],
+  "route_cost": 13.0,
+  "truth_at_request": [
+   -6.504872,
+   -0.029009,
+   0.004167999999999998
+  ]
+ },
+ "events": [
+  {
+   "trigger": "x_ge",
+   "trigger_value": 0.0,
+   "action": "odom_dropout",
+   "args": [
+    "2.0"
+   ],
+   "fired_sim": 15.850000000000001,
+   "fired_mono": 218933.057004879,
+   "fired_wall": 1794175503.908313,
+   "truth_at_fire": [
+    0.003786417553816579,
+    7.563611271265525e-11,
+    -1.4236191056618958e-09
+   ],
+   "confirmed_sim": 15.852,
+   "confirmed_mono": 218933.059019083,
+   "ok": true,
+   "result": "odom_dropout for 2.000000 s"
+  }
+ ],
+ "runner_outcome": "COMPLETED",
+ "terminal": {
+  "state": "COMPLETED",
+  "sim": 31.05,
+  "mono": 218948.772689292,
+  "wall": 1794175519.6239977
+ },
+ "finished_sim": 34.050000000000004,
+ "finished_mono": 218951.901960803,
+ "finished_wall": 1794175522.75327,
+ "mono_started": 218914.617909812,
+ "wall_started": 1794175486.870434
+}
