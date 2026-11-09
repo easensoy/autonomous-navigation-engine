@@ -1,0 +1,26 @@
+ane-scenario 1
+# Format: see A_nominal.txt. Acceptance criteria fixed before the first trial; manifests record this
+# file's SHA-256.
+#
+# Halfway along the middle aisle the fault injector withholds pose feedback for 2.0 s. The navigator
+# must notice within its 0.25 s feedback timeout, command zero velocity, hold, and resume once
+# feedback returns (inside its 4.0 s recovery window) with the pose still on the route.
+name D_feedback_dropout
+title Controlled feedback failure: 2 s pose dropout, hold and recovery
+start dispatch
+goal delivery
+trials 5
+seed 4000
+initial_jitter 0.10 0.10 0.20
+timeout 120
+observe 3
+event x_ge 0.0 odom_dropout 2.0
+accept outcome == COMPLETED
+accept goal_reached == true
+accept final_position_error_m <= 0.10
+accept collisions == 0
+accept interventions == 0
+accept feedback_holds == 1
+accept feedback_recoveries == 1
+accept hold_detect_s <= 0.35
+accept blind_travel_m <= 0.35

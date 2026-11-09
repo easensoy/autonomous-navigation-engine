@@ -1,0 +1,39 @@
+ane-scenario 1
+# Scenario format (shared by scripts/scenario_runner.py and the adapter's closed-loop test):
+#   start / goal          station names from the roadmap
+#   trials, seed          trial k uses seed + k for the initial-pose jitter and for `gz sim --seed`
+#   initial_jitter        uniform half-ranges around the start station, facing +x: x (m), y (m), yaw (rad)
+#   timeout               simulation seconds from the mission request before the runner gives up
+#   observe               simulation seconds recorded after the navigator reaches a terminal state
+#   event <trigger> <action> <arguments>
+#     triggers  at_start | x_ge <m> | x_le <m> | y_ge <m> | y_le <m> | time_ge <s>
+#               (robot ground-truth pose, or simulation time since the mission request)
+#     actions   spawn_obstacle <name> <cx> <cy> <sx> <sy> <height>   scripted world event; the navigator
+#                                                                     learns of it only through the lidar
+#               close_region <label> <min_x> <min_y> <max_x> <max_y>  operator blockage notification
+#                                                                     (source OPERATOR) for the roadmap
+#                                                                     nodes inside the rectangle
+#               odom_dropout <s>                                     fault injector withholds pose feedback
+#               drive_stall <s>                                      fault injector replaces drive commands
+#                                                                     with zero
+#   accept <metric> <op> <value>   acceptance criterion; metrics are defined in ros2/README.md
+# The acceptance criteria were fixed before the first trial was run; every trial manifest records the
+# SHA-256 of this file.
+name A_nominal
+title Nominal route execution: dispatch to delivery with no blockage
+start dispatch
+goal delivery
+trials 5
+seed 1000
+initial_jitter 0.10 0.10 0.20
+timeout 120
+observe 3
+accept outcome == COMPLETED
+accept goal_reached == true
+accept final_position_error_m <= 0.10
+accept collisions == 0
+accept waypoint_progress == 1
+accept interventions == 0
+accept max_cross_track_m <= 0.20
+accept replans == 0
+accept route_matches_engine == true
