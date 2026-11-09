@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-08-capture",
+ "scenario": "B_aisle_blockage",
+ "scenario_file": "ros2/ane_sim/scenarios/B_aisle_blockage.txt",
+ "scenario_sha256": "4f40598746fbc880ba7e582566defe16c75d5dbb6fa49fcc9b46a532696fb7c0",
+ "trial": 0,
+ "seed": 2000,
+ "initial_pose": {
+  "x": -6.510308596417894,
+  "y": 0.08943274284681749,
+  "yaw": -0.010210669196965977
+ },
+ "engine_commit": "5f0fc91a6602de5f64756ac9e3932911c509e2e5",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-08T22:13:43Z",
+ "mode": "capture (Gazebo GUI and RViz2 on Xvfb, screen recorded)"
+}
