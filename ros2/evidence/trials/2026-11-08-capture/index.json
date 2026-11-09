@@ -1,0 +1,16 @@
+{
+ "schema": "ane-sim/trial-index/1",
+ "attempts": [
+  {
+   "scenario": "B_aisle_blockage",
+   "trial": 0,
+   "seed": 2000,
+   "status": "completed",
+   "host_elapsed_s": 142.5,
+   "outcome": "COMPLETED",
+   "accepted": true,
+   "consistent": true,
+   "finished_utc": "2026-11-08T22:16:06Z"
+  }
+ ]
+}
