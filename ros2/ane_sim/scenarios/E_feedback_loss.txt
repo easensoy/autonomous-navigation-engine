@@ -1,0 +1,24 @@
+ane-scenario 1
+# Format: see A_nominal.txt. Acceptance criteria fixed before the first trial; manifests record this
+# file's SHA-256.
+#
+# As D, but pose feedback is withheld for 6.0 s, longer than the 4.0 s recovery window. The navigator
+# must hold, then declare a localization failure and keep commanding zero velocity after feedback
+# returns.
+name E_feedback_loss
+title Feedback loss beyond the recovery window: hold, then localization failure
+start dispatch
+goal delivery
+trials 5
+seed 5000
+initial_jitter 0.10 0.10 0.20
+timeout 120
+observe 6
+event x_ge 0.0 odom_dropout 6.0
+accept outcome == FAILED_LOCALIZATION
+accept collisions == 0
+accept interventions == 0
+accept feedback_holds == 1
+accept hold_detect_s <= 0.35
+accept blind_travel_m <= 0.35
+accept drift_after_stop_m <= 0.05

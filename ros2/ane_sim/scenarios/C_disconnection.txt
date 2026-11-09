@@ -1,0 +1,29 @@
+ane-scenario 1
+# Format: see A_nominal.txt. Acceptance criteria fixed before the first trial; manifests record this
+# file's SHA-256.
+#
+# At the start an operator closes the north and south aisles (blockage notifications, source
+# OPERATOR). The route through the middle aisle is unaffected. Once the robot is in the middle aisle a
+# loaded pallet appears in it; the lidar finds it, and no route to the delivery station remains. The
+# expected outcome is the engine's BLOCKED state and a controlled halt, not a completed mission.
+name C_disconnection
+title Complete route disconnection: two operator closures and a detected blockage
+start dispatch
+goal delivery
+trials 5
+seed 3000
+initial_jitter 0.10 0.10 0.20
+timeout 150
+observe 6
+event at_start close_region north_aisle -3.5 2.5 3.5 3.5
+event at_start close_region south_aisle -3.5 -3.5 3.5 -2.5
+event x_ge -3.0 spawn_obstacle pallet_c 1.0 0.0 1.0 1.2 1.0
+accept outcome == BLOCKED
+accept collisions == 0
+accept interventions == 0
+accept operator_blockage_reports == 2
+accept sensor_blockage_reports >= 1
+accept stop_time_after_terminal_s <= 1.0
+accept drift_after_stop_m <= 0.05
+accept blocked_nodes_entered == 0
+accept route_matches_engine == true

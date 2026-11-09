@@ -1,0 +1,30 @@
+ane-scenario 1
+# Format: see A_nominal.txt. Acceptance criteria fixed before the first trial; manifests record this
+# file's SHA-256.
+#
+# A loaded pallet (1.0 m x 1.2 m, 1.0 m high) appears in the middle aisle once the robot is inside it.
+# Nothing tells the navigator: it must find the pallet in its lidar scans, report the blocked nodes to
+# the engine and follow the engine's replacement route (back to the west cross aisle, then the south
+# aisle, which is cheaper than the north aisle and its picking zone).
+name B_aisle_blockage
+title Mid-mission aisle blockage detected by the lidar, with an alternative route
+start dispatch
+goal delivery
+trials 5
+seed 2000
+initial_jitter 0.10 0.10 0.20
+timeout 150
+observe 3
+event x_ge -3.0 spawn_obstacle pallet_b 1.0 0.0 1.0 1.2 1.0
+accept outcome == COMPLETED
+accept goal_reached == true
+accept final_position_error_m <= 0.10
+accept collisions == 0
+accept interventions == 0
+accept sensor_blockage_reports >= 1
+accept operator_blockage_reports == 0
+accept detection_latency_s <= 1.0
+accept replans >= 1
+accept blocked_nodes_entered == 0
+accept route_matches_engine == true
+accept max_cross_track_m <= 0.20
