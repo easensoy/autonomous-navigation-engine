@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-09-eval",
+ "scenario": "D_feedback_dropout",
+ "scenario_file": "ros2/ane_sim/scenarios/D_feedback_dropout.txt",
+ "scenario_sha256": "7b81a513da02c6ffbd6509ac0e4863322f9347875be656c1465e34576cb6ba0f",
+ "trial": 0,
+ "seed": 4000,
+ "initial_pose": {
+  "x": -6.517998090404648,
+  "y": -0.016411593708959143,
+  "yaw": -0.014466831954778353
+ },
+ "engine_commit": "fbe3278f5ac24defe98d2856985f00fde9fc9598",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-09T01:00:11Z",
+ "mode": "headless"
+}
