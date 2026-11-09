@@ -63,9 +63,9 @@ def font(path, size):
         return ImageFont.load_default()
 
 
-F = {"badge": font(FONT_BOLD, 22), "head": font(FONT, 19), "small": font(FONT, 16), "label": font(FONT, 17),
-     "chip": font(FONT_BOLD, 16), "caption": font(FONT, 23), "time": font(MONO_BOLD, 19),
-     "k": font(FONT, 18), "v": font(MONO, 20), "vb": font(MONO_BOLD, 20), "tick": font(FONT, 14)}
+F = {"badge": font(FONT_BOLD, 22), "head": font(FONT, 19), "small": font(FONT, 18), "label": font(FONT, 17),
+     "chip": font(FONT_BOLD, 18), "caption": font(FONT, 23), "time": font(MONO_BOLD, 19),
+     "k": font(FONT, 18), "v": font(MONO, 20), "vb": font(MONO_BOLD, 20), "tick": font(FONT, 15)}
 
 
 def wrap(draw, text, face, width):
@@ -84,7 +84,7 @@ def chip(draw, xy, text, fill=(0, 0, 0, 170), ink=INK, face=None, pad=(10, 5)):
     face = face or F["chip"]
     x, y = xy
     w = draw.textlength(text, font=face)
-    draw.rounded_rectangle((x, y, x + w + 2 * pad[0], y + 26), radius=6, fill=fill)
+    draw.rounded_rectangle((x, y, x + w + 2 * pad[0], y + 29), radius=6, fill=fill)
     draw.text((x + pad[0], y + 3), text, font=face, fill=ink)
     return x + w + 2 * pad[0]
 
@@ -335,9 +335,9 @@ def main():
     parser.add_argument("--story", choices=("mission", "failure"), required=True)
     parser.add_argument("--name", default=None)
     parser.add_argument("--fps", type=int, default=10, help="output frames per second")
-    parser.add_argument("--fast", type=float, default=6.0, help="preview speed outside the decisive seconds")
+    parser.add_argument("--fast", type=float, default=10.0, help="preview speed outside the decisive seconds")
     parser.add_argument("--gif-width", type=int, default=800)
-    parser.add_argument("--gif-fps", type=int, default=8)
+    parser.add_argument("--gif-fps", type=int, default=7)
     args = parser.parse_args()
     name = args.name or ("simulation-mission" if args.story == "mission" else "simulation-failure")
 
@@ -358,7 +358,7 @@ def main():
     boxes = {"gazebo": (gx, gy + gh - SCENE_H, W, SCENE_H),
              "rviz": (int(rcx - RVIZ_SRC[0] / 2), int(rcy - RVIZ_SRC[1] / 2), *RVIZ_SRC)}
     if args.story == "mission":
-        legend = [((40, 150, 70), "engine route", "line"), ((40, 100, 225), "trajectory (ground truth)", "line"),
+        legend = [((40, 150, 70), "engine route", "line"), ((40, 100, 225), "trajectory (truth)", "line"),
                   ((215, 30, 30), "blocked: lidar", "dot"), ((255, 40, 15), "unexplained returns", "dot")]
     else:
         legend = [((40, 150, 70), "route", "line"), ((40, 100, 225), "trajectory", "line"),
