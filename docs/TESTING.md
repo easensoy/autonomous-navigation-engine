@@ -102,7 +102,8 @@ ctest --test-dir build
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request. Its actions are pinned to commit
-hashes. Five jobs:
+hashes. Seven jobs: five for the library and its evidence, two for the ROS 2 integration
+([ros2/README.md](../ros2/README.md#tests-and-checks)).
 
 - **Windows, MSVC** (vswhere, vcvars and Ninja), **Windows, GCC** (MSYS2 UCRT64), and **Ubuntu
   24.04, GCC** and **Clang**. Each builds the library, the demo and every test, runs CTest, then runs
@@ -122,5 +123,15 @@ hashes. Five jobs:
 
   It never runs the benchmark: CI runners are shared machines, and the README's timings come only from
   the machine documented in [EVIDENCE.md](EVIDENCE.md#measurement-protocol).
+- **ROS 2 adapter core and simulation evidence** (Ubuntu 24.04, no ROS). Builds the ROS-independent
+  adapter core (`ros2/ane_navigation/core`) and runs its unit tests and its closed-loop kinematic test;
+  checks that the Gazebo world and the roadmap match the warehouse layout; runs `check_sim_evidence.py`,
+  which replays every engine call recorded in the published simulation campaign through this
+  checkout's engine and re-derives every acceptance verdict, and its mutation test.
+- **ROS 2 Jazzy / Gazebo Harmonic** (Ubuntu 24.04, Docker). Builds the simulation image from
+  `ros2/docker/Dockerfile`, builds and tests the four ROS 2 packages in it (`colcon test`: adapter-core
+  tests, URDF validity, world/roadmap freshness, SDFormat validity), then runs scenario A once in
+  headless Gazebo and requires its acceptance criteria and consistency checks. This is the only
+  simulator-dependent job; its criteria are in simulation time, so the runner's speed does not matter.
 
 The README badge shows the latest result.
