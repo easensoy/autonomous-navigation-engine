@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-08-eval",
+ "scenario": "A_nominal",
+ "scenario_file": "ros2/ane_sim/scenarios/A_nominal.txt",
+ "scenario_sha256": "64d0dd009eb929b0e71ad456143c5405bb2dfbe9987e85bb464a23e37fd1bb70",
+ "trial": 3,
+ "seed": 1003,
+ "initial_pose": {
+  "x": -6.5005317158120395,
+  "y": -0.028001908627948643,
+  "yaw": 0.088824702689487
+ },
+ "engine_commit": "5f0fc91a6602de5f64756ac9e3932911c509e2e5",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-08T21:51:14Z",
+ "mode": "headless"
+}
