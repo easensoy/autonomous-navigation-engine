@@ -1,0 +1,71 @@
+{
+ "schema": "ane-sim/runner-result/1",
+ "scenario": "A_nominal",
+ "scenario_title": "Nominal route execution: dispatch to delivery with no blockage",
+ "scenario_file": "A_nominal.txt",
+ "scenario_sha256": "64d0dd009eb929b0e71ad456143c5405bb2dfbe9987e85bb464a23e37fd1bb70",
+ "trial": 0,
+ "seed": 1000,
+ "initial_pose": {
+  "x": -6.444529,
+  "y": 0.033965,
+  "yaw": -0.160344
+ },
+ "mission": {
+  "requested_sim": 2.25,
+  "requested_mono": 228748.393391231,
+  "requested_wall": 1794184834.7093678,
+  "accepted": true,
+  "message": "route of 27 nodes",
+  "start_node": 0,
+  "goal_node": 88,
+  "route": [
+   0,
+   1,
+   2,
+   9,
+   17,
+   20,
+   23,
+   26,
+   29,
+   32,
+   35,
+   38,
+   41,
+   44,
+   47,
+   50,
+   53,
+   56,
+   59,
+   62,
+   65,
+   68,
+   71,
+   79,
+   86,
+   87,
+   88
+  ],
+  "route_cost": 13.0,
+  "truth_at_request": [
+   -6.444529,
+   0.033965,
+   -0.1603439999999999
+  ]
+ },
+ "events": [],
+ "runner_outcome": "COMPLETED",
+ "terminal": {
+  "state": "COMPLETED",
+  "sim": 29.1,
+  "mono": 228787.601990718,
+  "wall": 1794184870.8188982
+ },
+ "finished_sim": 32.1,
+ "finished_mono": 228792.324238393,
+ "finished_wall": 1794184875.5411456,
+ "mono_started": 228741.274695155,
+ "wall_started": 1794184827.5906649
+}
