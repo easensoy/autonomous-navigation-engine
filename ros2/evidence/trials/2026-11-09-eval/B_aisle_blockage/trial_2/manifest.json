@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-09-eval",
+ "scenario": "B_aisle_blockage",
+ "scenario_file": "ros2/ane_sim/scenarios/B_aisle_blockage.txt",
+ "scenario_sha256": "4f40598746fbc880ba7e582566defe16c75d5dbb6fa49fcc9b46a532696fb7c0",
+ "trial": 2,
+ "seed": 2002,
+ "initial_pose": {
+  "x": -6.454501771926264,
+  "y": 5.668747959024223e-05,
+  "yaw": 0.11100122821595271
+ },
+ "engine_commit": "fbe3278f5ac24defe98d2856985f00fde9fc9598",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-09T00:52:42Z",
+ "mode": "headless"
+}
