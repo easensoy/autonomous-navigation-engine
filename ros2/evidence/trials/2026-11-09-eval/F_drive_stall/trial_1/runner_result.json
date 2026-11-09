@@ -1,0 +1,92 @@
+{
+ "schema": "ane-sim/runner-result/1",
+ "scenario": "F_drive_stall",
+ "scenario_title": "Controlled tracking failure: the drive ignores commands; progress watchdog",
+ "scenario_file": "F_drive_stall.txt",
+ "scenario_sha256": "d2087845ecbf816b09b48f4599d82e119b0c224ac9727255ed7b6d64f8ca7357",
+ "trial": 1,
+ "seed": 6001,
+ "initial_pose": {
+  "x": -6.416881,
+  "y": 0.048207,
+  "yaw": 0.161509
+ },
+ "mission": {
+  "requested_sim": 2.1500000000000004,
+  "requested_mono": 230512.963154984,
+  "requested_wall": 1794186505.8167503,
+  "accepted": true,
+  "message": "route of 27 nodes",
+  "start_node": 0,
+  "goal_node": 88,
+  "route": [
+   0,
+   1,
+   2,
+   9,
+   17,
+   20,
+   23,
+   26,
+   29,
+   32,
+   35,
+   38,
+   41,
+   44,
+   47,
+   50,
+   53,
+   56,
+   59,
+   62,
+   65,
+   68,
+   71,
+   79,
+   86,
+   87,
+   88
+  ],
+  "route_cost": 13.0,
+  "truth_at_request": [
+   -6.416881,
+   0.048207,
+   0.16150900000000004
+  ]
+ },
+ "events": [
+  {
+   "trigger": "x_ge",
+   "trigger_value": 0.0,
+   "action": "drive_stall",
+   "args": [
+    "8.0"
+   ],
+   "fired_sim": 16.05,
+   "fired_mono": 230526.879813604,
+   "fired_wall": 1794186518.1143498,
+   "truth_at_fire": [
+    0.015690259024459433,
+    -7.732286584800469e-10,
+    4.4633691288153555e-09
+   ],
+   "confirmed_sim": 16.051000000000002,
+   "confirmed_mono": 230526.881417302,
+   "ok": true,
+   "result": "drive_stall for 8.000000 s"
+  }
+ ],
+ "runner_outcome": "FAILED_CONTROLLER",
+ "terminal": {
+  "state": "FAILED_CONTROLLER",
+  "sim": 20.5,
+  "mono": 230531.330712685,
+  "wall": 1794186522.5652492
+ },
+ "finished_sim": 26.5,
+ "finished_mono": 230537.341488175,
+ "finished_wall": 1794186528.5760252,
+ "mono_started": 230508.095377955,
+ "wall_started": 1794186500.9489698
+}

@@ -1,0 +1,118 @@
+{
+ "schema": "ane-sim/trial-metrics/1",
+ "scenario": "F_drive_stall",
+ "trial": 1,
+ "seed": 6001,
+ "metrics": {
+  "outcome": "FAILED_CONTROLLER",
+  "runner_outcome": "FAILED_CONTROLLER",
+  "goal_reached": false,
+  "final_position_error_m": 6.348945615858626,
+  "collisions": 0,
+  "min_clearance_m": 0.5559724164745701,
+  "waypoint_progress": 0.5,
+  "interventions": 0,
+  "max_cross_track_m": 0.05263343725734785,
+  "rms_cross_track_m": 0.013543886242902776,
+  "replans": 0,
+  "sensor_blockage_reports": 0,
+  "operator_blockage_reports": 0,
+  "blocked_nodes": [],
+  "detection_latency_s": null,
+  "detection_latency_from_trigger_s": null,
+  "replan_reaction_s": null,
+  "engine_call_ms": {
+   "ROUTE_PLANNED": [
+    0.055698
+   ],
+   "ROUTE_REPLACED": [],
+   "ROUTE_KEPT": [],
+   "ROUTE_BLOCKED": []
+  },
+  "blocked_nodes_entered": 0,
+  "route_matches_engine": true,
+  "published_routes_match_status": true,
+  "stop_time_after_terminal_s": 0.010000000000001563,
+  "drift_after_stop_m": 0.0,
+  "feedback_holds": 0,
+  "feedback_recoveries": 0,
+  "hold_detect_s": null,
+  "blind_travel_m": null,
+  "commands_zero_during_hold": null,
+  "failure_detect_s": 4.399999999999999,
+  "commands_zero_after_terminal": true,
+  "robot_commands_zero_after_terminal": true,
+  "commands_within_limits": true,
+  "path_length_m": 6.570059247216973,
+  "executed_graph_cost": 6.5,
+  "planned_route_cost": 13.0,
+  "final_route_cost_ahead": 6.5,
+  "mission_time_s": 18.299999999999997,
+  "mission_wall_s": 18.367557701014448,
+  "real_time_factor": 0.9963219007058995,
+  "bag_receive_clock": "simulation",
+  "fault_window_s": [
+   16.05,
+   24.058
+  ]
+ },
+ "acceptance": [
+  {
+   "metric": "outcome",
+   "op": "==",
+   "target": "FAILED_CONTROLLER",
+   "value": "FAILED_CONTROLLER",
+   "pass": true
+  },
+  {
+   "metric": "collisions",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "interventions",
+   "op": "==",
+   "target": "0",
+   "value": 0,
+   "pass": true
+  },
+  {
+   "metric": "failure_detect_s",
+   "op": "<=",
+   "target": "5.0",
+   "value": 4.399999999999999,
+   "pass": true
+  },
+  {
+   "metric": "drift_after_stop_m",
+   "op": "<=",
+   "target": "0.05",
+   "value": 0.0,
+   "pass": true
+  }
+ ],
+ "accepted": true,
+ "consistency": {
+  "navigator_outcome_equals_runner": true,
+  "reported_final_error_matches_ground_truth": true,
+  "reached_nodes_follow_roadmap_and_route": true,
+  "every_engine_route_reproduced_offline": true,
+  "published_routes_are_engine_routes": true,
+  "commands_within_limits": true
+ },
+ "consistent": true,
+ "route_checks": [
+  {
+   "t": 2.15,
+   "type": "ROUTE_PLANNED",
+   "identical": true,
+   "engine_cost": 13.0,
+   "nodes": 27,
+   "blocked": []
+  }
+ ],
+ "navigator_reported_final_error_m": null,
+ "ground_truth_error_at_claim_m": null
+}
