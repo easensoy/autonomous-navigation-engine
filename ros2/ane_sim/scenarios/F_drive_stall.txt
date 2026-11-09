@@ -1,0 +1,22 @@
+ane-scenario 1
+# Format: see A_nominal.txt. Acceptance criteria fixed before the first trial; manifests record this
+# file's SHA-256.
+#
+# Halfway along the middle aisle the fault injector replaces every drive command with zero for 8.0 s
+# (a drive that stops responding). Pose feedback stays fresh. The navigator keeps commanding motion,
+# sees no progress for its 4.0 s progress timeout and must declare a controller failure.
+name F_drive_stall
+title Controlled tracking failure: the drive ignores commands; progress watchdog
+start dispatch
+goal delivery
+trials 5
+seed 6000
+initial_jitter 0.10 0.10 0.20
+timeout 120
+observe 6
+event x_ge 0.0 drive_stall 8.0
+accept outcome == FAILED_CONTROLLER
+accept collisions == 0
+accept interventions == 0
+accept failure_detect_s <= 5.0
+accept drift_after_stop_m <= 0.05
