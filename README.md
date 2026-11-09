@@ -3,19 +3,42 @@
 [![CI](https://github.com/easensoy/autonomous-navigation-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/easensoy/autonomous-navigation-engine/actions/workflows/ci.yml)
 
 A C++17 library that plans least-cost routes on weighted 2-D graphs, follows them one node per step,
-and replans from its current node when nodes ahead are reported blocked. The figures and benchmark
-numbers on this page are regenerated from the library's own output by one command, and a CI job
-re-checks the routes, raw results and quoted numbers against the data in [`docs/data`](docs/data).
+and replans from its current node when nodes ahead are reported blocked. The first animation shows the
+engine inside a ROS 2 stack, driving a simulated robot in Gazebo; the second shows it on a bare graph.
+Both are regenerated from recorded runs, and CI re-checks routes, raw results and quoted numbers
+against the data in [`docs/data`](docs/data) and [`ros2/evidence`](ros2/evidence/README.md).
+
+<img src="ros2/evidence/media/simulation-mission-preview.gif" width="100%" alt="Recording of one simulated trial in four parts. Top: Gazebo Harmonic, a camera following an orange differential-drive robot along a warehouse aisle between blue-and-orange pallet racks; a red pallet appears in the aisle ahead; the view widens over the middle and south aisles while the robot turns back, then follows it through the south aisle to the delivery station. Bottom left: RViz2, a top-down view of the roadmap with the engine's route in green, the ground-truth trajectory in blue and the lidar-blocked nodes in red; the green route switches from the middle aisle to the south aisle. Bottom right: the navigator's recorded telemetry: simulation time, mission and engine state, waypoint, remaining route cost, tracking error, velocity command, last blockage and last engine call. A caption and a timeline name each recorded event, and a label states the playback speed.">
+
+<sub><b>Simulation, not hardware.</b> One recorded trial of scenario B (seed 2000) in Gazebo Harmonic
+with ROS 2 Jazzy, rendered in software in Docker. The robot's pose is the simulator's ground truth; the
+pallet is placed by the scenario script. Quiet stretches play at 10×, the decisive seconds at 1×, as
+each frame states. [Full recording at 1× (MP4)](ros2/evidence/media/simulation-mission.mp4) ·
+[poster](ros2/evidence/media/simulation-mission-poster.png) ·
+[failure case](#robotics-simulation-validation) ·
+[how it was recorded](ros2/evidence/media/simulation-mission.json)</sub>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.gif">
   <img src="docs/assets/hero-light.gif" width="100%" alt="Animated warehouse map with racks, aisles A, B and C, and a hatched picking zone on aisle C. A navigator leaves the dock along aisle B on its planned route, cost 46.7. At step 9, 14 nodes of aisle B ahead are reported blocked. It replans from its current node: down a cross aisle to aisle A, past the blockage, back up to aisle B, and reaches the station after 49 steps, cost 52.3. The abandoned plan stays dashed; during the replan the shortest detour by distance, through the picking zone, appears dotted with its cost of 62.2.">
 </picture>
 
-<sub>Simulated graph steps on a 744-node warehouse graph, one node per step; not a vehicle model.
-Static version: [light](docs/assets/hero-static-light.png) · [dark](docs/assets/hero-static-dark.png).</sub>
+<sub>The planner on its own: simulated graph steps on a 744-node warehouse graph, one node per step;
+not a vehicle model. Static version: [light](docs/assets/hero-static-light.png) ·
+[dark](docs/assets/hero-static-dark.png).</sub>
 
-## What the animation shows
+## What the animations show
+
+**The engine in a robotics stack (simulation).** The robot leaves the dispatch station on the engine's
+route through the middle aisle. The scenario script places a pallet in the aisle without telling the
+navigator. Lidar returns that the static map does not explain block three roadmap nodes in front of
+it, 0.23 s after it appeared; `handleObstacles` replaces the route ahead in 0.12 ms, through the south
+aisle, because the north aisle's picking zone costs more. The robot drives back to the last node it
+reached, follows the detour and stops 0.05 m from the goal. The telemetry panel is the navigator's
+recorded status at the same simulation time. This is one recorded trial; the evaluation over 30 trials,
+and the recorded failure case, are [further down](#robotics-simulation-validation).
+
+**The planner on a graph.**
 
 - **The map is a graph.** One node per free lattice point of a 47 × 24 warehouse: 744 nodes and 2,249
   two-way edges, diagonals included. An edge costs its length in coordinate units (u), times 3 inside
@@ -51,6 +74,105 @@ handling, not by the search. The search share stayed within 12–18% in all 4 ru
 while absolute times moved with machine load. Filtering blocked nodes inside the search and reusing
 the original A\*'s scale, which stays admissible when nodes are removed, would remove most of the rest;
 that change is [proposed, not made](docs/TECHNICAL_NOTES.md#where-a-replans-time-goes).
+
+## Robotics simulation validation
+
+**This is a simulation.** A ROS 2 Jazzy adapter in [`ros2/`](ros2/README.md) runs `NavigationCore` in
+closed loop with a simulated differential-drive robot in Gazebo Harmonic. Nothing here has run on a
+physical robot or on a robot's onboard computer: the simulator, the ROS 2 nodes and the planner share
+one laptop, in one Docker container per trial.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="ros2/evidence/media/software-chain-dark.png">
+  <img src="ros2/evidence/media/software-chain-light.png" width="100%" alt="Diagram of the executed software chain of one trial. The scenario runner requests the mission from graph_navigator and sends operator closures; graph_navigator, the adapter node, maps the pose to the nearest roadmap node, runs the mission executive and segment controller, maps lidar returns to blocked nodes and runs the watchdogs. It calls NavigationCore, this engine (startNavigation, handleObstacles, executeNavigationStep), which returns the node route and state. graph_navigator publishes cmd_vel_nav at 20 Hz to cmd_vel_gate, then to the fault_injector, then to Gazebo Harmonic. Gazebo returns the ground-truth pose through the fault_injector as odom, and the lidar scan at 10 Hz, to graph_navigator.">
+</picture>
+
+**Execution chain:** scenario → graph planner → waypoint/controller interface → simulated robot → pose
+feedback → route progress or replanning.
+
+1. A scenario runner requests a mission. The adapter associates the robot's pose with the nearest
+   roadmap node (within 0.20 m) and calls `NavigationCore::startNavigation`, which plans with A\* on an
+   89-node roadmap generated from the same layout file as the Gazebo world.
+2. The adapter drives the engine's node route edge by edge: it turns in place on nodes, tracks edges by
+   pure pursuit with bounded speed and acceleration, and calls `executeNavigationStep` as each node is
+   reached. The roadmap is checked at start-up against the robot's footprint (0.40 × 0.37 m) for room
+   to turn on every node and to drive every edge with the largest tracking error the controller
+   tolerates.
+3. Gazebo's DiffDrive moves the robot, and the simulator's ground-truth pose closes the loop. Lidar
+   returns that the static map does not explain block roadmap nodes, which go to `handleObstacles`:
+   the engine keeps the route, replaces the part ahead, or enters `BLOCKED`.
+
+**Results.** 30 trials: six scenarios, five seeded trials each (initial-pose jitter and lidar noise), each
+in a fresh container, judged against acceptance criteria written into the scenario files before the
+first trial (campaign `2026-11-09-eval`, run on the integration code as committed). 30 of 30 met every
+criterion. No trial collided: the smallest distance between the robot's footprint and any obstacle was
+0.41 m, and the robot never strayed more than 0.12 m from a roadmap edge. Completed missions ended
+0.016–0.053 m from the goal.
+
+| Scenario | What happens | Result, 5 trials each |
+|---|---|---|
+| A. Nominal | dispatch → delivery through the middle aisle | completed |
+| B. Aisle blockage | a pallet appears in the middle aisle ahead of the robot; nothing tells the navigator | blockage reported from the lidar 0.13–0.22 s after the pallet appeared, the same 5 nodes in every trial; the engine replaced the route in 0.12–0.22 ms (host); completed via the south aisle |
+| C. Disconnection | an operator closes the two outer aisles; the pallet then blocks the middle one | engine `BLOCKED`; the robot stopped 0.53–0.57 s later and did not move again |
+| D. Feedback dropout, 2 s | the pose feedback is withheld mid-aisle | zero velocity within 0.30 s of the loss, at most 0.28 m travelled without feedback; resumed and completed |
+| E. Feedback loss, 6 s | longer than the 4 s recovery window | `FAILED_LOCALIZATION`; robot stopped |
+| F. Drive stall | drive commands are replaced with zero | `FAILED_CONTROLLER` after 4.35–4.40 s (4 s progress timeout) |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="ros2/evidence/figures/simulation-trials-dark.png">
+  <img src="ros2/evidence/figures/simulation-trials-light.png" width="100%" alt="Six top-down warehouse maps, one per scenario A to F, each overlaying the ground-truth trajectories of its five trials. A, D, E and F follow the middle aisle; D shows a short segment during the injected feedback loss, and E and F end mid-aisle. B shows the original route through the middle aisle as a dashed line, the pallet, red crosses on the blocked nodes in front of it, and the replacement route drawn solid back to the west cross aisle and along the south aisle to delivery. C shows purple crosses on the operator-closed north and south aisles, red crosses at the pallet, and the trajectories stopping in the middle aisle.">
+</picture>
+
+<img src="ros2/evidence/media/simulation-failure-preview.gif" width="100%" alt="Recording of one simulated trial of scenario C in four parts. Top: Gazebo Harmonic, the camera follows the robot along the middle aisle; a red pallet appears ahead; the view widens over the middle and south aisles and the robot stays where it stopped. Bottom left: RViz2 with the operator-closed north and south aisles as purple nodes, the lidar-blocked nodes in front of the pallet in red, the travelled path in blue and the invalidated route to the delivery station in red. Bottom right: the navigator's recorded telemetry switching to BLOCKED, with the remaining cost infinite and the velocity command zero. A caption and a timeline name each recorded event.">
+
+<sub><b>The failure case, recorded:</b> scenario C, one trial (seed 3000). Two operator closures (purple)
+leave only the middle aisle; the lidar finds the pallet; `handleObstacles` finds no route, the
+navigator enters `BLOCKED` and commands zero velocity, and the simulator's ground truth shows the robot
+standing still 0.58 s later and not moving again.
+[Full recording at 1× (MP4)](ros2/evidence/media/simulation-failure.mp4) ·
+[how it was recorded](ros2/evidence/media/simulation-failure.json)</sub>
+
+**Recorded runs and evaluation are separate.** Both animations come from campaign
+`2026-11-09-capture`: one trial each of B and C with the Gazebo GUI and RViz2 rendered in software,
+which slowed the simulation to 0.74 and 0.82 of real time. They met the same acceptance criteria but are
+not among the 30 evaluated trials, and the numbers in their captions and telemetry are their own. Each
+recording has a provenance record: engine commit, integration-tree hash, container image, scenario,
+seed, the hashes of the trial files it was drawn from, and its playback speeds. The camera follows the
+robot along its lane and, after the engine's decision, widens to show both aisles; every camera move is
+logged with simulation time, and the camera never acts on the simulation.
+
+**How the numbers were checked.** Robot motion comes from the simulator's ground truth, never from the
+navigator's report. Every engine call that produced a route the robot followed (30 plans, 5
+replacements, 5 `BLOCKED`) was planned again offline by the engine from the same node, around the same
+blocked nodes, and came out identical. CI is configured to repeat that replay on every push, rebuild the
+simulation image and run scenario A once in headless Gazebo; the badge shows its latest result. The
+engine calls are the same A\* through `DynamicReplanner` measured
+[above](#finding-the-search-is-the-small-part-of-a-replan).
+
+**Recordings.** The rosbag2 recordings (307 MB) are not in Git and have not been published;
+[`recordings.json`](ros2/evidence/recordings.json) lists every archive and bag with its size and SHA-256.
+
+**Boundaries.**
+
+- **Simulation, not deployment:** Gazebo only, on a host laptop; no physical robot, nothing onboard.
+- **Ground-truth localisation:** the navigator receives the simulator's pose. Scenarios D and E test
+  missing feedback, not wrong feedback; SLAM and estimation errors are untested.
+- **Scripted versus sensor-derived:** the pallet is placed by the scenario script, and the navigator
+  finds it only through its lidar; the aisle closures in C are operator notifications sent by the
+  script. Both sources are recorded separately.
+- **Responsibilities:** the engine plans and replans. The adapter, outside the library, associates
+  poses, follows routes and maps lidar returns to nodes. Gazebo simulates physics, actuation and the
+  lidar. Nav2 is not used, so there are no costmaps, local planner or recovery behaviours.
+- **Timing:** behaviour runs in simulation time. Wall-clock values are converted to host time,
+  because the container's monotonic clock ran 5.6% fast. The host was shared with other work, and the
+  simulation ran at 0.69–1.05 of real time.
+- **What this establishes:** in this warehouse, with this robot model, the engine's routes were
+  executed without collision, a lidar-detected blockage led to the engine's replacement route, and the
+  failure states halted the robot as specified, in five seeded trials per scenario. Real sensors,
+  moving obstacles, other layouts, embedded timing and safety are untested.
+
+Contracts, robot model, metrics and reproduction: [ros2/README.md](ros2/README.md). Per-trial data:
+[ros2/evidence](ros2/evidence/README.md).
 
 ## Comparing planners
 
@@ -230,27 +352,32 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - `test_api_link_coverage`, which takes the address of all 172 public member functions of the 15
     classes whose declarations were audited, so a declared but undefined member fails the build;
   - 2 benchmark smoke programs.
-- **CI** (`.github/workflows/ci.yml`) runs five jobs. Four build and test on Windows (MSVC, MSYS2 GCC)
+- **CI** (`.github/workflows/ci.yml`) runs seven jobs. Four build and test on Windows (MSVC, MSYS2 GCC)
   and Ubuntu 24.04 (GCC, Clang). The fifth, *Evidence checks*, needs only Python's standard library:
   `check_outputs.py` recomputes every exported route from the exported edge lists, re-reads the raw
   benchmark results and the run history, and requires the quoted numbers on this page;
   `test_check_outputs.py` corrupts the evidence six ways and requires the checker to fail each time;
   `compare_traces.py` rebuilds `evidence_export` and requires the committed traces back. CI never
   times anything.
+- **ROS 2 integration in CI:** one job builds the ROS-independent adapter core and runs its unit and
+  closed-loop tests, and replays the published simulation campaign through the engine. The other, the
+  only simulator-dependent job, builds the simulation image, runs `colcon test` on the four ROS 2
+  packages and one headless Gazebo trial ([details](ros2/README.md#tests-and-checks)).
 - **More:** what the library contains, [docs/LIBRARY.md](docs/LIBRARY.md); design notes and findings
   in depth, [docs/TECHNICAL_NOTES.md](docs/TECHNICAL_NOTES.md); test inventory and toolchains,
   [docs/TESTING.md](docs/TESTING.md); API changes, [CHANGELOG.md](CHANGELOG.md).
 
 ## Limitations
 
-- **Graph planning only:** no time, kinematics or vehicle model; obstacles are node ids the caller
-  reports; a step is one node.
+- **Graph planning only:** no time, kinematics or vehicle model in the library; obstacles are node ids
+  the caller reports; a step is one node. The simulated robot above is driven by an adapter outside the
+  library, in simulation only.
 - **Known defects:** replanning copies the whole graph; `Node::euclideanDistance` scales coordinate
   distances by 0.1, so distances and edge weights can be in different units; most components print
   straight to standard output.
 - **Measurements** come from one laptop shared with other work, under the background load stated
   above, and report no memory use. Linux is built and tested only in CI; macOS has not been tried.
-- **Proposed, not implemented:** replanning without copying the graph; timed trajectories with a
-  simple vehicle model, evaluated in closed loop.
+- **Proposed, not implemented:** replanning without copying the graph; timed trajectories inside the
+  library (the simulation's controller follows node routes without a time parametrisation).
 
 Everything else, including unreachable experimental classes: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
