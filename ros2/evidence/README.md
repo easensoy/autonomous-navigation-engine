@@ -34,6 +34,12 @@ robot was involved.
   code and the world's materials and lighting changed afterwards. All 30 trials of each of the two
   30-trial campaigns met every criterion.
 
+**Engine commit.** The two 2026-11-09 campaigns, and the media made from the capture, record engine
+commit `fbe3278`, the identifier of that commit before the published history was condensed. The
+published commit with the same tree is `8f786e3`; the earlier campaigns record `5f0fc91`, published as
+`3a6630b`. The integration-tree hash is computed from file contents, so it is the same for both
+identifiers ([commit identifiers](../../docs/EVIDENCE.md#commit-identifiers)).
+
 **Development runs not kept here.** Before these campaigns, 11 smoke and probe runs, 2 pipeline checks
 and 4 test captures were used to find two defects in the experiment set-up, both fixed before the
 campaigns: a Gazebo server that survived the end of a trial and fed a second clock and robot into the
