@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-09-eval",
+ "scenario": "E_feedback_loss",
+ "scenario_file": "ros2/ane_sim/scenarios/E_feedback_loss.txt",
+ "scenario_sha256": "181382460ac94ccebcd164fbb50644f5d28fc4b7186fcda8346eca4d8a02e066",
+ "trial": 2,
+ "seed": 5002,
+ "initial_pose": {
+  "x": -6.472431024924828,
+  "y": -0.048866391378001375,
+  "yaw": 0.1418066502750044
+ },
+ "engine_commit": "fbe3278f5ac24defe98d2856985f00fde9fc9598",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-09T01:05:44Z",
+ "mode": "headless"
+}
