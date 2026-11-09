@@ -1,0 +1,105 @@
+{
+ "schema": "ane-sim/runner-result/1",
+ "scenario": "B_aisle_blockage",
+ "scenario_title": "Mid-mission aisle blockage detected by the lidar, with an alternative route",
+ "scenario_file": "B_aisle_blockage.txt",
+ "scenario_sha256": "4f40598746fbc880ba7e582566defe16c75d5dbb6fa49fcc9b46a532696fb7c0",
+ "trial": 2,
+ "seed": 2002,
+ "initial_pose": {
+  "x": -6.454502,
+  "y": 5.7e-05,
+  "yaw": 0.111001
+ },
+ "mission": {
+  "requested_sim": 2.1,
+  "requested_mono": 218330.428279364,
+  "requested_wall": 1794174929.5326018,
+  "accepted": true,
+  "message": "route of 27 nodes",
+  "start_node": 0,
+  "goal_node": 88,
+  "route": [
+   0,
+   1,
+   2,
+   9,
+   17,
+   20,
+   23,
+   26,
+   29,
+   32,
+   35,
+   38,
+   41,
+   44,
+   47,
+   50,
+   53,
+   56,
+   59,
+   62,
+   65,
+   68,
+   71,
+   79,
+   86,
+   87,
+   88
+  ],
+  "route_cost": 13.0,
+  "truth_at_request": [
+   -6.454502,
+   5.6999999999999996e-05,
+   0.111001
+  ]
+ },
+ "events": [
+  {
+   "trigger": "x_ge",
+   "trigger_value": -3.0,
+   "action": "spawn_obstacle",
+   "args": [
+    "pallet_b",
+    "1.0",
+    "0.0",
+    "1.0",
+    "1.2",
+    "1.0"
+   ],
+   "fired_sim": 9.65,
+   "fired_mono": 218337.980745846,
+   "fired_wall": 1794174937.0850677,
+   "truth_at_fire": [
+    -2.998111605602066,
+    -2.4292792792100896e-07,
+    -6.550344446342697e-07
+   ],
+   "confirmed_sim": 9.895000000000001,
+   "confirmed_mono": 218338.328882416,
+   "confirmed_wall": 1794174937.4332042,
+   "result": "data: true",
+   "ok": true,
+   "geometry": {
+    "cx": 1.0,
+    "cy": 0.0,
+    "sx": 1.0,
+    "sy": 1.2,
+    "height": 1.0
+   }
+  }
+ ],
+ "runner_outcome": "COMPLETED",
+ "terminal": {
+  "state": "COMPLETED",
+  "sim": 68.9,
+  "mono": 218397.466310216,
+  "wall": 1794174993.7416942
+ },
+ "finished_sim": 71.9,
+ "finished_mono": 218400.471825339,
+ "finished_wall": 1794174996.7472103,
+ "mono_started": 218325.747915471,
+ "wall_started": 1794174926.2539358
+}
