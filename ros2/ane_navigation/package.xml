@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ane_navigation</name>
+  <version>0.1.0</version>
+  <description>ROS 2 adapter for the Autonomous Navigation Engine: graph_navigator plans and replans with the engine's NavigationCore and drives the route; cmd_vel_gate is a simulator-independent stop and stale-command guard; fault_injector is the test instrument for feedback and drive faults. The engine and the ROS-independent adapter core (core/) are built from this repository.</description>
+  <maintainer email="easensoy@users.noreply.github.com">easensoy</maintainer>
+  <!-- The repository has no LICENSE file; until one is added, the default (all rights reserved) applies. -->
+  <license>All rights reserved</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>ane_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
