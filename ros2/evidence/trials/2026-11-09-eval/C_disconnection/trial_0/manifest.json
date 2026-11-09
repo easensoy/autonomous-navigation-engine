@@ -1,0 +1,18 @@
+{
+ "schema": "ane-sim/trial-manifest/1",
+ "campaign": "2026-11-09-eval",
+ "scenario": "C_disconnection",
+ "scenario_file": "ros2/ane_sim/scenarios/C_disconnection.txt",
+ "scenario_sha256": "6d83659b31020db95dbcfb60d5fc9ee060f2667ba35413ed5bf8d04edcde1151",
+ "trial": 0,
+ "seed": 3000,
+ "initial_pose": {
+  "x": -6.472224707712441,
+  "y": -0.03754466461643396,
+  "yaw": -0.0877657839130015
+ },
+ "engine_commit": "fbe3278f5ac24defe98d2856985f00fde9fc9598",
+ "image_id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+ "started_utc": "2026-11-09T00:57:46Z",
+ "mode": "headless"
+}
