@@ -1,6 +1,9 @@
 # Builds the library, the demo and every test, then runs CTest and the demo:
 # on Windows with MSVC and with GCC from MSYS2, and on Ubuntu with GCC and Clang.
 # A fifth job checks the committed evidence (docs/data, docs/assets, README) without timing anything.
+# Two jobs cover the ROS 2 integration (ros2/): the adapter core and the published simulation evidence
+# without ROS, and the ROS 2 / Gazebo packages in the same container image the trials ran in, with one
+# headless simulation trial as a simulator-dependent smoke test.
 name: CI
 
 on:
@@ -113,3 +116,49 @@ jobs:
 
       - name: Reproduce the committed traces
         run: python3 tools/evidence/compare_traces.py build/tools/evidence/evidence_export
+
+  # The ROS-independent adapter core (ros2/ane_navigation/core) and the published simulation evidence.
+  # Ordinary unit and closed-loop tests: no ROS, no simulator.
+  adapter-core:
+    name: ROS 2 adapter core and simulation evidence (no ROS)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Build and test the adapter core
+        run: |
+          cmake -S ros2/ane_navigation/core -B build/adapter-core -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/adapter-core --parallel
+          ctest --test-dir build/adapter-core --output-on-failure
+
+      - name: The world and the roadmap match the warehouse layout
+        run: python3 ros2/ane_sim/scripts/generate_world.py --check
+
+      - name: Check the simulation evidence and replay every recorded engine route
+        run: python3 ros2/tools/check_sim_evidence.py --route-check build/adapter-core/ane_route_check
+
+      - name: Check that the checker detects corrupted simulation evidence
+        run: python3 ros2/tools/test_check_sim_evidence.py --route-check build/adapter-core/ane_route_check
+
+  # Simulator-dependent: builds ros2/docker/Dockerfile (ROS 2 Jazzy, Gazebo Harmonic), builds and tests the
+  # ROS 2 packages in it, and runs scenario A once in headless Gazebo. Runner timing is not evaluated;
+  # the trial's acceptance criteria are in simulation time.
+  ros2-gazebo:
+    name: ROS 2 Jazzy / Gazebo Harmonic (packages and a simulation trial)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Build the simulation image
+        run: docker build -t ane-sim:jazzy ros2/docker
+
+      - name: Build the ROS 2 workspace and run colcon test
+        run: docker run --rm -v "$PWD:/ane" -v ane-ws:/ws ane-sim:jazzy bash /ane/ros2/tools/container_build.sh --test
+
+      - name: Run scenario A once in headless Gazebo
+        run: |
+          docker run --rm -v "$PWD:/ane" -v ane-ws:/ws ane-sim:jazzy bash /ane/ros2/tools/container_trial.sh \
+            /ane/ros2/ane_sim/scenarios/A_nominal.txt 0 1000 -6.5 0.0 0.0 /ane/build/ci-trial/out /ane/build/ci-trial/bag
+          python3 -c "import json, sys; r = json.load(open('build/ci-trial/out/metrics.json')); m = r['metrics']; print({k: m[k] for k in ('outcome', 'final_position_error_m', 'collisions', 'min_clearance_m', 'real_time_factor')}); sys.exit(0 if r['accepted'] and r['consistent'] else 1)"
