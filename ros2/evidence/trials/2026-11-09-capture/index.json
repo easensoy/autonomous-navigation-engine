@@ -1,0 +1,27 @@
+{
+ "schema": "ane-sim/trial-index/1",
+ "attempts": [
+  {
+   "scenario": "B_aisle_blockage",
+   "trial": 0,
+   "seed": 2000,
+   "status": "completed",
+   "host_elapsed_s": 145.7,
+   "outcome": "COMPLETED",
+   "accepted": true,
+   "consistent": true,
+   "finished_utc": "2026-11-09T01:15:39Z"
+  },
+  {
+   "scenario": "C_disconnection",
+   "trial": 0,
+   "seed": 3000,
+   "status": "completed",
+   "host_elapsed_s": 62.7,
+   "outcome": "BLOCKED",
+   "accepted": true,
+   "consistent": true,
+   "finished_utc": "2026-11-09T01:16:41Z"
+  }
+ ]
+}

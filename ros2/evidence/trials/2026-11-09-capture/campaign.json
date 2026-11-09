@@ -1,0 +1,108 @@
+{
+ "schema": "ane-sim/campaign/1",
+ "campaign": "2026-11-09-capture",
+ "note": "Recorded runs for the README: scenario B (the full mission) and scenario C (the failure case) with the Gazebo GUI and RViz2 rendered in software on a virtual display, on the integration code committed at fbe3278. Rendering lowers the real-time factor; these trials are not part of the evaluation campaign's statistics.",
+ "started_utc": "2026-11-09T01:12:10Z",
+ "engine_commit": "fbe3278f5ac24defe98d2856985f00fde9fc9598",
+ "engine_sources_modified": true,
+ "engine_source_changes": [
+  "?? include/README.md"
+ ],
+ "integration_tree_sha256": "f5a791131591df31e8b94643c0dded0481cf83160ff90c192ad74d7bbc8f83ea",
+ "integration_tree_definition": "scenario_lib.integration_tree_sha256: every file under ros2/ except evidence/ and *.md, LF line endings",
+ "integration_sources_uncommitted": [
+  "?? ros2/README.md"
+ ],
+ "image": {
+  "tag": "ane-sim:jazzy",
+  "id": "sha256:923776cdc552e7f63735fd6293ac918a952ed30796f5616313f47fd3d5ebaa56",
+  "versions": [
+   "image-built-utc 2026-11-08T19:55:51Z",
+   "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"",
+   "VERSION_ID=\"24.04\"",
+   "cmake 3.28.3-1build7",
+   "ffmpeg 7:6.1.1-3ubuntu5",
+   "g++ 4:13.2.0-7ubuntu1",
+   "libgl1-mesa-dri 25.2.8-0ubuntu0.24.04.4",
+   "python3 3.12.3-0ubuntu2.1",
+   "ros-jazzy-gz-physics-vendor 0.0.9-1noble.20260905.065116",
+   "ros-jazzy-gz-rendering-vendor 0.0.7-1noble.20260905.065113",
+   "ros-jazzy-gz-sensors-vendor 0.0.6-1noble.20260905.071631",
+   "ros-jazzy-gz-sim-vendor 0.0.13-1noble.20260905.073557",
+   "ros-jazzy-gz-tools-vendor 0.0.8-1noble.20260820.143431",
+   "ros-jazzy-gz-transport-vendor 0.0.9-1noble.20260905.065154",
+   "ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434",
+   "ros-jazzy-robot-state-publisher 3.3.4-1noble.20260915.184559",
+   "ros-jazzy-ros-base 0.11.0-1noble.20261006.035407",
+   "ros-jazzy-ros-gz 1.0.24-1noble.20261006.041805",
+   "ros-jazzy-ros-gz-bridge 1.0.24-1noble.20260920.234644",
+   "ros-jazzy-ros-gz-sim 1.0.24-1noble.20261006.035056",
+   "ros-jazzy-rosbag2 0.26.11-1noble.20261006.034645",
+   "ros-jazzy-rosbag2-storage-mcap 0.26.11-1noble.20260911.143733",
+   "ros-jazzy-rviz2 14.1.24-1noble.20260915.204213",
+   "ros-jazzy-sdformat-vendor 0.0.14-1noble.20260905.033543",
+   "ros-jazzy-tf2-ros 0.36.23-1noble.20260915.173839",
+   "ros-jazzy-xacro 2.1.1-1noble.20260519.011123",
+   "xvfb 2:21.1.12-1ubuntu1.9"
+  ]
+ },
+ "host": {
+  "os": "Windows-11-10.0.26200-SP0",
+  "python": "3.13.5",
+  "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+  "cores": 16,
+  "logical_processors": 22,
+  "ram_gib": 31.5,
+  "model": "Precision 5690",
+  "gpu": "NVIDIA RTX 1000 Ada Generation Laptop GPU, 596.71",
+  "rendering": "software (Mesa llvmpipe in the container); the GPU is not used",
+  "docker": {
+   "server": "28.3.2",
+   "cpus": 22,
+   "memory_gib": 9.7,
+   "os": "Docker Desktop",
+   "kernel": "5.15.153.1-microsoft-standard-WSL2"
+  }
+ },
+ "timing": {
+  "physics_step_s": 0.001,
+  "target_real_time_factor": 1.0,
+  "control_rate_hz": 20,
+  "ground_truth_rate_hz": 50,
+  "lidar_rate_hz": 10,
+  "gate_rate_hz_wall": 20
+ },
+ "files_sha256": {
+  "roadmap": "359d693b97df2c15fa85313cb5222703f2140b9732619d32eccc65cf4a13869b",
+  "world": "b1b1ba3195bc0f0d1fdc05bc63f38195e7942f136cedb17e65d703d5a56019ab",
+  "navigator_params": "c04d47118e69b1b19a89490bfcd8dfc927992270cf222181e45b07b50b9088f6",
+  "robot_xacro": "7e919cb43738c902016ff79e71ca7551af96e8490610a769ae1e0b8c55cd5314"
+ },
+ "clock_check_before": {
+  "container_monotonic_s": 60.0029,
+  "container_realtime_s": 56.7731,
+  "container_realtime_steps_s": [
+   -0.713,
+   -0.904,
+   -0.687,
+   -0.904
+  ],
+  "host_monotonic_s": 56.7873,
+  "container_monotonic_rate": 1.05663,
+  "definition": "container_monotonic_rate = container monotonic seconds per host second over the window"
+ },
+ "clock_check_after": {
+  "container_monotonic_s": 60.0046,
+  "container_realtime_s": 56.7925,
+  "container_realtime_steps_s": [
+   -0.699,
+   -0.907,
+   -0.678,
+   -0.907
+  ],
+  "host_monotonic_s": 56.7929,
+  "container_monotonic_rate": 1.05655,
+  "definition": "container_monotonic_rate = container monotonic seconds per host second over the window"
+ },
+ "finished_utc": "2026-11-09T01:17:39Z"
+}
