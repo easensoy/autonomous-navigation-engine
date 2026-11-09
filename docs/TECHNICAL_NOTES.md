@@ -1,7 +1,9 @@
 # Technical notes
 
 Design decisions, the measured findings behind the README, and what they imply. Numbers come from
-`docs/data/summary.json` unless stated otherwise ([how they were measured](EVIDENCE.md)).
+`docs/data/summary.json` unless stated otherwise ([how they were measured](EVIDENCE.md)). Commit
+identifiers name the commits the work was done on; the [commit identifiers](EVIDENCE.md#commit-identifiers)
+table maps them to the published history.
 
 - [Why the default A\* heuristic is safe](#why-the-default-a-heuristic-is-safe)
 - [A\* tie bug found by the traces](#a-tie-bug-found-by-the-traces)
