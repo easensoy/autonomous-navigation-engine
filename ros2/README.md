@@ -17,6 +17,7 @@ on one laptop in one container per trial.
 - [Warehouse world and roadmap](#warehouse-world-and-roadmap)
 - [RViz2 view](#rviz2-view)
 - [Scenarios and acceptance criteria](#scenarios-and-acceptance-criteria)
+- [Experimental methodology](#experimental-methodology)
 - [Results](#results)
 - [Metrics](#metrics)
 - [Clocks](#clocks)
@@ -265,6 +266,38 @@ creates a model in Gazebo and tells the navigator nothing; the blockage the navi
 `OPERATOR`-sourced report on `ane/blockage_reports`, with no physical obstacle. Both are recorded with
 their sources (`ane/events`, `ane/scenario_events`).
 
+## Experimental methodology
+
+**Evaluation trials** (campaign `2026-11-09-eval`). Six scenarios, five trials each, run headless. Each
+trial runs in a fresh container from the image `ane-sim:jazzy` (`sha256:923776cdc552…`); its seed
+(`seed + trial`) sets the initial-pose jitter and the lidar noise. The acceptance criteria in the
+scenario files were fixed before the first trial, and every manifest records its scenario file's
+SHA-256. Every attempted trial is listed in the campaign's `index.json`. Metrics come from the trial's
+rosbag2 recording, with robot motion from the simulator's ground truth ([metrics](#metrics)); wall-clock
+values are converted to host time ([clocks](#clocks)); every engine call that produced a route is planned
+again offline by `ane_route_check` ([checks](#tests-and-checks)).
+
+**Recorded demonstrations** (campaign `2026-11-09-capture`). The README's two animations show scenario B,
+trial 0 (seed 2000), and scenario C, trial 0 (seed 3000): separate trials, analysed like the others but
+outside the evaluation's statistics, so their captions and telemetry report their own values.
+
+| | How the recordings were made |
+|---|---|
+| Container | `ane-sim:jazzy` (`sha256:923776cdc552…`), the evaluation's image: ROS 2 Jazzy, Gazebo Harmonic ([versions](#stack-and-versions)); one container per trial |
+| Rendering | Gazebo GUI and RViz2 on a virtual X display (Xvfb), software OpenGL (Mesa llvmpipe). Rendering slowed the simulation to a real-time factor of 0.74 (B) and 0.82 (C) in host time |
+| Screen capture | up to 10 frames per wall-clock second (`tools/capture_frames.py`), each stamped with the container's monotonic clock and placed on the simulation clock through `capture_clock.csv` |
+| Robot pose | simulator ground truth (Gazebo's OdometryPublisher), the navigator's only pose input; no localisation runs |
+| Obstacle insertion | scripted: once the robot is in the middle aisle (x ≥ −3), the scenario runner creates the 1.0 × 1.2 × 1.0 m pallet at (1, 0) through Gazebo's create service. The navigator is not told and detects it only with the lidar. In C, the closures of the outer aisles are scripted operator reports on `ane/blockage_reports` |
+| Camera | follows the robot along its lane in the world frame and, after the engine replaces the route or finds none, widens to the middle and south aisles (`tools/capture_camera.py`). Every move is logged with simulation time in the trial's `camera_log.csv`; the camera never acts on the simulation |
+| Panels | top: Gazebo; bottom left: RViz2 ([view](#rviz2-view)); bottom right: the navigator's recorded status (`ane/status`, 10 Hz) at the same simulation time. Captions and the timeline come from the trial's recorded events |
+| Playback | full recordings (MP4): 1× simulation time, 10 frames per simulated second. README previews (GIF, 800 px, 7 frames/s): 10×, except the decisive seconds at 1× (B: simulation time 32.70–37.93 s; C: 31.96–35.12 s). Every frame states its playback speed |
+| Provenance | [`simulation-mission.json`](evidence/media/simulation-mission.json) and [`simulation-failure.json`](evidence/media/simulation-failure.json): trial, scenario file and its SHA-256, seed, initial pose, engine commit (`fbe3278`, published as `8f786e3`), integration-tree hash, image id, the hashes of the trial files drawn from, capture spans and playback speeds |
+
+Media: [mission recording (MP4)](evidence/media/simulation-mission.mp4) ·
+[poster](evidence/media/simulation-mission-poster.png) ·
+[failure recording (MP4)](evidence/media/simulation-failure.mp4), drawn by `tools/make_video.py` from
+the screen frames and the trial's recorded data ([reproduce](#reproduce)).
+
 ## Results
 
 **Evaluation campaign `2026-11-09-eval`** (engine commit `fbe3278`, which contains this integration
@@ -289,17 +322,10 @@ behaviour, which runs in simulation time.
 
 ![Trajectories of every trial](evidence/figures/simulation-trials-light.png)
 
-**Recorded runs `2026-11-09-capture`**: one trial each of scenarios B and C, with the Gazebo GUI and
-RViz2 rendered in software on a virtual display; they are the source of the README's animations and are
-not part of the evaluation. B completed 0.050 m from the goal, with the lidar blockage 0.225 s after the
-pallet appeared and a route replacement of 0.125 ms (container clock); C reached `BLOCKED` and stood
-still 0.58 s later. Rendering slowed the simulation to a real-time factor of 0.74 and 0.82 in host time.
-Each trial folder also holds `camera_log.csv`, every move of the GUI camera
-(`tools/capture_camera.py`: it follows the robot along its lane in the world frame, and shows an
-overview of the middle and south aisles after the engine replaces the route or finds none). The media in
-[`evidence/media`](evidence/media) are drawn by `tools/make_video.py` from the screen frames and the
-trial's recorded data; each has a provenance record (`.json`) listing the trial, the engine commit, the
-integration-tree hash, the image, the hashes of the trial files and the playback speeds.
+**Recorded runs `2026-11-09-capture`** (the README's animations; not part of the evaluation, see
+[methodology](#experimental-methodology)): B completed 0.050 m from the goal, with the lidar blockage
+0.225 s after the pallet appeared and a route replacement of 0.125 ms (container clock); C reached
+`BLOCKED` and stood still 0.58 s later.
 
 **Earlier campaigns** `2026-11-08`, `2026-11-08-eval` and `2026-11-08-capture` ran on an earlier,
 uncommitted revision of this integration with the same navigation code (the recording and visualisation
