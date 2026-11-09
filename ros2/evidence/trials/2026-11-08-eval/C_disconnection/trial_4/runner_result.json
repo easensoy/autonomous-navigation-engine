@@ -1,0 +1,151 @@
+{
+ "schema": "ane-sim/runner-result/1",
+ "scenario": "C_disconnection",
+ "scenario_title": "Complete route disconnection: two operator closures and a detected blockage",
+ "scenario_file": "C_disconnection.txt",
+ "scenario_sha256": "6d83659b31020db95dbcfb60d5fc9ee060f2667ba35413ed5bf8d04edcde1151",
+ "trial": 4,
+ "seed": 3004,
+ "initial_pose": {
+  "x": -6.50107,
+  "y": -0.058706,
+  "yaw": -0.167762
+ },
+ "mission": {
+  "requested_sim": 2.1,
+  "requested_mono": 218703.148582635,
+  "requested_wall": 1794175285.2888412,
+  "accepted": true,
+  "message": "route of 27 nodes",
+  "start_node": 0,
+  "goal_node": 88,
+  "route": [
+   0,
+   1,
+   2,
+   9,
+   17,
+   20,
+   23,
+   26,
+   29,
+   32,
+   35,
+   38,
+   41,
+   44,
+   47,
+   50,
+   53,
+   56,
+   59,
+   62,
+   65,
+   68,
+   71,
+   79,
+   86,
+   87,
+   88
+  ],
+  "route_cost": 13.0,
+  "truth_at_request": [
+   -6.50107,
+   -0.058706,
+   -0.167762
+  ]
+ },
+ "events": [
+  {
+   "trigger": "at_start",
+   "trigger_value": 0.0,
+   "action": "close_region",
+   "args": [
+    "north_aisle",
+    "-3.5",
+    "2.5",
+    "3.5",
+    "3.5"
+   ],
+   "fired_sim": 2.1500000000000004,
+   "fired_mono": 218703.199687441,
+   "fired_wall": 1794175285.3399444,
+   "truth_at_fire": [
+    -6.50107,
+    -0.058706,
+    -0.167762
+   ],
+   "confirmed_sim": 2.1500000000000004,
+   "confirmed_mono": 218703.199687441,
+   "ok": true
+  },
+  {
+   "trigger": "at_start",
+   "trigger_value": 0.0,
+   "action": "close_region",
+   "args": [
+    "south_aisle",
+    "-3.5",
+    "-3.5",
+    "3.5",
+    "-2.5"
+   ],
+   "fired_sim": 2.1500000000000004,
+   "fired_mono": 218703.200442337,
+   "fired_wall": 1794175285.340699,
+   "truth_at_fire": [
+    -6.50107,
+    -0.058706,
+    -0.167762
+   ],
+   "confirmed_sim": 2.1500000000000004,
+   "confirmed_mono": 218703.200442337,
+   "ok": true
+  },
+  {
+   "trigger": "x_ge",
+   "trigger_value": -3.0,
+   "action": "spawn_obstacle",
+   "args": [
+    "pallet_c",
+    "1.0",
+    "0.0",
+    "1.0",
+    "1.2",
+    "1.0"
+   ],
+   "fired_sim": 10.25,
+   "fired_mono": 218711.334951846,
+   "fired_wall": 1794175293.475209,
+   "truth_at_fire": [
+    -2.997964340626848,
+    2.407245946941558e-06,
+    8.157610411185108e-07
+   ],
+   "confirmed_sim": 10.494,
+   "confirmed_mono": 218711.680740279,
+   "confirmed_wall": 1794175293.8209972,
+   "result": "data: true",
+   "ok": true,
+   "geometry": {
+    "cx": 1.0,
+    "cy": 0.0,
+    "sx": 1.0,
+    "sy": 1.2,
+    "height": 1.0
+   }
+  }
+ ],
+ "runner_outcome": "BLOCKED",
+ "terminal": {
+  "state": "BLOCKED",
+  "sim": 10.700000000000001,
+  "mono": 218711.936033176,
+  "wall": 1794175294.0762906
+ },
+ "finished_sim": 16.75,
+ "finished_mono": 218717.992420605,
+ "finished_wall": 1794175300.1326778,
+ "mono_started": 218698.498537172,
+ "wall_started": 1794175280.6387916
+}
