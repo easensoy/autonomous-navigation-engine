@@ -47,7 +47,8 @@ Most of the test time goes to two programs:
 On 8 November 2026, the library and tests as committed at `361f788`, the benchmark run's source, were
 built and tested on Windows 11 Pro 10.0.26200 (Intel Core Ultra 7 165H), Release, with CMake 4.3.1 and
 Ninja 1.13.2. They are unchanged at `27da527`, the source state in `docs/data/manifest.json`: the
-commits in between touch only Python evidence scripts.
+commits in between touch only Python evidence scripts. Both identifiers are mapped to the published
+history in [commit identifiers](EVIDENCE.md#commit-identifiers).
 
 | Compiler | CTest programs | Total time |
 |---|---|---:|
