@@ -1,0 +1,40 @@
+# ros_gz_bridge parameter_bridge configuration (ros_gz 1.0, ROS 2 Jazzy, Gazebo Harmonic).
+# Only these topics cross between Gazebo and ROS.
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+# Simulator ground truth (OdometryPublisher): the robot's pose from the simulation state.
+- ros_topic_name: /ground_truth/odom
+  gz_topic_name: /model/ane_amr/ground_truth/odometry
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+- ros_topic_name: /tf
+  gz_topic_name: /model/ane_amr/ground_truth/tf
+  ros_type_name: tf2_msgs/msg/TFMessage
+  gz_type_name: gz.msgs.Pose_V
+  direction: GZ_TO_ROS
+# Wheel odometry from DiffDrive: recorded for comparison, not used by the navigator.
+- ros_topic_name: /wheel_odom
+  gz_topic_name: /model/ane_amr/wheel_odometry
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+- ros_topic_name: /scan
+  gz_topic_name: /model/ane_amr/scan
+  ros_type_name: sensor_msgs/msg/LaserScan
+  gz_type_name: gz.msgs.LaserScan
+  direction: GZ_TO_ROS
+- ros_topic_name: /joint_states
+  gz_topic_name: /model/ane_amr/joint_states
+  ros_type_name: sensor_msgs/msg/JointState
+  gz_type_name: gz.msgs.Model
+  direction: GZ_TO_ROS
+# Drive commands: navigator -> cmd_vel_gate -> fault_injector -> /cmd_vel_robot -> DiffDrive.
+- ros_topic_name: /cmd_vel_robot
+  gz_topic_name: /model/ane_amr/cmd_vel
+  ros_type_name: geometry_msgs/msg/Twist
+  gz_type_name: gz.msgs.Twist
+  direction: ROS_TO_GZ
