@@ -240,6 +240,12 @@ if(BUILD_EVIDENCE_TOOLS)
     add_subdirectory(tools/evidence)
 endif()
 
+# Synthetic left-hand-traffic road driving on the engine's Graph and NavigationCore (off by default).
+option(BUILD_ROAD_DRIVING "Build road_driving/ (synthetic road-driving extension)" OFF)
+if(BUILD_ROAD_DRIVING)
+    add_subdirectory(road_driving)
+endif()
+
 install(TARGETS NavigationEngine
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
