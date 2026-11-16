@@ -1,0 +1,10 @@
+t,source,type,detail
+0.00,WORLD,EPISODE_START,network=R1;labels=SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE;start=J00>J10/0;goal=J21>J22/2
+0.00,STACK,ROUTE_PLANNED,elements=19;engine=ACTIVE
+12.39,WORLD,CLOSURE_NOTIFIED,id=X1;kind=ROADWORKS;source=ORACLE;front_to_junction=2.972;front_to_barrier=168.995;v=8.941
+12.40,STACK,CLOSURE_OBSERVED,id=X1;kind=ROADWORKS;source=ORACLE;v=8.94;element=J00>J10/4;front_to_barrier=168.91
+12.40,STACK,ENGINE_REPORT,state=ACTIVE
+12.40,STACK,REPLAN,reason=closure X1;class=INFEASIBLE;a_req=3.86;v=8.94;via=J10:W>N J11:S>N J12:S>W J02:E>S J01:N>E J11:W>E J21:W>N
+12.40,STACK,MONITOR_TRIGGER,speed caps ahead need 3.86 m/s^2, above the firm limit
+12.40,STACK,FALLBACK_STOP,v=8.94;decel=8.00
+14.00,STACK,STOPPED,after fallback
