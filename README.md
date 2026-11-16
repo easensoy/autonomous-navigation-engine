@@ -6,7 +6,10 @@ A C++17 library that plans least-cost routes on weighted 2-D graphs, follows the
 and replans from its current node when nodes ahead are reported blocked. Below, it drives a simulated
 robot in Gazebo through ROS 2, then runs on its own on a warehouse graph. Both animations are
 regenerated from recorded runs, and CI recomputes the routes and checks the headline numbers against the
-data in [`docs/data`](docs/data) and [`ros2/evidence`](ros2/evidence/README.md).
+data in [`docs/data`](docs/data) and [`ros2/evidence`](ros2/evidence/README.md). An opt-in extension,
+[`road_driving/`](road_driving/README.md), uses the same routing and replanning for a car-sized
+kinematic vehicle on a synthetic left-hand-traffic road network
+([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
 
 <img src="ros2/evidence/media/simulation-mission-preview.gif" width="100%" alt="Recording of one simulated trial in four parts. Top: Gazebo Harmonic, a camera following an orange differential-drive robot along a warehouse aisle between blue-and-orange pallet racks; a red pallet appears in the aisle ahead; the view widens over the middle and south aisles while the robot turns back, then follows it through the south aisle to the delivery station. Bottom left: RViz2, a top-down view of the roadmap with the engine's route in green, the ground-truth trajectory in blue and the lidar-blocked nodes in red; the green route switches from the middle aisle to the south aisle. Bottom right: the navigator's recorded telemetry: simulation time, mission and engine state, waypoint, remaining route cost, tracking error, velocity command, last blockage and last engine call. A caption and a timeline name each recorded event, and a label states the playback speed.">
 
@@ -239,6 +242,25 @@ how the implementation was checked; tests on finite samples are evidence, not pr
 Depth-first search returns some route, with no optimality guarantee, and throws for an unknown start or
 goal where the other searches return an empty route.
 
+## Road driving: a synthetic left-hand-traffic slice
+
+[`road_driving/`](road_driving/README.md) (CMake option `BUILD_ROAD_DRIVING`, off by default) puts a
+car-sized vehicle on the engine. Lane segments and turning movements are graph nodes, so one-way
+streets, a banned turn and the absence of U-turns are missing edges. `NavigationCore` plans the route
+and, when a roadworks closure is reported, replans from the element the car occupies. A kinematic
+bicycle with approximately I-PACE dimensions, steering-rate, delay and braking limits drives the route.
+When the car cannot slow for the new route's turn within the firm braking limit, the turn is masked in
+the engine and the car stops before the barrier instead.
+
+- **Late notifications:** reported 80 to 20 m before the barrier, the closure ends every episode 1.84 to
+  1.90 m short of it at no more than 1.86 m/s². At 12 m, full braking stops 2.85 to 4.87 m short; at 6 m
+  the car enters the closure by up to 3.73 m and the episode is labelled unavoidable.
+- **Commitment:** notified 3 m before the last junction, the commitment-aware variant masks the turn it
+  cannot make and stops at the barrier. The plain variant accepts the engine's detour, and its monitor
+  brakes to a fallback stop; that episode is stored, and CI replays it.
+- **Reproducibility:** 192 episodes (16 scenarios, 6 seeds, 2 variants) gave byte-identical truth logs
+  with GCC 14.2 and MSVC 19.51. Cross-track error was at most 0.162 m, with no illegal move.
+
 ## Experimental scope
 
 **Robotics simulation.**
@@ -284,6 +306,11 @@ goal where the other searches return an empty route.
 
 **Library.** Graph planning only: no time, kinematics or vehicle model; obstacles are node ids the
 caller reports; a step is one node.
+
+**Road-driving extension.** Synthetic roads, ground-truth pose and an oracle-reported closure, with no
+other road user. The vehicle model is kinematic, with parameters that approximate an I-PACE's published
+dimensions. It was tuned and tested on one development network. A held-out network, perception,
+prediction and localisation are not built yet ([details](road_driving/README.md#experimental-scope)).
 
 ## Known defects and proposed work
 
@@ -355,6 +382,9 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - `test_api_link_coverage`, which takes the address of all 172 public member functions of the 15
     classes whose declarations were audited, so a declared but undefined member fails the build;
   - 2 benchmark smoke programs.
+- **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds `test_road_driving` (288
+  checks), a replay of the stored failing episode, and a replay of a changed copy that must be
+  rejected. CI turns the option on in the four build jobs.
 - **CI** (`.github/workflows/ci.yml`) runs seven jobs. Four build and test on Windows (MSVC, MSYS2 GCC)
   and Ubuntu 24.04 (GCC, Clang). The fifth, *Evidence checks*, needs only Python's standard library:
   `check_outputs.py` recomputes every exported route from the exported edge lists, re-reads the raw
