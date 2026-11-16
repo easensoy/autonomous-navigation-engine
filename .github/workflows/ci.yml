@@ -1,5 +1,7 @@
 # Builds the library, the demo and every test, then runs CTest and the demo:
-# on Windows with MSVC and with GCC from MSYS2, and on Ubuntu with GCC and Clang.
+# on Windows with MSVC and with GCC from MSYS2, and on Ubuntu with GCC and Clang. These four jobs also
+# build the road-driving extension (road_driving/, BUILD_ROAD_DRIVING=ON), so CTest runs its tests and
+# the replay of its stored failing episode on every toolchain.
 # A fifth job checks the committed evidence (docs/data, docs/assets, README) without timing anything.
 # Two jobs cover the ROS 2 integration (ros2/): the adapter core and the published simulation evidence
 # without ROS, and the ROS 2 / Gazebo packages in the same container image the trials ran in, with one
@@ -32,7 +34,7 @@ jobs:
           set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
           for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
           call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=cl || exit /b 1
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=cl -DBUILD_ROAD_DRIVING=ON || exit /b 1
           cmake --build build || exit /b 1
           ctest --test-dir build --output-on-failure --timeout 600 || exit /b 1
           build\AutonomousNavigationEngine.exe > demo-output.txt || exit /b 1
@@ -56,7 +58,7 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++ -DBUILD_ROAD_DRIVING=ON
 
       - name: Build
         run: cmake --build build
@@ -83,7 +85,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DBUILD_ROAD_DRIVING=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -93,6 +95,11 @@ jobs:
 
       - name: Run the demo
         run: ./build/AutonomousNavigationEngine > demo-output.txt
+
+      - name: Print the road-driving scenario outcomes
+        run: |
+          ./build/road_driving/road_drive suite --variant B1
+          ./build/road_driving/road_drive suite --variant B0
 
   # Correctness of the committed evidence (docs/data, docs/assets, README). No timing runs here: CI
   # runners are shared machines, and their timings are never used as benchmark results.
