@@ -4,6 +4,20 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving extension (new, `road_driving/`)
+
+- **Additive and off by default.** The root `CMakeLists.txt` gains `option(BUILD_ROAD_DRIVING ... OFF)`;
+  with it off, the build is unchanged. No engine source or public header changed. The extension uses
+  `Graph` and `NavigationCore` only through their public API (`addNode`, `addEdge`, `startNavigation`,
+  `executeNavigationStep`, `handleObstacles`, `clearObstacles`, `retryNavigation`, the state and route
+  getters). Only `road_driving/src/engine_router.cpp` includes engine headers.
+- **Contents:** a synthetic left-hand-traffic lane network, a kinematic vehicle with approximately
+  I-PACE dimensions, a driving stack that replans around an oracle-reported closure or stops before
+  it, an evaluator that reads only the truth log, episode logs with replay, the `road_drive` tool and
+  the `test_road_driving` program. See [road_driving/README.md](road_driving/README.md).
+- **Tests:** with the option on, CTest gains three entries. CI turns the option on in the four build
+  jobs.
+
 ### ROS 2 and Gazebo integration (new, `ros2/`)
 
 - **Additive.** No engine source or public header changed. The integration links the engine as built
