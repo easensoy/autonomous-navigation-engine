@@ -1,3 +1,7 @@
 # Shell scripts run inside the Linux simulation container (ros2/tools/*.sh). Keep LF line endings on
 # every checkout, including Windows ones with core.autocrlf, so they run as documented.
 *.sh text eol=lf
+
+# The stored road-driving episode: its manifest's trace hash is FNV-1a over truth.csv exactly as
+# written (LF), so the files must keep LF on Windows checkouts too.
+road_driving/regression/** text eol=lf
