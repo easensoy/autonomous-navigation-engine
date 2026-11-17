@@ -214,6 +214,14 @@ The stack never receives truth. The world records the truth and an independent e
 
 On simulator truth the layer changes nothing on R1's 192 closure episodes (byte-identical traces). On R2's right-turn exits it shifts the reference by about 0.01 m.
 
+**Pose corrections** (`rejoinpolicy` in `src/stack.hpp`, added after the third evaluation):
+- **The problem.** An estimate can jump: a kerb re-localisation, a GNSS re-anchor, GNSS returning after dead reckoning. The car did not move. Chasing the old reference turned such a jump into a steering step. Pure pursuit, steering-rate limited, then oscillated until the monitor's fallback stop.
+- **Detection.** The cross-track error from the reference changes between two control ticks (20 ms) by more than 0.15 m, which no motion explains. Ordinary filter updates stay well below that: none triggered it in nominal or outage drives.
+- **Re-join.** The controller's reference moves sideways by exactly that change, so its error stays continuous. The reference then returns to the path along a raised cosine over 10 m, or over 20 m per metre of correction if longer. Corrections above 1.5 m are not re-joined.
+- **Monitor.** It measures from the path the car should follow, clearance shift included. Before, it measured from the unshifted path, so a clearance shift ate into its 1 m limit. It deliberately ignores the re-join. A jump can also be a corruption, such as the timed-reset EKF snapping onto multipath fixes, and the stack cannot tell which. A first version that also re-joined the monitor drove one such car 9.3 m off the road, where the old monitor had stopped it at the jump.
+
+On simulator truth nothing jumps, and R1's 192 closure episodes stay byte-identical.
+
 There is no fallback to truth. A car that stops inside a GNSS outage waits there until the estimate recovers.
 
 **Closed-loop metrics** (from truth):
@@ -433,6 +441,30 @@ Closed loop, against the ground-truth reference with the same seed (1,440 episod
 - **Kerb faults.** With no kerb scans and GNSS excluded at once, both kerb filters dead-reckon, and the clearance layer stops the car in every episode, 34 of the 40 stops unwarranted. On R4-C the car is still slowing towards that stop when GNSS returns and the estimate is corrected, by up to 0.9 m. In 6 of 10 episodes the monitor then measured 1 m of lateral error and made a fallback stop, with no crossing.
 - **Closure incursions.** Both were by GNSS-only filters, dragged by the slow excursion, on R4-B_late_closure seed 1.
 
+### After the third evaluation: pose corrections in the stack (development)
+
+The held-out crossing (U9) came from the stack, not the estimate. The re-join (see [Driving on the estimate](#driving-on-the-estimate)) was then developed on R3 and R4, both used before, so these are development results. The closed loops were rerun at `f674183` with the same compiler as the earlier runs on each network: MSVC 19.51 on R4, compared with the held-out run, and GCC 14.2 on R3, compared with [`r3-dev/`](benchmark/r3-dev). Full files: [`benchmark/rejoin-dev/`](benchmark/rejoin-dev).
+
+Only the cells that changed are shown. Each is out of 40 episodes; fallback stops count the episodes that ended in one.
+
+| Network | Condition | Pose source | Same outcome as reference | Over a kerb (deepest) | Fallback stops |
+|---|---|---|---|---|---|
+| R4 | `combined_r4` | `ekf_kerb2` | 39 → **40** | 1 (0.91 m) → **0** | 1 → **0** |
+| R4 | `kerb_faults_r4` | `ekf_kerb2` | 14 → **18** | 0 → 0 | 6 → **2** |
+| R4 | `kerb_faults_r4` | `ekf_kerb` | 14 → **19** | 0 → 0 | 6 → **1** |
+| R4 | `multipath_r4` | `ekf_int`, `ekf_int2` | 0 → **10** | 3 → 3 | 10 → **0** |
+| R4 | `multipath_r4` | `ekf` | 0 → 1 | 5 (1.26 m) → **3 (0.14 m)** | 40 → 40 |
+| R4 | `gnss_outage_r4` | GNSS-only filters | 0 → 0 | 3 → 3 | 30 → **0** |
+| R4 | `combined_r4` | `ekf_int`, `ekf_int2` | 4 → 3 | 9 → 9 | 3 → 4 |
+| R3 | `gnss_ramp_r3` | `ekf_kerb2` | 36 → **38** | 4 (3.92 m) → **2** (3.92 m) | 4 → **2** |
+| R3 | `multipath_r3` | `ekf` | 0 → 0 | 10 (5.66 m) → 10 (**1.45 m**) | 40 → 40 |
+| R3 | `multipath_r3` | `ekf_int`, `ekf_int2` | 0 → 0 | 3 → 3 | 11 → **0** |
+
+- **`ekf_kerb2`** crossed a kerb in none of R4's 280 episodes, and in 2 of R3's 240. Those 2 are one drive, R3-B seed 2, in both R3-B scenarios: the re-localisation that came too late.
+- **Unchanged:** nominal driving everywhere. In no condition does any pose source cross a kerb more often or deeper than before. 413 of 1,440 episodes changed on R4, and 76 of 1,240 on R3.
+- **The one cell that got worse.** On R4-C under combined faults, seed 4, the GNSS-only integrity filters used to complete the route with the body 2.18 m over a kerb, on an estimate 4.2 m off. The monitor now stops them, with the same crossing.
+- **Not shown:** whether the gain holds on roads it was not developed on. That needs a fresh held-out network.
+
 ### Failure cases and the next improvement
 
 #### After the second evaluation (R3)
@@ -464,18 +496,18 @@ The third increment answered T1 with a way out of FAULTED, and T8 with kerb re-l
 - **No regression.** In every condition where nothing triggers them, the second versions equal the first; in no condition do they fail or cross more often.
 
 **What failed or remains:**
-- **Large pose corrections in the stack (U9).** The one crossing came after a correct mid-turn re-localisation: the estimate was right, but pure pursuit oscillated after the 0.8 m jump until the monitor's fallback stop, which ended with the body over the kerb. The same weakness turns a GNSS-return correction into a fallback stop in 6 of 10 kerb-fault episodes on R4-C. The localisation was right in both; the stack reads a corrected estimate as a tracking error.
+- **Large pose corrections in the stack (U9).** The one crossing came after a correct mid-turn re-localisation: the estimate was right, but pure pursuit oscillated after the 0.8 m jump until the monitor's fallback stop, which ended with the body over the kerb. The same weakness turns a GNSS-return correction into a fallback stop in 6 of 10 kerb-fault episodes on R4-C. The localisation was right in both; the stack reads a corrected estimate as a tracking error. *Addressed afterwards, on development data:* see [pose corrections in the stack](#after-the-third-evaluation-pose-corrections-in-the-stack-development).
 - **GNSS-only filters still drift while GNSS is excluded.** Under the gyro fault `ekf_int2` still exceeded 5 m in 20 of 30 runs before recovering. No GNSS rule can bound dead reckoning: only another absolute reference does, and kerbs did (`ekf_kerb2`: 0 failures, 0.045 m lateral).
 - **One fault never ended.** The jump-back test compares the receiver's return with its onset jump. When the first biased fix fell short (3.4 m of a 6 m offset), the return did not match it.
 - **Losing kerbs and GNSS together.** Under `kerb_faults_r4` the kerb filters stopped for clearance in every episode, 34 of the 40 stops unwarranted. The stop is the designed behaviour with no absolute reference; its cost is that the true error is usually small.
 - **A slow excursion still drags every GNSS-only filter** (29 or 30 of 30 runs failed), as the R3 protocol expected: a slow excursion with no jump cannot be detected from GNSS and odometry alone.
 
-**The next improvement the evidence supports:** in the stack, treat a pose correction as a correction:
-- re-join the path smoothly from the corrected pose;
-- measure tracking error against that re-joined path, so the monitor does not see the jump as an error;
-- damp the steering response for a few seconds after a jump larger than the tracking allowance.
+**What the evidence pointed to next, and what was done.** The stack should treat a pose correction as a correction. It now re-joins the path smoothly after a jump, and its monitor measures from the path including the clearance shift (development results above). The monitor deliberately still sees a jump of more than 1 m: a version that hid it from the monitor drove a corrupted estimate 9.3 m off the road. A steering damper was not needed.
 
-The held-out crossing and one of the two development crossings (R3-B, seed 9) share this cause. The other development crossing (seed 2) was a re-localisation that came too late. The smaller step for `ekf_int2` is to remember the fault offset from several fixes after the onset rather than one.
+**What the evidence supports now:**
+- **Earlier re-localisation for `ekf_kerb2`.** The remaining development crossing (R3-B, seed 2) came from a match found only mid-turn, one return short of the uniqueness margin.
+- **A better fault offset for `ekf_int2`:** remember it from several fixes after the onset, not one.
+- **A fresh held-out network** to test the stack change on roads it was not developed on.
 
 ## Not done
 
