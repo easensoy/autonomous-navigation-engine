@@ -101,6 +101,9 @@ jobs:
           ./build/road_driving/road_drive suite --variant B1
           ./build/road_driving/road_drive suite --variant B0
 
+      - name: Replay a stored sensor log through every estimator, without the simulator
+        run: ./build/road_driving/road_drive localise road_driving/benchmark/dev/logs/R1-A_gnss_outage_s1
+
   # Correctness of the committed evidence (docs/data, docs/assets, README). No timing runs here: CI
   # runners are shared machines, and their timings are never used as benchmark results.
   evidence:
