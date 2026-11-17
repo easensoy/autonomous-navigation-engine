@@ -103,7 +103,7 @@ double requiredDecel(const DrivePath& path, const std::vector<double>& caps, dou
 }
 
 Stack::Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility,
-             bool rejoin)
+             Rejoin rejoin)
     : net_(net), vp_(vp), variant_(variant), goal_(goalElement), goalLaneS_(goalLaneS), router_(net), feasibility_(feasibility), rejoin_(rejoin) {}
 
 double Stack::pathShiftAt(double s) const {
@@ -271,9 +271,11 @@ void Stack::event(const std::string& type, const std::string& detail) { events.p
 
 int Stack::currentElement() const { return path_.elements().at(idx_); }
 
-void Stack::track(const VehicleState& pose) {
+void Stack::track(const VehicleState& pose, const VerifiedCorrection& verified) {
     v_ = pose.v;
     a_ = pose.accel;
+    const bool newVerified = verified.count > lastVerified_;
+    lastVerified_ = verified.count;
     if (path_.empty()) {
         return;
     }
@@ -281,15 +283,30 @@ void Stack::track(const VehicleState& pose) {
     if (pr.ok) {
         s_ = pr.s;
         lateral_ = pr.lateral;
-        // A cross-track change no motion explains is a pose correction: move the reference with it.
+        // All: a cross-track change no motion explains is a pose correction; move the reference with it.
+        // Verified: only a correction the estimator verified against the map, by its cross-track part.
         const double err = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
-        if (rejoin_ && haveLastErr_ && std::fabs(err - lastErr_) > rejoinpolicy::kJump) {
-            const double d0 = rejoinAt(s_) + (err - lastErr_);
+        double jump = 0.0;
+        if (rejoin_ == Rejoin::All && haveLastErr_ && std::fabs(err - lastErr_) > rejoinpolicy::kJump) {
+            jump = err - lastErr_;
+        } else if (rejoin_ == Rejoin::Verified && newVerified) {
+            // The cross-track change the verified correction alone made: the pose without it, projected the same
+            // way (in a turn a correction along the road changes the cross-track error too).
+            const double reach = 2.0 + std::hypot(verified.dx, verified.dy);
+            const DrivePath::Projection pb = path_.project(pose.x - verified.dx, pose.y - verified.dy, s_, reach, reach + pose.v);
+            if (pb.ok) {
+                const double across = err - (pb.lateral - pathShiftAt(pb.s) - rejoinAt(pb.s));
+                jump = std::fabs(across) > rejoinpolicy::kJump ? across : 0.0;
+            }
+        }
+        if (jump != 0.0) {
+            const double d0 = rejoinAt(s_) + jump;
             if (std::fabs(d0) <= rejoinpolicy::kMax) {
                 rejoinS0_ = s_;
                 rejoinD0_ = d0;
                 rejoinLength_ = std::max(rejoinpolicy::kMinLength, std::fabs(d0) / rejoinpolicy::kSlope);
-                event("POSE_CORRECTION", "jump=" + fmt(err - lastErr_, 3) + ";rejoin=" + fmt(d0, 3) + ";over=" + fmt(rejoinLength_, 1));
+                event("POSE_CORRECTION", std::string(rejoin_ == Rejoin::Verified ? "verified;" : "") + "jump=" + fmt(jump, 3) + ";rejoin=" + fmt(d0, 3) +
+                                             ";over=" + fmt(rejoinLength_, 1));
             }
         }
         lastErr_ = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
@@ -360,6 +377,7 @@ bool Stack::entersKnownClosure(const DrivePath& path, double sRear) const { retu
 void Stack::initialise(const Observation& obs) {
     t_ = obs.t;
     v_ = obs.pose.v;
+    lastVerified_ = obs.verified.count;  // corrections made before the mission are not jumps the stack saw
     const int start = associate(net_, obs.pose.x, obs.pose.y, obs.pose.yaw);
     for (const ClosureReport& c : obs.closures) {
         if (!c.active) {
@@ -389,7 +407,7 @@ void Stack::initialise(const Observation& obs) {
 
 void Stack::plan(const Observation& obs) {
     t_ = obs.t;
-    track(obs.pose);
+    track(obs.pose, obs.verified);
     if (mode_ == Mode::Done || mode_ == Mode::HoldFallback || mode_ == Mode::NoRoute) {
         return;
     }
@@ -466,12 +484,8 @@ void Stack::plan(const Observation& obs) {
         if (mode_ == Mode::Drive && aReq > vp_.decelFirm) {
             fallback("speed caps ahead need " + (std::isfinite(aReq) ? fmt(aReq) : std::string("inf")) +
                      " m/s^2, above the firm limit");
-        } else if (std::fabs(lateral_ - (rejoin_ ? pathShiftAt(s_) : 0.0)) > 1.0) {
-            // From the path the car should follow, its clearance shift included, but not any re-join: the
-            // re-join only keeps the steering smooth. An estimate that jumps more than 1 m off that path may be
-            // a correction or a corruption, and the stack cannot tell which, so it still stops. (Without the
-            // re-join, the stack evaluated on R3 and R4: from the unshifted path.)
-            fallback("lateral error " + fmt(lateral_ - (rejoin_ ? pathShiftAt(s_) : 0.0)) + " m");
+        } else if (std::fabs(lateral_ - monitorOffset()) > 1.0) {
+            fallback("lateral error " + fmt(lateral_ - monitorOffset()) + " m");
         } else if (mode_ == Mode::Drive && entersKnownClosure(path_, s_)) {
             planClosureStop("monitor: known closure ahead", v_);
         }
@@ -696,9 +710,22 @@ double Stack::envelopeAt(double s) const {
     return a + (b - a) * t;
 }
 
-Command Stack::control(const VehicleState& pose, double t) {
+// The monitor's reference, sideways from the path. Off: the path itself (the R3 and R4 stack). All: the path
+// with its clearance shift, but not the re-join, which may follow a corrupted estimate. Verified: the path with
+// the re-join, which only ever follows a map-verified correction; the clearance shift is not included, so
+// every unverified jump meets the R3 and R4 monitor.
+double Stack::monitorOffset() const {
+    switch (rejoin_) {
+        case Rejoin::Off: return 0.0;
+        case Rejoin::All: return pathShiftAt(s_);
+        case Rejoin::Verified: return rejoinAt(s_);
+    }
+    return 0.0;
+}
+
+Command Stack::control(const VehicleState& pose, double t, const VerifiedCorrection& verified) {
     t_ = t;
-    track(pose);
+    track(pose, verified);
     Command cmd;
     if (path_.empty()) {
         cmd.accel = -kHoldDecel;
