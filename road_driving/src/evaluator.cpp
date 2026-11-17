@@ -72,6 +72,7 @@ Metrics evaluate(const LaneNetwork& net, const VehicleParams& vp, const Scenario
     int cur = associate(net, truth[0].x, truth[0].y, truth[0].yaw);
     m.visited.push_back(cur);
     m.maxSpeedExcess = -inf;
+    m.minClearance = inf;
     size_t limited = 0, pairs = 0;
     bool emergency = false;
     for (size_t i = 0; i < truth.size(); ++i) {
@@ -124,6 +125,13 @@ Metrics evaluate(const LaneNetwork& net, const VehicleParams& vp, const Scenario
                 m.visited.push_back(g);
                 cur = g;
             }
+        }
+        m.truthElement.push_back(best >= 0 && bestD <= 1.5 ? cur : -1);
+        // Whole-vehicle clearance with mirrors (reported), and the body off the carriageway (counted).
+        const double clearance = footprintClearance(net, s.x, s.y, s.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors);
+        m.minClearance = std::min(m.minClearance, clearance);
+        if (clearance < 0.0) {
+            m.clearanceViolations += footprintClearance(net, s.x, s.y, s.yaw, vp.rearOverhang, vp.frontOffset(), vp.width) < 0.0 ? 1 : 0;
         }
 
         m.maxSpeedExcess = std::max(m.maxSpeedExcess, s.v - net.elements[static_cast<size_t>(cur)].speedLimit);
