@@ -4,6 +4,30 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: second filter versions, network R4 and a kerb map error (`road_driving/`)
+
+- **Additive.** With `BUILD_ROAD_DRIVING` off, the build is unchanged. No engine source, public header,
+  file under `ros2/`, or road-driving stack file changed.
+- **New estimators** (`makeEstimator`):
+  - `ekf_int2`: `ekf_int` with a confirmed way out of a GNSS fault (a jump back, then 20 clean fixes)
+    and re-anchoring on the track angle;
+  - `ekf_kerb2`: the same, plus kerb re-localisation by a grid search when scans keep being rejected.
+
+  `ekf`, `ekf_int` and `ekf_kerb` are unchanged: their traces on stored logs are byte-identical. On
+  clean data each second version equals its first version exactly (a test compares the traces).
+- **Statistics.** `EstimatorStats` and `LocMetrics` gain `faultRecoveries`, `headingReanchors` and
+  `kerbRelocalisations`; `runs.jsonl` lines gain the three fields.
+- **Network R4** (`buildR4`, `buildNetwork("R4")`) and its routes and closure scenario.
+- **Faults.** A kerb map error (`SensorConditions::kerbShift`): a kerb section lies further out than
+  mapped. Its zones are written to the manifest only when present, so earlier logs are unchanged. Seven
+  R4 conditions (`conditionNamesR4`).
+- **`road_drive`:**
+  - `bench-loc` and `bench-closed` gain the splits `r3dev` (R3 as development data) and `r4`;
+  - `bench-closed --scenario A,B` runs a subset of a split's scenarios, and
+    `tools/merge_closed_loop.py` merges per-scenario parts into the files one process writes;
+  - `map` knows R4 and prints each network's benchmark routes.
+- **Tests:** `road_driving_localisation_tests` grows from 95 to 121 checks.
+
 ### Road-driving: GNSS integrity, kerb registration and a clearance layer (`road_driving/`)
 
 - **Additive.** With `BUILD_ROAD_DRIVING` off, the build is unchanged. No engine source, public header
