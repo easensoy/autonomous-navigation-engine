@@ -85,6 +85,16 @@ struct Street {
     double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
 };
 
+// The kerb, the edge of the carriageway, as straight lines and corner arcs (built with the network).
+struct KerbLine {
+    double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
+    double nx = 0.0, ny = 0.0;  // unit normal pointing into the carriageway
+};
+struct KerbArc {
+    double cx = 0.0, cy = 0.0, r = 0.0;  // the carriageway lies outside this circle
+    double mid = 0.0, half = 0.0;        // the arc spans the directions mid +- half seen from the centre
+};
+
 struct LaneNetwork {
     NetworkSpec spec;
     std::vector<Junction> junctions;
@@ -93,6 +103,8 @@ struct LaneNetwork {
     std::vector<BannedTurn> banned;
     std::vector<Street> streets;
     std::vector<double> kerbRadius;  // per junction
+    std::vector<KerbLine> kerbLines;
+    std::vector<KerbArc> kerbArcs;
 
     int junction(const std::string& name) const;   // -1 if absent
     int lane(const std::string& name) const;       // -1 if absent
@@ -100,9 +112,18 @@ struct LaneNetwork {
     int segmentAt(int lane, double laneS) const;   // the segment containing a lane arc length
     double cost(int element) const;                // engine cost of entering and traversing an element, s
     PathPoint lanePoint(int lane, double laneS) const;
-    // Signed distance from a point to the edge of the drivable carriageway (positive inside): street
+    // Signed Euclidean distance from a point to the kerb (positive on the carriageway): street
     // carriageways two lanes wide, junction boxes, and corner kerbs rounded with the junction's radius.
     double roadClearance(double x, double y) const;
+    // The same distance, and the unit normal at the nearest kerb point, pointing into the carriageway.
+    double kerbDistance(double x, double y, double& nx, double& ny) const;
+    // Distance along a ray (unit direction) to the first kerb it meets, or -1 within maxRange.
+    double rayToKerb(double x, double y, double dx, double dy, double maxRange) const;
+    // A conservative version of roadClearance: the same sign everywhere, but near a rounded corner it
+    // understates the clearance of points inside a street's rectangle. Used for the inside test, and kept
+    // because results up to November 2026 were measured with it.
+    double coarseClearance(double x, double y) const;
+    void buildKerbs();  // kerbLines and kerbArcs from streets, junctions and kerb radii
     // Empty when every invariant holds. unitsPerMetre is the graph scale handed to the engine, whose
     // nodes reject coordinates beyond +-10000 units.
     std::vector<std::string> validate(double unitsPerMetre = 1.0) const;
@@ -135,6 +156,7 @@ struct GridSpec {
 };
 GridSpec gridR1();
 GridSpec gridR2();
+GridSpec gridR3();
 LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& spec = NetworkSpec{});
 
 // Network R1 (development): a 3 by 3 grid at x = 0, 120, 240 m and y = 0, 80, 160 m. Two-way streets
@@ -147,7 +169,12 @@ LaneNetwork buildR1(const NetworkSpec& spec = NetworkSpec{});
 // J12>J22; tight junctions J11 and J31 (4 m kerbs, 5.5 m left-turn arcs at 2.5 m/s); 16 m junction mouths
 // and 14 m right-turn arcs.
 LaneNetwork buildR2(const NetworkSpec& spec = NetworkSpec{});
-// "R1" or "R2"; throws for any other name.
+// Network R3 (held out for the second localisation evaluation): a 4 by 4 grid at x = 0, 110, 200, 330 m
+// and y = 0, 85, 190, 270 m; one-way streets J12->J22 (eastbound) and J31->J30 (southbound); no right
+// turn J11>J21 -> J21>J20 or J02>J12 -> J12>J11; tight junctions J21 and J13; a 50 m cul-de-sac east of
+// J33. Junction design as R2's (16 m mouths, 14 m right-turn arcs, 4 m tight kerbs).
+LaneNetwork buildR3(const NetworkSpec& spec = NetworkSpec{});
+// "R1", "R2" or "R3"; throws for any other name.
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec = NetworkSpec{});
 // A right-hand-traffic copy (x mirrored). validate() must reject it.
 LaneNetwork mirrored(const LaneNetwork& net);
