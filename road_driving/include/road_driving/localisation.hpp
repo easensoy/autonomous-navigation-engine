@@ -119,11 +119,13 @@ struct SensorConditions {
 // Named conditions. Development: nominal, gnss_outage, multipath, wheel_slip, imu_bias, delay_drop.
 // Held out on R2 (different placements and magnitudes, plus a combination): the same names with suffix
 // _h, and combined_h. Held out on R3 (new fault types): the names in conditionNamesR3(). Held out on R4
-// for the second versions (new magnitudes and combinations, and a kerb map error): conditionNamesR4().
+// for the second versions (new magnitudes and combinations, and a kerb map error): conditionNamesR4(). Held
+// out on R5 for the stack's re-join after pose corrections: conditionNamesR5().
 SensorConditions sensorConditions(const std::string& name);
 std::vector<std::string> conditionNames(bool heldOut);
 std::vector<std::string> conditionNamesR3();
 std::vector<std::string> conditionNamesR4();
+std::vector<std::string> conditionNamesR5();
 
 struct Zone {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
