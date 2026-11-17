@@ -1,0 +1,20 @@
+split=dev
+seeds=1..5
+routes=R1-A:R1:J00>J10@7.5->J21>J22@47.5 R1-B:R1:J02>J12@10->J20>J10@40 R1-C:R1:J20>J21@10->J01>J00@30 
+conditions=nominal gnss_outage multipath wheel_slip imu_bias delay_drop 
+estimators=ekf dr gnss_cv gnss_hold
+estimator_config=gnss_sigma=0.28 gnss_corr_sigma=0.15 gnss_corr_tau=60 wheel_sigma=0.03 gyro_sigma=0.0015 accel_sigma=0.03 pos_process=0.0006 gyro_bias_walk=0.0001 accel_bias_walk=0.0002 scale_walk=1e-05 gate_gnss=11 gate_wheel=10.83 robust_nis=3 reset_after_rejected=100 cv_accel_sigma=1.5 init_pos_sigma=1 init_yaw_sigma=0.05 init_gyro_bias_sigma=0.01
+toolchain=GCC 14.2.0
+engine_commit_at_configure=66e81250786942903d74b3d56e929b55293a707a
+config.gnss_sigma=0.28
+config.wheel_sigma=0.03
+config.gyro_sigma=0.0015
+config.accel_sigma=0.03
+config.pos_process=0.0006
+config.gyro_bias_walk=0.0001
+config.accel_bias_walk=0.0002
+config.scale_walk=1e-05
+config.gate_gnss=11
+config.gate_wheel=10.83
+config.reset_after_rejected=100
+config.cv_accel_sigma=1.5
