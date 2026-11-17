@@ -35,6 +35,9 @@ On R4, every estimator processed the same recorded logs: 210 drives under seven 
 
 What failed or remains:
 - **The stack after a large pose correction (U9):** a correct 0.8 m re-localisation mid-turn left pure pursuit oscillating until the monitor's fallback stop. During that stop the body went 0.91 m over the kerb. The same weakness turned estimate corrections into 6 fallback stops under kerb faults, with no crossing.
+  - *Fixed afterwards, on development data:* the stack now re-joins its path smoothly after a pose correction.
+  - Rerun on R4, `ekf_kerb2` crossed in none of 280 episodes, and the kerb-fault fallbacks fell from 6 to 2. No pose source crossed more often or deeper ([details](LOCALISATION.md#after-the-third-evaluation-pose-corrections-in-the-stack-development)).
+  - R4 had already been used, so this still needs a fresh held-out network.
 - **GNSS-only drift:** while GNSS is rightly excluded, nothing bounds dead reckoning. `ekf_int2` still exceeded 5 m in 20 of 30 gyro-fault runs, and in one the fault never ended.
 - **Losing kerbs and GNSS together** stopped the kerb filters for clearance in every such episode, 34 of the 40 stops unwarranted.
 
@@ -64,7 +67,7 @@ Details, the earlier evaluations and the next improvement: [LOCALISATION.md](LOC
 | Vehicle | `vehicle.*` | Kinematic bicycle about the rear axle. Wheelbase 2.99 m; steering up to 0.55 rad at 0.4 rad/s with a 0.2 s lag; 0.1 s command delay; 0.3 s longitudinal lag; braking up to 8 m/s²; no reverse |
 | Sensors | `sensors.cpp` | GNSS at 10 Hz, IMU at 100 Hz, wheel speed and steering angle at 50 Hz, and a kerb-height range scanner at 10 Hz, each with its own latency, noise, bias and mounting. Sensor conditions add outages, multipath (constant, intermittent or slowly growing), wheel slip, IMU bias steps, delayed and dropped fixes, parked cars, kerb clutter, and a kerb section that is not where the map has it. The same seed gives the same noise in every condition |
 | Estimators | `estimators.cpp` | `ekf`: a 9-state EKF (pose, speed, gyro and accelerometer biases, wheel scale, two GNSS error states) with gating, robust weighting, a rewind buffer for late measurements, and a 10 s reset. `ekf_int`: the same with GNSS integrity instead of the reset. `ekf_kerb`: `ekf_int` plus scan-to-map kerb registration. `ekf_int2` and `ekf_kerb2`: a confirmed way out of a GNSS fault, and kerb re-localisation when scans keep being rejected. Baselines: dead reckoning, a GNSS-only constant-velocity filter, and the latest fix held |
-| Driving stack | `stack.*` | Engine routing, the closure executive, a speed envelope (20 mph, and curvature caps at 1.9 m/s² lateral), stop guidance, pure pursuit steering, a constraint monitor and a fallback stop. On estimated pose it adds a localisation policy that slows, stops and resumes on the estimate's covariance and age. A clearance layer keeps the footprint's margin to the kerb in line with that uncertainty: it shifts the path sideways or stops explicitly |
+| Driving stack | `stack.*` | Engine routing, the closure executive, a speed envelope (20 mph, and curvature caps at 1.9 m/s² lateral), stop guidance, pure pursuit steering, a constraint monitor and a fallback stop. On estimated pose it adds a localisation policy that slows, stops and resumes on the estimate's covariance and age. A clearance layer keeps the footprint's margin to the kerb in line with that uncertainty: it shifts the path sideways or stops explicitly. When the estimate jumps, the controller re-joins the path smoothly instead of steering at the jump |
 | World | `episode.cpp` | 100 Hz integration, the sensors and estimator in estimated mode, the oracle notification and lift, and the logs |
 | Evaluator | `evaluator.cpp` | Outcome and metrics from the truth log, the scenario and the map only, including whole-vehicle clearance, crossing depth and lane association |
 | Benchmark | `benchmark.cpp` | Open-loop scoring of every estimator on the same logs, closed-loop campaigns against the ground-truth reference, and the summaries in [`benchmark/`](benchmark) |
@@ -149,7 +152,7 @@ CTest runs four tests with the option on:
   - the commitment branch at J10, the closure lifecycle and determinism;
   - replay from a written episode;
   - an evaluator check on a hand-written truth log.
-- **`road_driving_localisation_tests`** (121 checks):
+- **`road_driving_localisation_tests`** (123 checks):
   - sensor rates, latencies, arrival order and noise spread; no fix inside an outage zone; no brake-hold reading at rest;
   - every estimator replayed from `sensors.csv` without the simulator, matching the live estimates to 1e-9 m;
   - late and out-of-order GNSS giving the same EKF as in-order processing;
@@ -165,7 +168,8 @@ CTest runs four tests with the option on:
   - the clearance layer: no crossing at R2-B's right-turn exit where the previous stack crossed, an explicit stop where no margin is left, no effect on ground truth;
   - R3's and R4's map invariants, exact footprint clearance, legal routes and defined conditions, and R4's closure lane on its route;
   - the kerb map error: only returns from the left kerb inside its zone change, and only outward;
-  - the second versions: equal to the first on clean data, trace for trace; the persistent offset still never trusted; drift still recovered. On an R3 combined-fault drive `ekf_int2` leaves the fault and ends within 1 m, where `ekf_int` ends 28 m off. On an R3 slow-excursion drive `ekf_kerb2` re-localises and keeps its lateral 95th percentile below 0.2 m.
+  - the second versions: equal to the first on clean data, trace for trace; the persistent offset still never trusted; drift still recovered. On an R3 combined-fault drive `ekf_int2` leaves the fault and ends within 1 m, where `ekf_int` ends 28 m off. On an R3 slow-excursion drive `ekf_kerb2` re-localises and keeps its lateral 95th percentile below 0.2 m;
+  - pose corrections: a mid-turn re-localisation, and GNSS corrections next to a shifted path, end without a fallback stop and with the body on the road.
 - **`road_driving_regression_replay`** replays the stored failing episode.
 - **`road_driving_replay_detects_change`** swaps that episode's variant label and requires the replay to fail.
 
