@@ -131,7 +131,11 @@ Metrics evaluate(const LaneNetwork& net, const VehicleParams& vp, const Scenario
         const double clearance = footprintClearance(net, s.x, s.y, s.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors);
         m.minClearance = std::min(m.minClearance, clearance);
         if (clearance < 0.0) {
-            m.clearanceViolations += footprintClearance(net, s.x, s.y, s.yaw, vp.rearOverhang, vp.frontOffset(), vp.width) < 0.0 ? 1 : 0;
+            const double body = footprintClearance(net, s.x, s.y, s.yaw, vp.rearOverhang, vp.frontOffset(), vp.width);
+            if (body < 0.0) {
+                ++m.clearanceViolations;
+                m.maxCrossing = std::max(m.maxCrossing, -body);
+            }
         }
 
         m.maxSpeedExcess = std::max(m.maxSpeedExcess, s.v - net.elements[static_cast<size_t>(cur)].speedLimit);
