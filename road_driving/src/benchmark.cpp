@@ -206,6 +206,9 @@ std::vector<LocMetrics> evaluateLocalisation(const std::vector<TruthSample>& tru
         m.gnssExcluded = st.gnssExcluded;
         m.reanchors = st.reanchors;
         m.kerbUsed = st.kerbUsed;
+        m.faultRecoveries = st.faultRecoveries;
+        m.headingReanchors = st.headingReanchors;
+        m.kerbRelocalisations = st.kerbRelocalisations;
         m.kerbRejected = st.kerbRejected;
         if (!st.nisKerb.empty()) {
             double s = 0.0;
@@ -234,7 +237,8 @@ std::string locMetricsJson(const LocMetrics& m) {
       << ",\"lateral_rmse\":" << num(m.lateralRmse, 4) << ",\"lateral_p95\":" << num(m.lateralP95, 4) << ",\"lateral_max\":" << num(m.lateralMax, 4)
       << ",\"step_alarms\":" << m.stepAlarms << ",\"fault_exits\":" << m.faultExits << ",\"gnss_excluded\":" << m.gnssExcluded
       << ",\"reanchors\":" << m.reanchors << ",\"kerb_used\":" << m.kerbUsed << ",\"kerb_rejected\":" << m.kerbRejected
-      << ",\"nis_kerb_mean\":" << num(m.nisKerbMean, 3);
+      << ",\"nis_kerb_mean\":" << num(m.nisKerbMean, 3) << ",\"fault_recoveries\":" << m.faultRecoveries << ",\"heading_reanchors\":" << m.headingReanchors
+      << ",\"kerb_relocalisations\":" << m.kerbRelocalisations;
     return o.str();
 }
 
@@ -313,9 +317,50 @@ std::vector<Scenario> closedLoopScenariosR3() {
     return out;
 }
 
+std::vector<RouteSpec> benchmarkRoutesR4() {
+    return {{"R4-A", "R4", "J00>J10", 10.0, "J41>J42", 30.0}, {"R4-B", "R4", "J41>J31", 10.0, "J10>J00", 30.0},
+            {"R4-C", "R4", "J02>J01", 10.0, "J22>J32", 30.0}};
+}
+
+std::vector<Scenario> closedLoopScenariosR4() {
+    std::vector<Scenario> out;
+    for (const RouteSpec& r : benchmarkRoutesR4()) {
+        out.push_back(benchmarkScenario(r, "", 0, "ground_truth"));
+    }
+    Scenario c = benchmarkScenario(benchmarkRoutesR4()[1], "", 0, "ground_truth");
+    c.name = "R4-B_late_closure";
+    c.scenarioClass = "C3";
+    c.closure = true;
+    c.closureLane = "J20>J10";
+    c.barrierLaneS = 35.0;
+    c.worksLength = 15.0;
+    c.reveal = Reveal::BeforeBarrier;
+    c.revealDistance = 30.0;
+    out.push_back(c);
+    return out;
+}
+
 SplitSpec splitSpec(const std::string& name) {
     SplitSpec s;
     s.name = name;
+    if (name == "r3dev" || name == "r4") {
+        const bool r4 = name == "r4";
+        s.title = r4 ? "held-out evaluation of the second versions (network R4)"
+                     : "development and regression data for the second versions (network R3)";
+        s.routes = r4 ? benchmarkRoutesR4() : benchmarkRoutesR3();
+        s.conditions = r4 ? conditionNamesR4() : conditionNamesR3();
+        s.estimators = estimatorNamesV2();
+        s.scenarios = r4 ? closedLoopScenariosR4() : closedLoopScenariosR3();
+        s.closedConditions = r4 ? conditionNamesR4()
+                                : std::vector<std::string>{"nominal_r3", "gnss_outage_r3", "multipath_r3", "gnss_ramp_r3", "kerb_clutter_r3", "combined_r3"};
+        s.sources = {{"ekf", "estimated", "ekf", true},
+                     {"ekf_int", "estimated", "ekf_int", true},
+                     {"ekf_int2", "estimated", "ekf_int2", true},
+                     {"ekf_kerb", "estimated", "ekf_kerb", true},
+                     {"ekf_kerb2", "estimated", "ekf_kerb2", true}};
+        s.referenceFeasibility = true;
+        return s;
+    }
     if (name == "dev" || name == "heldout") {
         const bool h = name == "heldout";
         s.title = h ? "held-out split (network R2)" : "development split (network R1)";
@@ -356,6 +401,7 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
     const std::vector<RouteSpec>& routes = sp.routes;
     const std::vector<std::string>& conds = sp.conditions;
     const bool extended = sp.estimators.size() > estimatorNames().size();
+    const bool v2 = std::find(sp.estimators.begin(), sp.estimators.end(), "ekf_int2") != sp.estimators.end();
     EstimatorConfig cfg;
     std::string cfgError;
     if (!applyConfigOverrides(opt.config, cfg, cfgError)) {
@@ -395,7 +441,9 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                     }
                 }
                 std::vector<std::pair<std::string, std::string>> pairs;
-                if (extended) {
+                if (v2) {
+                    pairs = {{"ekf_int2", "ekf_int"}, {"ekf_kerb2", "ekf_kerb"}, {"ekf_int2", "ekf"}, {"ekf_kerb2", "ekf_int2"}};
+                } else if (extended) {
                     pairs = {{"ekf_int", "ekf"}, {"ekf_kerb", "ekf"}, {"ekf_kerb", "ekf_int"}};
                 } else {
                     for (const std::string& n : sp.estimators) {
@@ -415,9 +463,15 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                 }
                 // Raw logs for replay without the simulator: the first route, seed 1, a few conditions (every
                 // other run is reproducible from its route, condition and seed).
-                const bool keepLog = extended ? (cond == "multipath_r3" || cond == "gnss_ramp_r3" || cond == "kerb_clutter_r3")
-                                              : (cond.rfind("gnss_outage", 0) == 0 || cond.rfind("multipath", 0) == 0 || cond == "combined_h");
-                if (route.name == routes.front().name && seed == 1 && keepLog && (sp.name != "r2")) {
+                bool keepLog = false;  // development splits (r2, r3dev) keep none
+                if (sp.name == "r4") {
+                    keepLog = cond == "multipath_r4" || cond == "gnss_ramp_r4" || cond == "combined_r4";
+                } else if (sp.name == "r3") {
+                    keepLog = cond == "multipath_r3" || cond == "gnss_ramp_r3" || cond == "kerb_clutter_r3";
+                } else if (!extended) {
+                    keepLog = cond.rfind("gnss_outage", 0) == 0 || cond.rfind("multipath", 0) == 0 || cond == "combined_h";
+                }
+                if (route.name == routes.front().name && seed == 1 && keepLog) {
                     std::string error;
                     writeEpisode(r, (fs::path(opt.outDir) / "logs" / (route.name + "_" + cond + "_s1")).string(), error);
                 }
@@ -438,13 +492,14 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
         md << "## " << cond << "\n\n";
         md << "| Estimator | Runs | Failed | RMSE, median run (m) | RMSE, pooled (m) | p95, pooled (m) | Max (m) | Lateral p95, pooled (m) | "
               "Heading RMSE, median (deg) | Outage drift at end, median (m) | Recovery, median (s) | NEES mean (dof) | NEES in 95% | "
-              "GNSS NIS mean | GNSS rejected | Jumps detected | Re-anchors | Kerb scans used | p99 latency (us) |\n";
-        md << "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n";
+              "GNSS NIS mean | GNSS rejected | Jumps detected | Re-anchors | Kerb scans used | "
+           << (v2 ? "Fault recoveries | Heading re-anchors | Kerb re-localisations | " : "") << "p99 latency (us) |\n";
+        md << "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|" << (v2 ? "---|---|---|" : "") << "\n";
         for (const std::string& name : sp.estimators) {
             const Group& g = groups[cond][name];
             if (g.runs.empty()) continue;
             std::vector<double> rmses, heads, ends, recs, nees, neesIn, nis, lat;
-            int failed = 0, rejected = 0, jumps = 0, reanch = 0, kUsed = 0, kAll = 0;
+            int failed = 0, rejected = 0, jumps = 0, reanch = 0, kUsed = 0, kAll = 0, recov = 0, hReanch = 0, reloc = 0;
             double mx = 0.0, s2 = 0.0;
             for (const LocMetrics& m : g.runs) {
                 rmses.push_back(m.rmse);
@@ -463,6 +518,9 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                 reanch += m.reanchors;
                 kUsed += m.kerbUsed;
                 kAll += m.kerbUsed + m.kerbRejected;
+                recov += m.faultRecoveries;
+                hReanch += m.headingReanchors;
+                reloc += m.kerbRelocalisations;
                 mx = std::max(mx, m.max);
             }
             for (double e : g.pooled) s2 += e * e;
@@ -471,7 +529,9 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                 for (double x : v) s += x;
                 return v.empty() ? -1.0 : s / static_cast<double>(v.size());
             };
-            const bool integrityEst = name == "ekf_int" || name == "ekf_kerb";
+            const bool integrityEst = name == "ekf_int" || name == "ekf_kerb" || name == "ekf_int2" || name == "ekf_kerb2";
+            const bool kerbEst = name == "ekf_kerb" || name == "ekf_kerb2";
+            const bool secondEst = name == "ekf_int2" || name == "ekf_kerb2";
             const std::string neesText = nees.empty() ? "-" : num(mean(nees), 2) + " (" + std::to_string(g.runs.front().neesDof) + ")";
             md << "| " << name << " | " << g.runs.size() << " | " << failed << " | " << num(median(rmses), 3) << " | "
                << num(std::sqrt(s2 / static_cast<double>(std::max<size_t>(1, g.pooled.size()))), 3) << " | " << num(percentile(g.pooled, 0.95), 3) << " | "
@@ -479,7 +539,12 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                << (ends.empty() ? "-" : num(median(ends), 2)) << " | " << (recs.empty() ? "-" : num(median(recs), 1)) << " | " << neesText << " | "
                << (neesIn.empty() ? "-" : num(mean(neesIn), 2)) << " | " << (nis.empty() ? "-" : num(mean(nis), 2)) << " | " << rejected << " | "
                << (integrityEst ? std::to_string(jumps) : std::string("-")) << " | " << (integrityEst ? std::to_string(reanch) : std::string("-")) << " | "
-               << (name == "ekf_kerb" && kAll > 0 ? num(100.0 * kUsed / kAll, 1) + "%" : std::string("-")) << " | " << num(median(lat), 1) << " |\n";
+               << (kerbEst && kAll > 0 ? num(100.0 * kUsed / kAll, 1) + "%" : std::string("-")) << " | ";
+            if (v2) {
+                md << (secondEst ? std::to_string(recov) : std::string("-")) << " | " << (secondEst ? std::to_string(hReanch) : std::string("-")) << " | "
+                   << (name == "ekf_kerb2" ? std::to_string(reloc) : std::string("-")) << " | ";
+            }
+            md << num(median(lat), 1) << " |\n";
         }
         md << "\nLower RMSE, paired by drive: ";
         bool first = true;
@@ -516,7 +581,7 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
 std::string runClosedLoopCampaign(const CampaignOptions& opt) {
     namespace fs = std::filesystem;
     const SplitSpec sp = splitSpec(opt.split);
-    const bool extended = sp.sources.size() > 1;
+    const bool previousStack = std::any_of(sp.sources.begin(), sp.sources.end(), [](const PoseSource& p) { return !p.feasibility; });
     fs::create_directories(opt.outDir);
     std::ofstream jl(fs::path(opt.outDir) / "closed_loop.jsonl", std::ios::binary);
     struct Row {
@@ -598,7 +663,7 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
     md << "Each scenario is driven with the stack on simulator truth (the labelled reference) and on each estimator's output under each "
           "sensor condition, with matched seeds 1.." << opt.seeds << ". Every quantity below is measured from truth by the evaluator. Toolchain: "
        << toolchain() << ".";
-    if (extended) {
+    if (previousStack && sp.sources.size() > 1) {
         md << " \"previous stack\" is the stack evaluated on R2 in November 2026, without the clearance layer; every other row, and the "
               "reference, use the clearance layer.";
     }
