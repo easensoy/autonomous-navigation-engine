@@ -22,13 +22,34 @@ struct ClosureReport {
 
 struct Observation {
     double t = 0.0;
-    VehicleState pose;                    // GROUND_TRUTH
+    VehicleState pose;                    // GROUND_TRUTH, or the estimator's output when `estimated`
     std::vector<ClosureReport> closures;  // ORACLE: every closure notified so far
+    // Estimated-state driving: the estimate's quality, as the estimator reports it (no truth).
+    bool estimated = false;
+    bool estimateValid = true;
+    double estimateAge = 0.0;   // s since the estimate's time of validity
+    double sigmaAlong = 0.0;    // m, position 1-sigma along the estimated heading
+    double sigmaAcross = 0.0;   // m, position 1-sigma across it
 };
+
+// When the estimate is degraded the stack slows down; when it is unreliable (invalid, stale or too
+// uncertain across the lane) the stack stops in lane and waits for it to recover. It never switches to
+// another pose source.
+namespace locpolicy {
+// Chosen on development data: while dead reckoning, the EKF's lateral 1-sigma overstated its actual
+// error about threefold, so a 0.75 m sigma corresponds to roughly 0.25 m of actual lateral error.
+constexpr double kSlowAcross = 0.35, kSlowAlong = 1.5;  // m: above either, cap the speed
+constexpr double kStopAcross = 0.75, kStopAlong = 3.0;  // m: above either, stop
+constexpr double kResumeAcross = 0.30;                  // m: resume after 2 s below this
+constexpr double kMaxAge = 0.25;                        // s
+constexpr double kDegradedSpeed = 5.0;                  // m/s
+constexpr double kStopDecel = 2.5;                      // m/s^2
+}  // namespace locpolicy
 
 class Stack {
 public:
-    enum class Mode { Drive, StopForClosure, Fallback, Hold, HoldFallback, Done, NoRoute };
+    enum class Mode { Drive, StopForClosure, Fallback, Hold, HoldFallback, Done, NoRoute, LocalisationStop };
+    int believedElement() const { return path_.empty() ? -1 : path_.elements()[idx_]; }
 
     Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS);
     void initialise(const Observation& obs);  // first planning tick: closures known at departure, initial route
@@ -100,6 +121,12 @@ private:
     double aEnv_ = 1.8;
     std::vector<double> env_;
     size_t envFrom_ = 0;
+
+    void localisationPolicy(const Observation& obs);
+    double speedCap_ = 1e9;
+    bool degraded_ = false;
+    Mode beforeLocStop_ = Mode::Drive;
+    double goodSince_ = -1.0;
 };
 
 // Speed caps of a path (20 mph limit and curvature), and the deceleration needed from (s, v) to meet
