@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <stdexcept>
 
@@ -15,6 +16,7 @@ const char* kindName(Measurement::Kind k) {
         case Measurement::Imu: return "IMU";
         case Measurement::Wheel: return "WHEEL";
         case Measurement::Steer: return "STEER";
+        case Measurement::Kerb: return "KERB";
     }
     return "?";
 }
@@ -52,6 +54,46 @@ SensorConditions sensorConditions(const std::string& name) {
         c.slipRatio = 0.25;
         c.gnss.latency = 0.30;
         c.gnss.dropProb = 0.15;
+    } else if (name == "test_persistent_bias") {
+        // Tests only: a clean 6 m offset (no extra noise) for most of the route, far longer than 10 s.
+        c.multipath = {0.25, 0.85};
+        c.multipathBias = 6.0;
+    } else if (name == "test_drift_recovery") {
+        // Tests only: an unmodelled gyro-bias step inside an outage leaves the filter off and overconfident.
+        c.outage = {0.30, 0.60};
+        c.gyroBiasStepTime = 20.0;
+        c.gyroBiasStep = 0.015;
+    } else if (name == "nominal_r3") {
+    } else if (name == "gnss_outage_r3") {
+        c.outage = {0.35, 0.75};
+    } else if (name == "multipath_r3") {
+        c.multipath = {0.40, 0.70};
+        c.multipathBias = 8.0;
+        c.multipathSigma = 1.0;
+    } else if (name == "gnss_jumps_r3") {
+        c.multipath = {0.30, 0.70};
+        c.multipathBias = 3.0;
+        c.multipathSigma = 0.5;
+        c.multipathPeriod = 6.0;
+    } else if (name == "gnss_ramp_r3") {
+        c.ramp = {0.45, 0.80};
+        c.rampRate = 0.25;
+        c.rampMax = 5.0;
+    } else if (name == "kerb_clutter_r3") {
+        c.parked = {0.15, 0.65};
+        c.kerbClutter = 0.15;
+        c.kerbBlackout = {0.70, 0.80};
+    } else if (name == "combined_r3") {
+        c.outage = {0.15, 0.35};
+        c.multipath = {0.55, 0.70};
+        c.multipathBias = 7.0;
+        c.multipathSigma = 1.0;
+        c.slip = {0.40, 0.50};
+        c.slipRatio = 0.25;
+        c.parked = {0.10, 0.50};
+        c.kerbClutter = 0.10;
+        c.gyroBiasStepTime = 35.0;
+        c.gyroBiasStep = 0.010;
     } else {
         throw std::invalid_argument("unknown sensor condition " + name);
     }
@@ -67,6 +109,10 @@ std::vector<std::string> conditionNames(bool heldOut) {
         base.push_back("combined_h");
     }
     return base;
+}
+
+std::vector<std::string> conditionNamesR3() {
+    return {"nominal_r3", "gnss_outage_r3", "multipath_r3", "gnss_jumps_r3", "gnss_ramp_r3", "kerb_clutter_r3", "combined_r3"};
 }
 
 std::uint64_t SensorSimulator::Rng::next() {
@@ -87,8 +133,9 @@ double SensorSimulator::Rng::normal() {
     return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * kPi * u2);
 }
 
-SensorSimulator::SensorSimulator(const SensorConditions& cond, const SensorZones& zones, std::uint64_t seed, double wheelbase)
-    : c_(cond), zones_(zones), rng_{seed ^ 0x5E5B0A11D1E5ULL}, wheelbase_(wheelbase) {
+SensorSimulator::SensorSimulator(const SensorConditions& cond, const SensorZones& zones, std::uint64_t seed, double wheelbase,
+                                 const LaneNetwork* map)
+    : c_(cond), zones_(zones), rng_{seed ^ 0x5E5B0A11D1E5ULL}, kerbRng_{seed ^ 0x4B45524253434E31ULL}, wheelbase_(wheelbase), map_(map) {
     auto sign = [&]() { return rng_.uniform(0.0, 1.0) < 0.5 ? -1.0 : 1.0; };
     gyroBias_ = sign() * c_.imu.gyroBias;
     accelBias_ = sign() * c_.imu.accelBias;
@@ -99,6 +146,72 @@ SensorSimulator::SensorSimulator(const SensorConditions& cond, const SensorZones
     mpY_ = c_.multipathBias * std::sin(mpAngle);
     corrX_ = c_.gnss.corrSigma * rng_.normal();
     corrY_ = c_.gnss.corrSigma * rng_.normal();
+    // Everything added later draws from its own stream, so the sensors above are unchanged by it.
+    for (double& p : devPhase_) {
+        p = kerbRng_.uniform(0.0, 2.0 * kPi);
+    }
+    const double rampAngle = kerbRng_.uniform(0.0, 2.0 * kPi);
+    rampX_ = std::cos(rampAngle);
+    rampY_ = std::sin(rampAngle);
+}
+
+double SensorSimulator::kerbDeviationAt(double x, double y) const {
+    const double l = c_.kerb.deviationWavelength;
+    const double u1 = x * std::cos(devPhase_[0]) + y * std::sin(devPhase_[0]);
+    const double u2 = x * std::cos(devPhase_[1]) + y * std::sin(devPhase_[1]);
+    return c_.kerb.kerbDeviation * (std::sin(2.0 * kPi * u1 / l + devPhase_[2]) + std::sin(2.0 * kPi * u2 / (0.61 * l) + devPhase_[3]));
+}
+
+std::vector<double> SensorSimulator::scan(double sx, double sy, double syaw) {
+    const KerbConfig& k = c_.kerb;
+    std::vector<double> out(static_cast<size_t>(k.beams), -1.0);
+    for (int i = 0; i < k.beams; ++i) {
+        // A fixed number of draws per beam keeps the stream aligned across conditions.
+        const double uClutter = kerbRng_.uniform(0.0, 1.0), uWhere = kerbRng_.uniform(0.0, 1.0), uDrop = kerbRng_.uniform(0.0, 1.0);
+        const double noise = kerbRng_.normal();
+        const double th = syaw + k.firstBearing + i * k.bearingStep, dx = std::cos(th), dy = std::sin(th);
+        double r = map_ ? map_->rayToKerb(sx, sy, dx, dy, k.maxRange + 1.0) : -1.0;
+        if (r > 0.0) {
+            // The real kerb lies off the mapped one by the deviation, along its normal.
+            const double hx = sx + r * dx, hy = sy + r * dy;
+            double nx = 0.0, ny = 0.0;
+            map_->kerbDistance(hx, hy, nx, ny);
+            const double incidence = std::max(0.15, -(dx * nx + dy * ny));
+            r += kerbDeviationAt(hx, hy) / incidence;
+        }
+        for (const Obstacle& o : zones_.obstacles) {
+            // Slab test in the obstacle's frame.
+            const double c = std::cos(o.yaw), s = std::sin(o.yaw);
+            const double px = c * (sx - o.cx) + s * (sy - o.cy), py = -s * (sx - o.cx) + c * (sy - o.cy);
+            const double qx = c * dx + s * dy, qy = -s * dx + c * dy;
+            double t0 = -1e18, t1 = 1e18;
+            bool miss = false;
+            for (int a = 0; a < 2 && !miss; ++a) {
+                const double p = a == 0 ? px : py, q = a == 0 ? qx : qy, h = 0.5 * (a == 0 ? o.length : o.width);
+                if (std::fabs(q) < 1e-12) {
+                    miss = std::fabs(p) > h;
+                } else {
+                    const double ta = (-h - p) / q, tb = (h - p) / q;
+                    t0 = std::max(t0, std::min(ta, tb));
+                    t1 = std::min(t1, std::max(ta, tb));
+                }
+            }
+            if (!miss && t1 >= t0 && t0 > 0.0 && (r < 0.0 || t0 < r)) {
+                r = t0;
+            }
+        }
+        if (uClutter < c_.kerbClutter) {
+            r = k.minRange + uWhere * ((r > 0.0 ? r : k.maxRange) - k.minRange);  // spray or debris short of the target
+        }
+        if (r > 0.0) {
+            r += k.rangeNoise * noise;
+        }
+        if (uDrop < k.dropout || r < k.minRange || r > k.maxRange) {
+            r = -1.0;
+        }
+        out[static_cast<size_t>(i)] = r;
+    }
+    return out;
 }
 
 void SensorSimulator::step(double t, double dt, double x, double y, double yaw, double v, double steer, double accel,
@@ -119,6 +232,25 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
     gnssAvailable_ = !inside(zones_.outage);
     inMultipath_ = inside(zones_.multipath);
     inSlip_ = inside(zones_.slip);
+    if (inMultipath_ && mpSince_ < 0.0) {
+        mpSince_ = t;
+    } else if (!inMultipath_) {
+        mpSince_ = -1.0;
+    }
+    // Intermittent multipath: the offset switches on and off, half a period each, from zone entry.
+    const bool mpOn = inMultipath_ && (c_.multipathPeriod <= 0.0 ||
+                                       static_cast<long>(std::floor((t - mpSince_) / (0.5 * c_.multipathPeriod))) % 2 == 0);
+    // Slow excursion: inside the zone the offset grows at rampRate until rampMax, then decays at the same rate,
+    // also after the zone; it never steps.
+    if (c_.rampRate > 0.0) {
+        const bool rising = inside(zones_.ramp) && rampInside_ * c_.rampRate < c_.rampMax;
+        if (inside(zones_.ramp)) {
+            rampInside_ += dt;
+        }
+        rampBias_ = std::max(0.0, std::min(c_.rampMax, rampBias_ + (rising ? 1.0 : -1.0) * c_.rampRate * dt));
+    }
+    const double rampBias = rampBias_;
+    gnssFault_ = (mpOn ? c_.multipathBias : 0.0) + rampBias;
 
     // Slowly varying errors: bias random walks, a scheduled gyro-bias step, correlated GNSS error.
     if (stepped_) {
@@ -184,13 +316,27 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
             m.tArrival = t + std::max(0.0, c_.gnss.latency + jitter);
             m.a = x + cy * c_.gnss.antennaX - sy * c_.gnss.antennaY + c_.gnss.sigma * nx + corrX_;
             m.b = y + sy * c_.gnss.antennaX + cy * c_.gnss.antennaY + c_.gnss.sigma * ny + corrY_;
-            if (inMultipath_) {
+            if (mpOn) {
                 m.a += mpX_ + c_.multipathSigma * mx;
                 m.b += mpY_ + c_.multipathSigma * my;
             }
+            m.a += rampBias * rampX_;
+            m.b += rampBias * rampY_;
             m.c = c_.gnss.reportedSigma;
             pending_.push_back(m);
         }
+    }
+    const long kerbEvery = std::max(1L, std::lround(1.0 / (c_.kerb.rate * dt)));
+    if (map_ && k % kerbEvery == 0 && !inside(zones_.kerbBlackout)) {
+        Measurement m;
+        m.kind = Measurement::Kerb;
+        m.tMeas = t;
+        m.tArrival = t + c_.kerb.latency;
+        m.a = c_.kerb.firstBearing;
+        m.b = c_.kerb.bearingStep;
+        m.c = c_.kerb.mountX;
+        m.ranges = scan(x + c_.kerb.mountX * std::cos(yaw), y + c_.kerb.mountX * std::sin(yaw), yaw);
+        pending_.push_back(m);
     }
 
     // Round every new measurement through the log's text format, so that an estimator fed from the
@@ -200,6 +346,10 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
         std::snprintf(buf, sizeof buf, "%.4f %.4f %.9g %.9g %.9g", m.tMeas, m.tArrival, m.a, m.b, m.c);
         std::istringstream rs(buf);
         rs >> m.tMeas >> m.tArrival >> m.a >> m.b >> m.c;
+        for (double& r : m.ranges) {
+            std::snprintf(buf, sizeof buf, "%.4f", r);
+            r = std::strtod(buf, nullptr);
+        }
     }
 
     // Release everything that has arrived, in a fixed order.
@@ -221,11 +371,19 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
 }
 
 std::string sensorLogCsv(const std::vector<Measurement>& log) {
-    std::string s = "t_meas,t_arrival,sensor,a,b,c\n";
+    std::string s = "t_meas,t_arrival,sensor,a,b,c,ranges\n";
     char line[192];
     for (const Measurement& m : log) {
-        std::snprintf(line, sizeof line, "%.4f,%.4f,%s,%.9g,%.9g,%.9g\n", m.tMeas, m.tArrival, kindName(m.kind), m.a, m.b, m.c);
+        std::snprintf(line, sizeof line, "%.4f,%.4f,%s,%.9g,%.9g,%.9g", m.tMeas, m.tArrival, kindName(m.kind), m.a, m.b, m.c);
         s += line;
+        if (m.kind == Measurement::Kerb) {
+            s += ',';
+            for (size_t i = 0; i < m.ranges.size(); ++i) {
+                std::snprintf(line, sizeof line, i ? " %.4f" : "%.4f", m.ranges[i]);
+                s += line;
+            }
+        }
+        s += '\n';
     }
     return s;
 }
@@ -244,7 +402,7 @@ bool parseSensorLog(const std::string& text, std::vector<Measurement>& out, std:
             continue;
         }
         std::istringstream ls(line);
-        std::string f[6];
+        std::string f[7];
         for (std::string& s : f) {
             std::getline(ls, s, ',');
         }
@@ -253,6 +411,7 @@ bool parseSensorLog(const std::string& text, std::vector<Measurement>& out, std:
         else if (f[2] == "IMU") m.kind = Measurement::Imu;
         else if (f[2] == "WHEEL") m.kind = Measurement::Wheel;
         else if (f[2] == "STEER") m.kind = Measurement::Steer;
+        else if (f[2] == "KERB") m.kind = Measurement::Kerb;
         else {
             error = "line " + std::to_string(n) + ": unknown sensor " + f[2];
             return false;
@@ -266,6 +425,16 @@ bool parseSensorLog(const std::string& text, std::vector<Measurement>& out, std:
         } catch (const std::exception&) {
             error = "line " + std::to_string(n) + ": bad number";
             return false;
+        }
+        if (m.kind == Measurement::Kerb) {
+            const char* p = f[6].c_str();
+            while (*p) {
+                char* end = nullptr;
+                const double r = std::strtod(p, &end);
+                if (end == p) break;
+                m.ranges.push_back(r);
+                p = end;
+            }
         }
         out.push_back(m);
     }
