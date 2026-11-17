@@ -81,6 +81,28 @@ bool parseReveal(const std::string& s, Reveal& r) {
     return false;
 }
 
+const char* rejoinName(Rejoin r) {
+    switch (r) {
+        case Rejoin::Off: return "off";
+        case Rejoin::All: return "on";
+        case Rejoin::Verified: return "verified";
+    }
+    return "off";
+}
+
+bool parseRejoin(const std::string& s, Rejoin& out) {
+    if (s == "off") {
+        out = Rejoin::Off;
+    } else if (s == "on") {
+        out = Rejoin::All;
+    } else if (s == "verified") {
+        out = Rejoin::Verified;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 std::vector<Scenario> catalogue() {
     std::vector<Scenario> out;
     Scenario s;
@@ -307,6 +329,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
 
     Vehicle veh(vp, dt, init);
     Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility, sc.rejoin);
+    VerifiedCorrection verified;  // the estimator's map-verified corrections, for the stack
     bool present = sc.closure, revealed = false, lifted = false;
     double tRest = -1.0;
     std::vector<LogEvent> world;
@@ -359,6 +382,9 @@ EpisodeResult runEpisode(const Scenario& sc) {
         // What the stack is given as its pose: simulator truth, or the estimate (never both).
         VehicleState stackPose = vs;
         if (est) {
+            verified.count = estNow.verifiedCorrections;
+            verified.dx = estNow.verifiedJumpX;
+            verified.dy = estNow.verifiedJumpY;
             stackPose.x = estNow.x;
             stackPose.y = estNow.y;
             stackPose.yaw = estNow.yaw;
@@ -408,6 +434,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
             Observation obs;
             obs.t = t;
             obs.pose = stackPose;
+            obs.verified = verified;
             if (est) {
                 obs.estimated = true;
                 obs.estimateValid = estNow.valid && estNow.hasCov;  // quality unknown without a covariance: not usable
@@ -437,7 +464,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
             }
         }
         if (k % 2 == 0) {
-            cmd = stackStarted ? stack.control(stackPose, t) : Command{0.0, -2.0};  // brake hold until the mission starts
+            cmd = stackStarted ? stack.control(stackPose, t, verified) : Command{0.0, -2.0};  // brake hold until the mission starts
             r.belief.push_back({t, stackStarted ? stack.believedElement() : -1});
             if (est) {
                 r.estimates.push_back(estNow);
@@ -608,7 +635,7 @@ std::string manifestText(const EpisodeResult& r) {
       << "\nclearance_violations=" << m.clearanceViolations << "\nassociation_errors=" << m.associationErrors
       << "\nassociation_samples=" << m.associationSamples << "\nlocalisation_stops=" << m.localisationStops
       << "\nlocalisation_degraded=" << m.localisationDegraded << "\nest_rmse=" << fixed(m.estRmse, 4) << "\nest_p95=" << fixed(m.estP95, 4)
-      << "\nest_max=" << fixed(m.estMax, 4) << "\nfeasibility=" << (s.feasibility ? "on" : "off") << "\nrejoin=" << (s.rejoin ? "on" : "off")
+      << "\nest_max=" << fixed(m.estMax, 4) << "\nfeasibility=" << (s.feasibility ? "on" : "off") << "\nrejoin=" << rejoinName(s.rejoin)
       << "\nmax_crossing=" << fixed(m.maxCrossing, 3)
       << "\nclearance_stops=" << m.clearanceStops << "\nunwarranted_stops=" << m.unwarrantedStops << "\ngnss_outages=" << r.outages.size()
       << "\noutage_windows=";
@@ -735,7 +762,9 @@ bool scenarioFromManifest(const std::map<std::string, std::string>& kv, Scenario
         sc.estimator = optional("estimator", "ekf");
         sc.departDelay = std::stod(optional("depart_delay", "0"));
         sc.feasibility = optional("feasibility", "off") == "on";  // older manifests: the stack before the layer existed
-        sc.rejoin = optional("rejoin", "off") == "on";            // older manifests: the stack before the re-join existed
+        if (!parseRejoin(optional("rejoin", "off"), sc.rejoin)) {  // older manifests: the stack before the re-join existed
+            throw std::runtime_error("unknown rejoin setting");
+        }
     } catch (const std::exception& ex) {
         error = ex.what();
         return false;
