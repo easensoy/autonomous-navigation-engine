@@ -7,6 +7,7 @@
 // GROUND_TRUTH_POSE (the stack reads simulator truth), ORACLE_CLOSURE (the scenario tells the stack
 // about the closure; nothing is sensed). There is no other traffic.
 #include "road_driving/lane_network.hpp"
+#include "road_driving/localisation.hpp"
 #include "road_driving/vehicle.hpp"
 
 #include <cstddef>
@@ -55,6 +56,14 @@ struct Scenario {
     std::string revealJunction = "J10";
     double liftAfterStop = -1.0;       // s after the car comes to rest with the closure in force; < 0 never
     double timeBudget = 300.0;         // s
+    // Localisation. With a sensor condition the world simulates GNSS, IMU, wheel and steering sensors
+    // and logs them. Mode "ground_truth" drives on simulator truth (the reference); "estimated" drives
+    // on the named estimator's output, which sees only the sensor measurements.
+    std::string network = "R1";
+    std::string condition;              // empty: no sensors
+    std::string mode = "ground_truth";  // or "estimated"
+    std::string estimator = "ekf";
+    double departDelay = 0.0;           // s at rest before the mission starts (initial alignment)
 };
 
 std::vector<Scenario> catalogue();
@@ -92,9 +101,17 @@ struct Metrics {
     double maxDecel = 0.0, maxAccel = 0.0, maxJerk = 0.0;
     int emergencyEvents = 0;         // actual deceleration rising above 5.0 m/s^2
     std::vector<int> visited;        // elements associated from truth, in order
+    std::vector<int> truthElement;   // the element associated from truth at every truth sample (-1: none)
+    double minClearance = 0.0;       // m, smallest footprint (with mirrors) to road-edge distance; < 0 is off the road
+    int clearanceViolations = 0;     // truth samples with part of the body (no mirrors) off the carriageway
     // Stack decisions, counted from its event log (never used for the outcome)
     int replans = 0, masks = 0, fallbacks = 0, monitorTriggers = 0;
     std::string stopClass;
+    // Estimated-state driving: the stack's own element against the truth association, and the
+    // driving estimator's error against truth (computed after the run, never fed back).
+    int associationSamples = 0, associationErrors = 0;
+    int localisationStops = 0, localisationDegraded = 0;
+    double estRmse = -1.0, estP95 = -1.0, estMax = -1.0;
 };
 
 struct EpisodeResult {
@@ -114,6 +131,13 @@ struct EpisodeResult {
     double engineMs = 0.0;        // wall clock in engine calls; excluded from every hash
     std::uint64_t engineSilencedBytes = 0;
     std::size_t engineNodes = 0, engineEdges = 0;
+    // Localisation logs (only with a sensor condition).
+    std::vector<Measurement> sensors;                    // arrival order, as the estimators saw them
+    std::vector<StateEstimate> estimates;                // estimated mode: the driving estimate at every truth sample
+    std::vector<std::pair<double, double>> outages;      // GNSS outage intervals [t0, t1] (world record)
+    SensorZones zones;
+    std::vector<std::pair<double, int>> belief;          // estimated mode: the stack's element at each control tick
+    std::string sensorsCsv, estimatesCsv;
 };
 
 EpisodeResult runEpisode(const Scenario& sc);
