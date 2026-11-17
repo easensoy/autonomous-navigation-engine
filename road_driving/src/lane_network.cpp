@@ -184,9 +184,27 @@ GridSpec gridR2() {
     return g;
 }
 
+GridSpec gridR3() {
+    GridSpec g;
+    g.name = "R3";
+    g.xs = {0.0, 110.0, 200.0, 330.0};
+    g.ys = {0.0, 85.0, 190.0, 270.0};
+    g.oneWay = {{"J12", "J22"}, {"J31", "J30"}};
+    g.banned = {{"J21", "J11>J21", "J21>J20"}, {"J12", "J02>J12", "J12>J11"}};
+    g.deadEnds = {{"J33", "D33", 50.0, 0.0}};
+    g.tight = {"J21", "J13"};
+    // R2's junction design, which the exact footprint check (road_drive map R3) passes for every movement.
+    g.mouth = 16.0;
+    g.rightRadius = 14.0;
+    g.tightKerbRadius = 4.0;
+    return g;
+}
+
 LaneNetwork buildR1(const NetworkSpec& spec) { return buildGrid(gridR1(), spec); }
 
 LaneNetwork buildR2(const NetworkSpec& spec) { return buildGrid(gridR2(), spec); }
+
+LaneNetwork buildR3(const NetworkSpec& spec) { return buildGrid(gridR3(), spec); }
 
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
     if (name == "R1") {
@@ -194,6 +212,9 @@ LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
     }
     if (name == "R2") {
         return buildR2(spec);
+    }
+    if (name == "R3") {
+        return buildR3(spec);
     }
     throw std::invalid_argument("unknown network " + name);
 }
@@ -408,10 +429,11 @@ LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& baseSpec) {
             net.elements[static_cast<size_t>(v)].prev.push_back(e.id);
         }
     }
+    net.buildKerbs();
     return net;
 }
 
-double LaneNetwork::roadClearance(double x, double y) const {
+double LaneNetwork::coarseClearance(double x, double y) const {
     const double hw = spec.laneWidth;  // half the carriageway: one lane each side of the centreline
     double best = -std::numeric_limits<double>::infinity();
     for (const Street& st : streets) {
@@ -456,6 +478,169 @@ double LaneNetwork::roadClearance(double x, double y) const {
     return best;
 }
 
+// Kerbs of a grid network. Each street contributes its two side kerbs. At a junction end, a side kerb
+// stops where the corner arc begins if the junction has an arm on that side, and otherwise runs across
+// the junction box to its far edge (T and L junctions). Each pair of perpendicular arms gets a corner arc
+// of the junction's kerb radius; a dead end gets an end kerb.
+void LaneNetwork::buildKerbs() {
+    kerbLines.clear();
+    kerbArcs.clear();
+    const double hw = spec.laneWidth;
+    auto armsOf = [&](int j) {
+        std::vector<std::pair<double, double>> arms;
+        for (const Street& st : streets) {
+            if (st.a == j || st.b == j) {
+                const double ox = st.a == j ? st.bx : st.ax, oy = st.a == j ? st.by : st.ay;
+                const Junction& jn = junctions[static_cast<size_t>(j)];
+                const double len = std::hypot(ox - jn.x, oy - jn.y);
+                arms.push_back({(ox - jn.x) / len, (oy - jn.y) / len});
+            }
+        }
+        return arms;
+    };
+    auto hasArm = [&](int j, double dx, double dy) {
+        for (const auto& a : armsOf(j)) {
+            if (a.first * dx + a.second * dy > 0.99) return true;
+        }
+        return false;
+    };
+    for (const Street& st : streets) {
+        const double len = std::hypot(st.bx - st.ax, st.by - st.ay);
+        const double ux = (st.bx - st.ax) / len, uy = (st.by - st.ay) / len;
+        const double lx = -uy, ly = ux;  // left of a -> b
+        for (double side : {1.0, -1.0}) {
+            const double sx = side * lx, sy = side * ly;  // towards this kerb
+            const double u0 = (st.a >= 0 && hasArm(st.a, sx, sy)) ? hw + kerbRadius[static_cast<size_t>(st.a)] : -hw;
+            double u1 = len;
+            if (st.b >= 0) {
+                u1 = hasArm(st.b, sx, sy) ? len - hw - kerbRadius[static_cast<size_t>(st.b)] : len + hw;
+            }
+            KerbLine k;
+            k.ax = st.ax + ux * u0 + sx * hw;
+            k.ay = st.ay + uy * u0 + sy * hw;
+            k.bx = st.ax + ux * u1 + sx * hw;
+            k.by = st.ay + uy * u1 + sy * hw;
+            k.nx = -sx;
+            k.ny = -sy;
+            kerbLines.push_back(k);
+        }
+        if (st.b < 0) {  // dead end: the end kerb, no turning head
+            KerbLine e;
+            e.ax = st.bx - lx * hw;
+            e.ay = st.by - ly * hw;
+            e.bx = st.bx + lx * hw;
+            e.by = st.by + ly * hw;
+            e.nx = -ux;
+            e.ny = -uy;
+            kerbLines.push_back(e);
+        }
+    }
+    for (size_t j = 0; j < junctions.size(); ++j) {
+        const auto arms = armsOf(static_cast<int>(j));
+        const double r = kerbRadius[j];
+        for (size_t i = 0; i < arms.size(); ++i) {
+            for (size_t k = i + 1; k < arms.size(); ++k) {
+                const double ax = arms[i].first + arms[k].first, ay = arms[i].second + arms[k].second;
+                if (std::fabs(arms[i].first * arms[k].first + arms[i].second * arms[k].second) > 0.1) continue;
+                KerbArc a;
+                a.cx = junctions[j].x + (hw + r) * ax;
+                a.cy = junctions[j].y + (hw + r) * ay;
+                a.r = r;
+                a.mid = std::atan2(-ay, -ax);
+                a.half = 0.25 * kPi;
+                kerbArcs.push_back(a);
+            }
+        }
+    }
+}
+
+namespace {
+
+// Nearest point of a kerb arc: distance, and the unit normal into the carriageway.
+double arcDistance(const KerbArc& a, double x, double y, double& nx, double& ny) {
+    const double dx = x - a.cx, dy = y - a.cy, rho = std::hypot(dx, dy);
+    const double th = std::atan2(dy, dx);
+    if (std::fabs(wrapAngle(th - a.mid)) <= a.half && rho > 1e-12) {
+        nx = dx / rho;
+        ny = dy / rho;
+        return std::fabs(rho - a.r);
+    }
+    double best = std::numeric_limits<double>::infinity();
+    for (double s : {-1.0, 1.0}) {
+        const double ex = a.cx + a.r * std::cos(a.mid + s * a.half), ey = a.cy + a.r * std::sin(a.mid + s * a.half);
+        const double d = std::hypot(x - ex, y - ey);
+        if (d < best) {
+            best = d;
+            nx = (ex - a.cx) / a.r;  // the radial direction at the arc's end
+            ny = (ey - a.cy) / a.r;
+        }
+    }
+    return best;
+}
+
+double lineDistance(const KerbLine& k, double x, double y) {
+    const double vx = k.bx - k.ax, vy = k.by - k.ay, l2 = vx * vx + vy * vy;
+    const double t = l2 > 0.0 ? std::min(1.0, std::max(0.0, ((x - k.ax) * vx + (y - k.ay) * vy) / l2)) : 0.0;
+    return std::hypot(x - (k.ax + t * vx), y - (k.ay + t * vy));
+}
+
+}  // namespace
+
+double LaneNetwork::kerbDistance(double x, double y, double& nx, double& ny) const {
+    double best = std::numeric_limits<double>::infinity();
+    nx = 0.0;
+    ny = 0.0;
+    for (const KerbLine& k : kerbLines) {
+        const double d = lineDistance(k, x, y);
+        if (d < best) {
+            best = d;
+            nx = k.nx;
+            ny = k.ny;
+        }
+    }
+    for (const KerbArc& a : kerbArcs) {
+        double ax = 0.0, ay = 0.0;
+        const double d = arcDistance(a, x, y, ax, ay);
+        if (d < best) {
+            best = d;
+            nx = ax;
+            ny = ay;
+        }
+    }
+    return coarseClearance(x, y) >= 0.0 ? best : -best;
+}
+
+double LaneNetwork::roadClearance(double x, double y) const {
+    double nx = 0.0, ny = 0.0;
+    return kerbDistance(x, y, nx, ny);
+}
+
+double LaneNetwork::rayToKerb(double x, double y, double dx, double dy, double maxRange) const {
+    double best = std::numeric_limits<double>::infinity();
+    for (const KerbLine& k : kerbLines) {
+        // x + t d = a + s (b - a), 0 <= s <= 1, t > 0
+        const double ex = k.bx - k.ax, ey = k.by - k.ay;
+        const double den = dx * ey - dy * ex;
+        if (std::fabs(den) < 1e-12) continue;
+        const double wx = k.ax - x, wy = k.ay - y;
+        const double t = (wx * ey - wy * ex) / den;
+        const double s = (wx * dy - wy * dx) / den;
+        if (t > 1e-9 && s >= -1e-9 && s <= 1.0 + 1e-9 && t < best) best = t;
+    }
+    for (const KerbArc& a : kerbArcs) {
+        const double px = x - a.cx, py = y - a.cy;
+        const double b = px * dx + py * dy, c = px * px + py * py - a.r * a.r, disc = b * b - c;
+        if (disc < 0.0) continue;
+        const double sq = std::sqrt(disc);
+        for (double t : {-b - sq, -b + sq}) {
+            if (t <= 1e-9 || t >= best) continue;
+            const double th = std::atan2(py + t * dy, px + t * dx);
+            if (std::fabs(wrapAngle(th - a.mid)) <= a.half) best = t;
+        }
+    }
+    return best <= maxRange ? best : -1.0;
+}
+
 double footprintClearance(const LaneNetwork& net, double x, double y, double yaw, double rearOverhang, double frontOffset,
                           double width) {
     const double c = std::cos(yaw), s = std::sin(yaw), hw = 0.5 * width;
@@ -496,6 +681,7 @@ LaneNetwork mirrored(const LaneNetwork& net) {
             p.kappa = -p.kappa;
         }
     }
+    m.buildKerbs();
     return m;
 }
 
