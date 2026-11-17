@@ -705,7 +705,7 @@ void testPoseCorrections() {
           "L21 R3-B slow excursion, seed 9: the stack re-joins the path after the mid-turn correction and completes on the road",
           a.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
     // R4-C under kerb faults, seed 1: GNSS returns and corrects the estimate where the clearance layer has
-    // shifted the path; the monitor measures from that shifted, re-joined reference.
+    // shifted the path; the monitor measures from that shifted path.
     const EpisodeResult b = drive("R4-C", "kerb_faults_r4", 1, corrections, fallbacks);
     check(corrections >= 1 && fallbacks == 0 && b.outcome == "COMPLETED" && b.metrics.clearanceViolations == 0,
           "L21 R4-C kerb faults, seed 1: GNSS corrections near a shifted path end in no fallback stop",
