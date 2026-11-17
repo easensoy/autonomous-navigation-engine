@@ -87,6 +87,10 @@ struct CampaignOptions {
     int seeds = 5;
     std::string outDir;
     std::string config;  // EstimatorConfig overrides for development tuning; empty for the frozen configuration
+    // Closed loop only: run just these scenarios (comma-separated; empty: all). Episodes are independent,
+    // so one process per scenario, merged in the split's scenario order by tools/merge_closed_loop.py,
+    // gives the same files as one process running them all.
+    std::string scenarios;
 };
 // Open loop. Writes runs.jsonl, summary.md, campaign.txt and a few sensor logs; returns summary.md.
 std::string runLocalisationCampaign(const CampaignOptions& opt);
