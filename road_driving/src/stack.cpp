@@ -118,6 +118,17 @@ double Stack::pathShiftAt(double s) const {
     return shift_[i] + (shift_[i + 1] - shift_[i]) * f;
 }
 
+double Stack::rejoinAt(double s) const {
+    if (rejoinLength_ <= 0.0) {
+        return 0.0;
+    }
+    const double u = (s - rejoinS0_) / rejoinLength_;
+    if (u >= 1.0) {
+        return 0.0;
+    }
+    return u <= 0.0 ? rejoinD0_ : rejoinD0_ * 0.5 * (1.0 + std::cos(kPi * u));
+}
+
 void Stack::computeClearance() {
     clrLeft_.clear();
     clrRight_.clear();
@@ -269,6 +280,19 @@ void Stack::track(const VehicleState& pose) {
     if (pr.ok) {
         s_ = pr.s;
         lateral_ = pr.lateral;
+        // A cross-track change no motion explains is a pose correction: move the reference with it.
+        const double err = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
+        if (haveLastErr_ && std::fabs(err - lastErr_) > rejoinpolicy::kJump) {
+            const double d0 = rejoinAt(s_) + (err - lastErr_);
+            if (std::fabs(d0) <= rejoinpolicy::kMax) {
+                rejoinS0_ = s_;
+                rejoinD0_ = d0;
+                rejoinLength_ = std::max(rejoinpolicy::kMinLength, std::fabs(d0) / rejoinpolicy::kSlope);
+                event("POSE_CORRECTION", "jump=" + fmt(err - lastErr_, 3) + ";rejoin=" + fmt(d0, 3) + ";over=" + fmt(rejoinLength_, 1));
+            }
+        }
+        lastErr_ = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
+        haveLastErr_ = true;
     }
     // Step rule: the engine advances one node each time the rear axle enters the next route element.
     const size_t idx = path_.elementIndexAt(s_);
@@ -299,6 +323,8 @@ void Stack::adopt(const DrivePath& path, double s, const std::string& reason) {
         goalS_ = path_.elementStart(static_cast<size_t>(gi)) + (goalLaneS_ - net_.elements[static_cast<size_t>(goal_)].laneS0);
     }
     goalLatched_ = false;
+    rejoinLength_ = 0.0;  // a new path: no correction to re-join, and no previous error on it
+    haveLastErr_ = false;
     routes.push_back({t_, reason, router_.state(), path_.elements()});
     computeEnvelope();
     computeClearance();
@@ -439,8 +465,10 @@ void Stack::plan(const Observation& obs) {
         if (mode_ == Mode::Drive && aReq > vp_.decelFirm) {
             fallback("speed caps ahead need " + (std::isfinite(aReq) ? fmt(aReq) : std::string("inf")) +
                      " m/s^2, above the firm limit");
-        } else if (std::fabs(lateral_) > 1.0) {
-            fallback("lateral error " + fmt(lateral_) + " m");
+        } else if (std::fabs(lateral_ - pathShiftAt(s_) - rejoinAt(s_)) > 1.0) {
+            // Tracking error from the reference the controller follows: the path, its clearance shift and any
+            // re-join after a pose correction.
+            fallback("lateral error " + fmt(lateral_ - pathShiftAt(s_) - rejoinAt(s_)) + " m");
         } else if (mode_ == Mode::Drive && entersKnownClosure(path_, s_)) {
             planClosureStop("monitor: known closure ahead", v_);
         }
@@ -689,8 +717,8 @@ Command Stack::control(const VehicleState& pose, double t) {
         tg.x += over * std::cos(tg.yaw);
         tg.y += over * std::sin(tg.yaw);
     }
-    if (!shift_.empty()) {  // clearance shift: follow the path moved sideways
-        const double d = pathShiftAt(sTarget);
+    {  // follow the path moved sideways by the clearance shift and any re-join after a pose correction
+        const double d = (shift_.empty() ? 0.0 : pathShiftAt(sTarget)) + rejoinAt(sTarget);
         if (d != 0.0) {
             tg.x -= std::sin(tg.yaw) * d;
             tg.y += std::cos(tg.yaw) * d;
