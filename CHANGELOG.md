@@ -4,6 +4,35 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: GNSS integrity, kerb registration and a clearance layer (`road_driving/`)
+
+- **Additive.** With `BUILD_ROAD_DRIVING` off, the build is unchanged. No engine source, public header
+  or file under `ros2/` changed.
+- **Clearance is now exact.** `LaneNetwork::roadClearance` measures the distance to explicit kerb lines
+  and corner arcs. The previous function, kept as `coarseClearance`, has the same sign but understated
+  clearance near rounded corners by up to 3.6 m. Recorded R2 episodes keep their traces, outcomes and
+  body-crossing counts; positive clearances grow.
+- **New estimators** (`makeEstimator`):
+  - `ekf_int`: GNSS integrity (jump test against odometry, fault exclusion, consistency-checked
+    re-anchoring) instead of the 10 s reset;
+  - `ekf_kerb`: `ekf_int` plus scan-to-map kerb registration.
+
+  `ekf` is unchanged and reproduces its recorded results exactly.
+- **New sensor and faults.** A simulated kerb-height range scanner, on its own random stream, so earlier
+  logs and results are unchanged. New faults: intermittent multipath, a slow GNSS excursion, parked cars,
+  kerb clutter and scanner blackout. `sensors.csv` gains a seventh column for scan ranges; six-column
+  logs still parse.
+- **Stack.** A clearance layer: the footprint's margin to the kerb follows the estimate's uncertainty;
+  the path shifts away from close kerbs; the car stops explicitly where no clear continuation exists.
+  `Scenario::feasibility` turns it off; manifests written before it existed replay with it off. On
+  simulator truth, R1's 192 closure episodes are byte-identical.
+- **`road_drive`:**
+  - `drive` gains `--estimator` and `--feasibility`;
+  - `localise` gains `--estimators` and `--config`;
+  - `bench-loc` and `bench-closed` gain the splits `r2` (R2 as development data) and `r3` (held out);
+  - `map` knows R3.
+- **Tests:** `road_driving_localisation_tests` grows from 42 to 95 checks.
+
 ### Road-driving localisation (additive, `road_driving/`)
 
 - **Additive.** With `BUILD_ROAD_DRIVING` off, the build is unchanged. No engine source, public header
