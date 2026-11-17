@@ -63,6 +63,39 @@ SensorConditions sensorConditions(const std::string& name) {
         c.outage = {0.30, 0.60};
         c.gyroBiasStepTime = 20.0;
         c.gyroBiasStep = 0.015;
+    } else if (name == "nominal_r5") {
+    } else if (name == "gnss_outage_r5") {
+        c.outage = {0.20, 0.55};
+    } else if (name == "multipath_r5") {
+        c.multipath = {0.30, 0.55};
+        c.multipathBias = 9.0;
+        c.multipathSigma = 1.5;
+    } else if (name == "gnss_ramp_r5") {
+        c.ramp = {0.30, 0.70};
+        c.rampRate = 0.35;
+        c.rampMax = 6.0;
+    } else if (name == "imu_fault_r5") {
+        c.gyroBiasStepTime = 30.0;
+        c.gyroBiasStep = 0.012;
+        c.outage = {0.35, 0.55};
+    } else if (name == "kerb_faults_r5") {
+        c.kerbShift = {0.10, 0.30};
+        c.kerbShiftDistance = 0.4;
+        c.kerbBlackout = {0.40, 0.70};
+        c.multipath = {0.45, 0.60};
+        c.multipathBias = 7.0;
+        c.multipathSigma = 0.8;
+    } else if (name == "combined_r5") {
+        c.outage = {0.15, 0.30};
+        c.ramp = {0.45, 0.75};
+        c.rampRate = 0.3;
+        c.rampMax = 4.0;
+        c.slip = {0.35, 0.45};
+        c.slipRatio = 0.25;
+        c.kerbClutter = 0.10;
+        c.parked = {0.50, 0.70};
+        c.gyroBiasStepTime = 45.0;
+        c.gyroBiasStep = 0.010;
     } else if (name == "nominal_r4") {
     } else if (name == "gnss_outage_r4") {
         c.outage = {0.25, 0.70};
@@ -151,6 +184,10 @@ std::vector<std::string> conditionNames(bool heldOut) {
 
 std::vector<std::string> conditionNamesR3() {
     return {"nominal_r3", "gnss_outage_r3", "multipath_r3", "gnss_jumps_r3", "gnss_ramp_r3", "kerb_clutter_r3", "combined_r3"};
+}
+
+std::vector<std::string> conditionNamesR5() {
+    return {"nominal_r5", "gnss_outage_r5", "multipath_r5", "gnss_ramp_r5", "imu_fault_r5", "kerb_faults_r5", "combined_r5"};
 }
 
 std::vector<std::string> conditionNamesR4() {
