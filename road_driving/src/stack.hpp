@@ -50,6 +50,19 @@ constexpr double kResume = 0.05;        // m of spare margin, held for 2 s, to r
 constexpr double kShiftRate = 0.05;     // m: largest change of the shift at any point per planning tick
 }  // namespace clearpolicy
 
+// Pose corrections. An estimate can jump: a kerb re-localisation, a GNSS re-anchor, GNSS returning after
+// dead reckoning. The car itself did not move, so following the old reference would turn the correction
+// into a steering step, and the monitor would read it as a tracking error. When the cross-track error
+// changes between two control ticks by more than the car can move, the reference moves by that change and
+// returns to the path smoothly (a raised cosine), so the error the controller and the monitor see stays
+// continuous. Larger corrections than kMax are left to the monitor.
+namespace rejoinpolicy {
+constexpr double kJump = 0.15;    // m of cross-track change in one control tick (20 ms) that is a correction
+constexpr double kSlope = 0.05;   // m of re-join per m of path
+constexpr double kMinLength = 10.0;  // m
+constexpr double kMax = 1.5;      // m: largest re-join
+}  // namespace rejoinpolicy
+
 // When the estimate is degraded the stack slows down; when it is unreliable (invalid, stale or too
 // uncertain across the lane) the stack stops in lane and waits for it to recover. It never switches to
 // another pose source.
@@ -70,6 +83,7 @@ public:
     int believedElement() const { return path_.empty() ? -1 : path_.elements()[idx_]; }
     double pathShiftAt(double s) const;  // m, current sideways shift of the path (positive left)
     double currentShift() const { return pathShiftAt(s_); }
+    double rejoinAt(double s) const;     // m, sideways offset of the reference after a pose correction
 
     Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility = true);
     void initialise(const Observation& obs);  // first planning tick: closures known at departure, initial route
@@ -159,6 +173,11 @@ private:
     Mode beforeClearStop_ = Mode::Drive;
     double clearStopS_ = 0.0, clearSince_ = -1.0;
     bool clearLatched_ = false;
+
+    // Pose corrections (rejoinpolicy).
+    double rejoinS0_ = 0.0, rejoinD0_ = 0.0, rejoinLength_ = 0.0;
+    double lastErr_ = 0.0;     // cross-track error from the reference at the previous tick
+    bool haveLastErr_ = false;
 };
 
 // Speed caps of a path (20 mph limit and curvature), and the deceleration needed from (s, v) to meet
