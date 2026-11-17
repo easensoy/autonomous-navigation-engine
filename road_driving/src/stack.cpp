@@ -29,6 +29,29 @@ std::string fmt(double v, int prec = 2) {
     return os.str();
 }
 
+// Clearance of each side of a rectangular footprint to the kerb, at the same points footprintClearance
+// samples (the evaluator's discretisation).
+void sideClearance(const LaneNetwork& net, double x, double y, double yaw, double rear, double front, double width, double& left,
+                   double& right) {
+    const double c = std::cos(yaw), s = std::sin(yaw), hw = 0.5 * width;
+    left = right = kInf;
+    auto eval = [&](double u, double w) {
+        const double d = net.roadClearance(x + c * u - s * w, y + s * u + c * w);
+        if (w >= 0.0) left = std::min(left, d);
+        if (w <= 0.0) right = std::min(right, d);
+    };
+    for (int i = 0; i <= 8; ++i) {
+        const double u = -rear + (front + rear) * i / 8.0;
+        eval(u, -hw);
+        eval(u, hw);
+    }
+    for (int i = 1; i < 4; ++i) {
+        const double w = -hw + width * i / 4.0;
+        eval(-rear, w);
+        eval(front, w);
+    }
+}
+
 // The constant deceleration command A that stops the car within d metres, given its speed v and actual
 // acceleration a. The model is the vehicle's own actuator model: the current acceleration holds for the
 // command delay Td, then relaxes towards -A with the longitudinal lag tau. Its stopping distance is
@@ -79,8 +102,143 @@ double requiredDecel(const DrivePath& path, const std::vector<double>& caps, dou
     return a;
 }
 
-Stack::Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS)
-    : net_(net), vp_(vp), variant_(variant), goal_(goalElement), goalLaneS_(goalLaneS), router_(net) {}
+Stack::Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility)
+    : net_(net), vp_(vp), variant_(variant), goal_(goalElement), goalLaneS_(goalLaneS), router_(net), feasibility_(feasibility) {}
+
+double Stack::pathShiftAt(double s) const {
+    if (shift_.empty()) {
+        return 0.0;
+    }
+    const double u = std::max(0.0, s / clearpolicy::kStep);
+    const size_t i = std::min(shift_.size() - 1, static_cast<size_t>(u));
+    if (i + 1 >= shift_.size()) {
+        return shift_.back();
+    }
+    const double f = u - static_cast<double>(i);
+    return shift_[i] + (shift_[i + 1] - shift_[i]) * f;
+}
+
+void Stack::computeClearance() {
+    clrLeft_.clear();
+    clrRight_.clear();
+    clrTurn_.clear();
+    shift_.clear();
+    if (!feasibility_ || path_.empty()) {
+        return;
+    }
+    const size_t n = static_cast<size_t>(path_.length() / clearpolicy::kStep) + 1;
+    for (size_t i = 0; i < n; ++i) {
+        const PathSample p = path_.at(static_cast<double>(i) * clearpolicy::kStep);
+        double l = 0.0, r = 0.0;
+        sideClearance(net_, p.x, p.y, p.yaw, vp_.rearOverhang, vp_.frontOffset(), vp_.width, l, r);
+        clrLeft_.push_back(l);
+        clrRight_.push_back(r);
+        clrTurn_.push_back(net_.elements[static_cast<size_t>(p.element)].isConnector() ? 1 : 0);
+    }
+    shift_.assign(n, 0.0);
+    shiftS_ = -1.0;
+}
+
+// Each planning tick: the margin the estimate's uncertainty requires, the sideways shift that provides it
+// where the path is too close to a kerb, and an explicit stop before the first point where no permitted
+// shift does.
+void Stack::clearancePolicy(const Observation& obs) {
+    using namespace clearpolicy;
+    if (!feasibility_ || clrLeft_.empty()) {
+        return;
+    }
+    if (mode_ != Mode::Drive && mode_ != Mode::StopForClosure && mode_ != Mode::ClearanceStop) {
+        return;
+    }
+    // The footprint's lateral sigma: the estimate's, plus its heading sigma acting at the front bumper.
+    const double sigma = obs.estimated ? std::hypot(obs.sigmaAcross, vp_.frontOffset() * obs.sigmaHeading) : 0.0;
+    const double need = kSigma * sigma + kTrack;
+    const double laneLimit = 0.5 * (net_.spec.laneWidth - vp_.width) - kTrack;  // towards the centre line on a lane
+    const size_t n = clrLeft_.size();
+    const size_t i0 = std::min(n - 1, static_cast<size_t>(std::max(0.0, s_) / kStep));
+    const size_t i1 = std::min(n - 1, static_cast<size_t>((std::max(0.0, s_) + clearpolicy::kHorizon) / kStep));
+    const size_t m = i1 - i0 + 1;
+    std::vector<double> lo(m), hi(m), pos(m, 0.0), neg(m, 0.0);
+    auto bounds = [&](double margin) {
+        for (size_t k = 0; k < m; ++k) {
+            const size_t i = i0 + k;
+            lo[k] = margin - clrRight_[i];  // a shift left by at least this keeps the right side clear
+            hi[k] = clrLeft_[i] - margin;   // a shift left by at most this keeps the left side clear
+            if (clrTurn_[i]) {
+                lo[k] = std::max(lo[k], -kShiftMax);
+                hi[k] = std::min(hi[k], kShiftMax);
+            } else {
+                lo[k] = std::max(lo[k], -laneLimit);
+            }
+        }
+    };
+    bounds(need);
+    // The smallest shift that each sample wants, spread along the path as raised-cosine bumps (the shift
+    // and its curvature stay continuous); a bump of height h reaches h / kShiftSlope metres either side.
+    for (size_t k = 0; k < m; ++k) {
+        const double want = (lo[k] <= 0.0 && hi[k] >= 0.0) ? 0.0 : (lo[k] > 0.0 ? lo[k] : hi[k]);
+        if (want == 0.0) {
+            continue;
+        }
+        const double width = std::max(4.0, std::fabs(want) / kShiftSlope);
+        const long reach = static_cast<long>(width / kStep);
+        for (long j = -reach; j <= reach; ++j) {
+            const long q = static_cast<long>(k) + j;
+            if (q < 0 || q >= static_cast<long>(m)) continue;
+            const double f = 0.5 * (1.0 + std::cos(kPi * static_cast<double>(std::labs(j)) * kStep / width));
+            pos[static_cast<size_t>(q)] = std::max(pos[static_cast<size_t>(q)], std::max(0.0, want) * f);
+            neg[static_cast<size_t>(q)] = std::min(neg[static_cast<size_t>(q)], std::min(0.0, want) * f);
+        }
+    }
+    // Apply it, changing at most kShiftSlope per metre the car has moved since the last tick (never a step at
+    // standstill), and find the first sample the target shift cannot keep clear.
+    const double moved = shiftS_ < 0.0 ? 0.0 : std::max(0.0, s_ - shiftS_);
+    shiftS_ = s_;
+    const double rate = std::min(kShiftRate, kShiftSlope * moved);
+    size_t firstBad = m;
+    for (size_t k = 0; k < m; ++k) {
+        const double target = pos[k] + neg[k];
+        double& sh = shift_[i0 + k];
+        sh += std::max(-rate, std::min(rate, target - sh));
+        if (firstBad == m && (target < lo[k] - 1e-9 || target > hi[k] + 1e-9)) {
+            firstBad = k;
+        }
+    }
+    const std::string detail = [&]() {
+        if (firstBad == m) return std::string();
+        const size_t i = i0 + firstBad;
+        const PathSample p = path_.at(static_cast<double>(i) * kStep);
+        return "at=" + net_.elements[static_cast<size_t>(p.element)].name + ";ahead=" + fmt(static_cast<double>(i) * kStep - s_, 1) +
+               ";left=" + fmt(clrLeft_[i], 3) + ";right=" + fmt(clrRight_[i], 3) + ";required=" + fmt(need, 3) + ";sigma=" + fmt(sigma, 3);
+    }();
+    if (firstBad < m) {
+        clearSince_ = -1.0;
+        if (mode_ != Mode::ClearanceStop) {
+            beforeClearStop_ = mode_;
+            mode_ = Mode::ClearanceStop;
+            clearStopS_ = std::max(s_, static_cast<double>(i0 + firstBad) * kStep - kStep);
+            clearLatched_ = false;
+            event("NO_CLEAR_CONTINUATION", detail);
+        }
+        return;
+    }
+    if (mode_ == Mode::ClearanceStop) {
+        bounds(need + kResume);  // resume only with spare margin
+        bool spare = true;
+        for (size_t k = 0; k < m && spare; ++k) {
+            spare = lo[k] <= hi[k] + 1e-9;
+        }
+        if (!spare) {
+            clearSince_ = -1.0;
+        } else if (clearSince_ < 0.0) {
+            clearSince_ = t_;
+        } else if (t_ - clearSince_ >= 2.0) {
+            mode_ = beforeClearStop_;
+            clearSince_ = -1.0;
+            event("CLEAR_CONTINUATION", "required=" + fmt(need, 3) + ";sigma=" + fmt(sigma, 3));
+        }
+    }
+}
 
 const char* Stack::modeName() const {
     switch (mode_) {
@@ -92,6 +250,7 @@ const char* Stack::modeName() const {
         case Mode::Done: return "DONE";
         case Mode::NoRoute: return "NO_ROUTE";
         case Mode::LocalisationStop: return "LOCALISATION_STOP";
+        case Mode::ClearanceStop: return "CLEARANCE_STOP";
     }
     return "?";
 }
@@ -142,6 +301,7 @@ void Stack::adopt(const DrivePath& path, double s, const std::string& reason) {
     goalLatched_ = false;
     routes.push_back({t_, reason, router_.state(), path_.elements()});
     computeEnvelope();
+    computeClearance();
 }
 
 double Stack::barrierS(const DrivePath& path, const ClosureReport& c) const {
@@ -273,7 +433,8 @@ void Stack::plan(const Observation& obs) {
     }
 
     // Constraint monitor over the stopping horizon.
-    if (mode_ == Mode::Drive || mode_ == Mode::StopForClosure) {
+    // In a clearance stop the car is still moving: a lateral error beyond the limit must still trigger the fallback.
+    if (mode_ == Mode::Drive || mode_ == Mode::StopForClosure || mode_ == Mode::ClearanceStop) {
         const double aReq = requiredDecel(path_, caps_, s_, v_);
         if (mode_ == Mode::Drive && aReq > vp_.decelFirm) {
             fallback("speed caps ahead need " + (std::isfinite(aReq) ? fmt(aReq) : std::string("inf")) +
@@ -286,6 +447,7 @@ void Stack::plan(const Observation& obs) {
         aEnv_ = std::min(vp_.decelFirm, std::max(kEnvDecel, 1.05 * (std::isfinite(aReq) ? aReq : vp_.decelFirm)));
     }
     localisationPolicy(obs);
+    clearancePolicy(obs);
     computeEnvelope();
 }
 
@@ -527,6 +689,13 @@ Command Stack::control(const VehicleState& pose, double t) {
         tg.x += over * std::cos(tg.yaw);
         tg.y += over * std::sin(tg.yaw);
     }
+    if (!shift_.empty()) {  // clearance shift: follow the path moved sideways
+        const double d = pathShiftAt(sTarget);
+        if (d != 0.0) {
+            tg.x -= std::sin(tg.yaw) * d;
+            tg.y += std::cos(tg.yaw) * d;
+        }
+    }
     const double dx = tg.x - xp, dy = tg.y - yp;
     const double lx = std::cos(yawp) * dx + std::sin(yawp) * dy;
     const double ly = -std::sin(yawp) * dx + std::cos(yawp) * dy;
@@ -570,6 +739,13 @@ Command Stack::control(const VehicleState& pose, double t) {
     };
     if (goalOnPath_ && mode_ == Mode::Drive) {
         a = std::min(a, stopLaw(goalS_, goalLatched_, vp_.decelFirm));
+    }
+    if (mode_ == Mode::ClearanceStop) {  // stop short of the point the margin cannot be kept, and wait
+        a = std::min(a, std::min(0.0, stopLaw(clearStopS_, clearLatched_, vp_.decelFirm)));
+        if (v < 0.05) {
+            cmd.accel = -kHoldDecel;
+            return cmd;
+        }
     }
     if (stopActive_) {
         if (stopClass_ == "EMERGENCY" || stopClass_ == "UNAVOIDABLE") {
