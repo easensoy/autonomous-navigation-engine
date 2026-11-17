@@ -4,14 +4,14 @@ The car can drive on its own state estimate instead of simulator truth. The worl
 
 Labels: **SIMULATED_SENSORS** and **ESTIMATED_POSE**. The kerb scanner is simulated: its ranges are cast from the scanner's true pose to the mapped kerbs, shifted by a modelled deviation of the real kerb from the map. Kerb registration matches those ranges to the map. Nothing here is processed lidar or camera data.
 
-Three evaluations, each predeclared and pushed before its held-out run:
+Four evaluations, each predeclared and pushed before its held-out run:
 
-| | First | Second | Third |
-|---|---|---|---|
-| Question | does a GNSS + IMU + wheel EKF beat simple baselines? | do GNSS integrity, kerb registration and a clearance-aware stack fix the first one's failures? | do a confirmed way out of GNSS faults and kerb re-localisation fix the second one's failures? |
-| Estimators | `ekf` and three baselines | `ekf`, `ekf_int`, `ekf_kerb` and the baselines | those, plus `ekf_int2` and `ekf_kerb2` |
-| Development | R1 | R1 and R2 | R1 to R3 |
-| Held out | R2 ([protocol](benchmark/PROTOCOL.md), [results](benchmark/heldout)) | R3 ([protocol](benchmark/PROTOCOL_R3.md), [results](benchmark/heldout-r3)) | R4 ([protocol](benchmark/PROTOCOL_R4.md), [results](benchmark/heldout-r4)) |
+| | First | Second | Third | Fourth |
+|---|---|---|---|---|
+| Question | does a GNSS + IMU + wheel EKF beat simple baselines? | do GNSS integrity, kerb registration and a clearance-aware stack fix the first one's failures? | do a confirmed way out of GNSS faults and kerb re-localisation fix the second one's failures? | does the stack's re-join after pose corrections help on unseen roads, at no cost? |
+| Estimators | `ekf` and three baselines | `ekf`, `ekf_int`, `ekf_kerb` and the baselines | those, plus `ekf_int2` and `ekf_kerb2` | the five filters, each driven with and without the re-join |
+| Development | R1 | R1 and R2 | R1 to R3 | R3 and R4 |
+| Held out | R2 ([protocol](benchmark/PROTOCOL.md), [results](benchmark/heldout)) | R3 ([protocol](benchmark/PROTOCOL_R3.md), [results](benchmark/heldout-r3)) | R4 ([protocol](benchmark/PROTOCOL_R4.md), [results](benchmark/heldout-r4)) | R5 ([protocol](benchmark/PROTOCOL_R5.md), [results](benchmark/heldout-r5)) |
 
 ## Frames, units and time
 
@@ -269,8 +269,10 @@ All measured on 17 November 2026 on one Windows 11 laptop, with seeds 1 to 10.
 | Second, held out | R3 | MSVC 19.51 at `9332dd3` | 210 drives, 1,260 runs | 1,000 episodes | [`benchmark/heldout-r3/`](benchmark/heldout-r3) |
 | Third, development | R3 | GCC 14.2 at `b7ee7f2` | 210 drives, 1,680 runs | 1,240 episodes | [`benchmark/r3-dev/`](benchmark/r3-dev) |
 | Third, held out | R4 | MSVC 19.51 at `87436de` | 210 drives, 1,680 runs | 1,440 episodes | [`benchmark/heldout-r4/`](benchmark/heldout-r4) |
+| Fourth, development | R3 and R4 | GCC 14.2 and MSVC 19.51 at `f674183` | — | 2,680 episodes | [`benchmark/rejoin-dev/`](benchmark/rejoin-dev) |
+| Fourth, held out | R5 | MSVC 19.51 at `2966c0a` | 210 drives, 1,680 runs | 2,840 episodes | [`benchmark/heldout-r5/`](benchmark/heldout-r5) |
 
-Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`. No held-out network was used for tuning.
+Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`, [fourth](benchmark/PROTOCOL_R5.md) in `2966c0a`. No held-out network was used for tuning.
 
 ### First evaluation: held out on R2
 
@@ -463,7 +465,34 @@ Only the cells that changed are shown. Each is out of 40 episodes; fallback stop
 - **`ekf_kerb2`** crossed a kerb in none of R4's 280 episodes, and in 2 of R3's 240. Those 2 are one drive, R3-B seed 2, in both R3-B scenarios: the re-localisation that came too late.
 - **Unchanged:** nominal driving everywhere. In no condition does any pose source cross a kerb more often or deeper than before. 413 of 1,440 episodes changed on R4, and 76 of 1,240 on R3.
 - **The one cell that got worse.** On R4-C under combined faults, seed 4, the GNSS-only integrity filters used to complete the route with the body 2.18 m over a kerb, on an estimate 4.2 m off. The monitor now stops them, with the same crossing.
-- **Not shown:** whether the gain holds on roads it was not developed on. That needs a fresh held-out network.
+- **Not shown here:** whether the gain holds on roads it was not developed on. The fourth evaluation tests that.
+
+### Fourth evaluation: the re-join, held out on R5
+
+Every filter drove every R5 episode twice on the same seeds, with and without the re-join: 1,400 pairs, plus the reference.
+
+| # | Criterion | Held-out result | Verdict |
+|---|---|---|---|
+| V1 | Under `nominal_r5` every pair has identical traces | 200 of 200 | passed |
+| V2 | With the re-join, `ekf_kerb2`'s body is never over a kerb | 0 of 280 | passed |
+| V3 | No filter, in any condition, crosses a kerb in more episodes, or deeper, with the re-join | five cells cross in one more episode: `ekf`, `ekf_int` and `ekf_int2` under combined faults; `ekf_int` and `ekf_int2` under the slow excursion. None deeper | **failed** |
+| V4 | Fewer fallback stops, summed over all conditions and filters | 339 without, 326 with | passed |
+| V5 | `ekf_kerb2` ends as the reference does at least as often in every condition, and all filters together at least as often | `ekf_kerb2`: equal everywhere; all filters: 665 without, 664 with | **failed** |
+| V6 | No closure incursion by `ekf_kerb2` with the re-join | 0 | passed |
+
+**What R5 showed.**
+- **The failure the re-join was built for did not occur on R5.** `ekf_kerb` and `ekf_kerb2` never crossed a kerb and never made a fallback stop, with or without the re-join, in any condition. Their outcomes were identical in every pair. V2's pass therefore shows no harm, not a benefit.
+- **Where the re-join acted** (392 of 1,400 pairs changed), it was almost always on a GNSS-only filter whose estimate was already metres wrong.
+  - Under the GNSS outage it removed all 9 of their fallback stops (3 per filter), with outcomes unchanged.
+  - Under the slow excursion and combined faults it changed which episodes crossed, in both directions. In one pair (R5-C, slow excursion, seed 2) `ekf_int` and `ekf_int2` crossed by 2.90 m with the re-join and not at all without. There the old monitor's earlier stop happened to come before the crossing.
+  - In others the re-join removed a crossing: `ekf` on R5-B under kerb faults, seed 9, 0.37 m.
+  - The net was one more crossing episode in five cells, and one completion fewer.
+- **Open loop** (reported without a criterion):
+  - `ekf_kerb2` failed no run in any condition; its lateral 95th percentile was 0.043–0.046 m, and 0.166 m under kerb faults.
+  - Under combined faults `ekf_int2` failed 7 of 30 runs, against `ekf_int`'s 23.
+  - Under the gyro fault in an outage, both GNSS integrity filters failed 25 of 30, and the kerb filters none.
+
+**What this means.** On development data the re-join removed crossings that followed correct kerb re-localisations. On unseen roads that situation did not arise, and for filters without an independent reference it was not an improvement: it changes which wrong estimates end in a crossing, at a small net cost. A stack cannot tell a correction from a corruption by the jump alone.
 
 ### Failure cases and the next improvement
 
@@ -505,9 +534,9 @@ The third increment answered T1 with a way out of FAULTED, and T8 with kerb re-l
 **What the evidence pointed to next, and what was done.** The stack should treat a pose correction as a correction. It now re-joins the path smoothly after a jump, and its monitor measures from the path including the clearance shift (development results above). The monitor deliberately still sees a jump of more than 1 m: a version that hid it from the monitor drove a corrupted estimate 9.3 m off the road. A steering damper was not needed.
 
 **What the evidence supports now:**
+- **Let the estimator say what kind of jump it made.** The R5 evaluation shows the re-join helps only when the correction is right. A kerb re-localisation is verified against the map; a GNSS-only filter's jump is not. The stack could re-join only corrections the estimator marks as verified, and leave every other jump to the monitor as before. That would keep the development gains and the old safety net. It needs a new held-out network, because R5 has now been used.
 - **Earlier re-localisation for `ekf_kerb2`.** The remaining development crossing (R3-B, seed 2) came from a match found only mid-turn, one return short of the uniqueness margin.
 - **A better fault offset for `ekf_int2`:** remember it from several fixes after the onset, not one.
-- **A fresh held-out network** to test the stack change on roads it was not developed on.
 
 ## Not done
 
