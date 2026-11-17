@@ -1,0 +1,20 @@
+split=r4
+seeds=1..10
+routes=R4-A:R4:J00>J10@10->J41>J42@30 R4-B:R4:J41>J31@10->J10>J00@30 R4-C:R4:J02>J01@10->J22>J32@30 
+conditions=nominal_r4 gnss_outage_r4 multipath_r4 gnss_ramp_r4 imu_fault_r4 kerb_faults_r4 combined_r4 
+estimators=ekf ekf_int ekf_int2 ekf_kerb ekf_kerb2 dr gnss_cv gnss_hold 
+estimator_config=gnss_sigma=0.28 gnss_corr_sigma=0.15 gnss_corr_tau=60 wheel_sigma=0.03 gyro_sigma=0.0015 accel_sigma=0.03 pos_process=0.0006 gyro_bias_walk=0.0001 accel_bias_walk=0.0002 scale_walk=1e-05 gate_gnss=11 gate_wheel=10.83 robust_nis=3 reset_after_rejected=100 cv_accel_sigma=1.5 init_pos_sigma=1 init_yaw_sigma=0.05 init_gyro_bias_sigma=0.01 step_gate=18.4 fault_exit_fixes=5 inconsistent_after=20 reanchor_window=20 reanchor_scatter=0.6 reanchor_inflation=9 kerb_sigma=0.04 kerb_effective=15 kerb_floor_pos=0.03 kerb_floor_yaw=0.004 kerb_corr_length=5 kerb_gyro_bias_walk=0.0003 kerb_min_returns=8 kerb_gate=16.3 kerb_robust=7.8 heading_evidence=0.07 heading_evidence_track=10 reloc_after=3 reloc_radius=6 reloc_step=0.5
+toolchain=MSVC 195136260
+engine_commit_at_configure=87436dec6a76f8b3007cb7bb6175203164da8ea7
+config.gnss_sigma=0.28
+config.wheel_sigma=0.03
+config.gyro_sigma=0.0015
+config.accel_sigma=0.03
+config.pos_process=0.0006
+config.gyro_bias_walk=0.0001
+config.accel_bias_walk=0.0002
+config.scale_walk=1e-05
+config.gate_gnss=11
+config.gate_wheel=10.83
+config.reset_after_rejected=100
+config.cv_accel_sigma=1.5
