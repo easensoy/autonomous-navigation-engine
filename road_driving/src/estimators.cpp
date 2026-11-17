@@ -273,6 +273,9 @@ public:
         e.pyawyaw = c.P[YAW][YAW];
         e.pvv = c.P[VEL][VEL];
         e.lastGnssUsed = c.lastGnss;
+        e.verifiedCorrections = c.kerbCorrections;
+        e.verifiedJumpX = c.kerbJumpX;
+        e.verifiedJumpY = c.kerbJumpY;
         const double sp = e.sigmaPos();
         e.status = sp > 2.0 ? "LOST" : (sp > 0.5 ? "DEGRADED" : (t - c.lastGnss > 2.0 ? "DEAD_RECKONING" : "OK"));
         if (cfg_.integrity) {
@@ -309,6 +312,8 @@ private:
         // Kerb ranging.
         double lastKerbSeen = -1.0, lastKerbGood = -1.0, distSinceKerb = 0.0, lastRelocTry = -1.0;
         int kerbRejectRun = 0;
+        int kerbCorrections = 0;  // kerb registrations that moved the position by more than 0.1 m
+        double kerbJumpX = 0.0, kerbJumpY = 0.0;
         bool lastKerbOk = false;
     };
     struct Entry {
@@ -989,6 +994,14 @@ private:
         ++stats.kerbUsed;
         c.lastKerbOk = true;
         c.distSinceKerb = 0.0;
+        {  // a correction verified against the map, reported so that a stack can follow it
+            const double jx = c.x[PX] - p0[0], jy = c.x[PY] - p0[1];
+            if (std::hypot(jx, jy) > 0.1) {
+                ++c.kerbCorrections;
+                c.kerbJumpX = jx;
+                c.kerbJumpY = jy;
+            }
+        }
         if (nisTot <= cfg_.kerbRobust) {
             c.lastKerbGood = m.tMeas;
         }
