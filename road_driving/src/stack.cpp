@@ -102,8 +102,9 @@ double requiredDecel(const DrivePath& path, const std::vector<double>& caps, dou
     return a;
 }
 
-Stack::Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility)
-    : net_(net), vp_(vp), variant_(variant), goal_(goalElement), goalLaneS_(goalLaneS), router_(net), feasibility_(feasibility) {}
+Stack::Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility,
+             bool rejoin)
+    : net_(net), vp_(vp), variant_(variant), goal_(goalElement), goalLaneS_(goalLaneS), router_(net), feasibility_(feasibility), rejoin_(rejoin) {}
 
 double Stack::pathShiftAt(double s) const {
     if (shift_.empty()) {
@@ -282,7 +283,7 @@ void Stack::track(const VehicleState& pose) {
         lateral_ = pr.lateral;
         // A cross-track change no motion explains is a pose correction: move the reference with it.
         const double err = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
-        if (haveLastErr_ && std::fabs(err - lastErr_) > rejoinpolicy::kJump) {
+        if (rejoin_ && haveLastErr_ && std::fabs(err - lastErr_) > rejoinpolicy::kJump) {
             const double d0 = rejoinAt(s_) + (err - lastErr_);
             if (std::fabs(d0) <= rejoinpolicy::kMax) {
                 rejoinS0_ = s_;
@@ -465,11 +466,12 @@ void Stack::plan(const Observation& obs) {
         if (mode_ == Mode::Drive && aReq > vp_.decelFirm) {
             fallback("speed caps ahead need " + (std::isfinite(aReq) ? fmt(aReq) : std::string("inf")) +
                      " m/s^2, above the firm limit");
-        } else if (std::fabs(lateral_ - pathShiftAt(s_)) > 1.0) {
+        } else if (std::fabs(lateral_ - (rejoin_ ? pathShiftAt(s_) : 0.0)) > 1.0) {
             // From the path the car should follow, its clearance shift included, but not any re-join: the
             // re-join only keeps the steering smooth. An estimate that jumps more than 1 m off that path may be
-            // a correction or a corruption, and the stack cannot tell which, so it still stops.
-            fallback("lateral error " + fmt(lateral_ - pathShiftAt(s_)) + " m");
+            // a correction or a corruption, and the stack cannot tell which, so it still stops. (Without the
+            // re-join, the stack evaluated on R3 and R4: from the unshifted path.)
+            fallback("lateral error " + fmt(lateral_ - (rejoin_ ? pathShiftAt(s_) : 0.0)) + " m");
         } else if (mode_ == Mode::Drive && entersKnownClosure(path_, s_)) {
             planClosureStop("monitor: known closure ahead", v_);
         }
