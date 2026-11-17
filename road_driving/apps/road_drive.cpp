@@ -1,15 +1,16 @@
-// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 to R4, and the
+// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 to R5, and the
 // localisation benchmark.
 //
 //   road_drive list
 //   road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]
 //   road_drive replay <episode dir>
 //   road_drive suite [--variant B0|B1] [--seeds N]
-//   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--estimator NAME] [--feasibility on|off] [--seed N] [--out DIR]
+//   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--estimator NAME] [--feasibility on|off]
+//                    [--rejoin on|off] [--seed N] [--out DIR]
 //   road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]   (stored sensor log; no world simulation)
-//   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR
-//   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] [--scenario A,B] --out DIR
-//   road_drive map R1|R2|R3|R4 [--json FILE]
+//   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5 [--seeds N] --out DIR
+//   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5 [--seeds N] [--scenario A,B] [--rejoin on|off] --out DIR
+//   road_drive map R1|R2|R3|R4|R5 [--json FILE]
 //
 // Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
 // mode is "estimated", when the stack drives on the estimator's output.
@@ -44,11 +45,11 @@ int usage() {
                  "usage:\n  road_drive list\n  road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]\n"
                  "  road_drive replay <episode dir>\n  road_drive suite [--variant B0|B1] [--seeds N]\n"
                  "  road_drive drive <scenario|route> [--condition C] [--mode ground_truth|estimated] [--estimator NAME]\n"
-                 "                   [--feasibility on|off] [--seed N] [--out DIR]\n"
+                 "                   [--feasibility on|off] [--rejoin on|off] [--seed N] [--out DIR]\n"
                  "  road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]\n"
-                 "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR\n"
-                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] [--scenario A,B] --out DIR\n"
-                 "  road_drive map R1|R2|R3|R4 [--json FILE]\n");
+                 "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5 [--seeds N] --out DIR\n"
+                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5 [--seeds N] [--scenario A,B] [--rejoin on|off] --out DIR\n"
+                 "  road_drive map R1|R2|R3|R4|R5 [--json FILE]\n");
     return 2;
 }
 
@@ -134,14 +135,14 @@ bool scenarioByName(const std::string& name, Scenario& sc) {
             }
         }
     }
-    for (bool r4 : {false, true}) {
-        for (const RouteSpec& r : r4 ? benchmarkRoutesR4() : benchmarkRoutesR3()) {
+    for (int n : {3, 4, 5}) {
+        for (const RouteSpec& r : n == 3 ? benchmarkRoutesR3() : n == 4 ? benchmarkRoutesR4() : benchmarkRoutesR5()) {
             if (r.name == name) {
                 sc = benchmarkScenario(r, "", 0, "ground_truth");
                 return true;
             }
         }
-        for (const Scenario& s : r4 ? closedLoopScenariosR4() : closedLoopScenariosR3()) {
+        for (const Scenario& s : n == 3 ? closedLoopScenariosR3() : n == 4 ? closedLoopScenariosR4() : closedLoopScenariosR5()) {
             if (s.name == name) {
                 sc = s;
                 return true;
@@ -163,14 +164,16 @@ int drive(const std::string& name, std::map<std::string, std::string>& opt) {
     sc.departDelay = opt.count("--delay") ? std::stod(opt["--delay"]) : 2.0;
     sc.estimator = opt.count("--estimator") ? opt["--estimator"] : "ekf";
     sc.feasibility = !opt.count("--feasibility") || opt["--feasibility"] != "off";
+    sc.rejoin = !opt.count("--rejoin") || opt["--rejoin"] != "off";
     if (opt.count("--variant") && !parseVariant(opt["--variant"], sc.variant)) return usage();
     const EpisodeResult r = runEpisode(sc);
     printSummary(r);
     const Metrics& m = r.metrics;
-    std::printf("  mode=%s estimator=%s feasibility=%s condition=%s: min clearance %.3f m, body over a kerb in %d samples (deepest %.3f m), "
+    std::printf("  mode=%s estimator=%s feasibility=%s rejoin=%s condition=%s: min clearance %.3f m, body over a kerb in %d samples (deepest %.3f m), "
                 "lane-association errors %d of %d, localisation stops %d, clearance stops %d (unwarranted %d), estimate RMSE %.3f m (p95 %.3f, "
                 "max %.3f), GNSS outages %zu\n",
-                sc.mode.c_str(), sc.estimator.c_str(), sc.feasibility ? "on" : "off", sc.condition.c_str(), m.minClearance, m.clearanceViolations,
+                sc.mode.c_str(), sc.estimator.c_str(), sc.feasibility ? "on" : "off", sc.rejoin ? "on" : "off", sc.condition.c_str(), m.minClearance,
+                m.clearanceViolations,
                 m.maxCrossing, m.associationErrors, m.associationSamples, m.localisationStops, m.clearanceStops, m.unwarrantedStops, m.estRmse, m.estP95,
                 m.estMax, r.outages.size());
     if (opt.count("--out")) {
@@ -268,7 +271,9 @@ int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
     }
     // The benchmark routes on this network as the independent reference planner finds them: movements only.
     std::vector<RouteSpec> routes = benchmarkRoutes(false);
-    for (const auto& more : {benchmarkRoutes(true), benchmarkRoutesR3(), benchmarkRoutesR4()}) routes.insert(routes.end(), more.begin(), more.end());
+    for (const auto& more : {benchmarkRoutes(true), benchmarkRoutesR3(), benchmarkRoutesR4(), benchmarkRoutesR5()}) {
+        routes.insert(routes.end(), more.begin(), more.end());
+    }
     for (const RouteSpec& rs : routes) {
         if (rs.network != name) continue;
         const RefRoute rr = referenceRoute(net, net.segmentAt(net.lane(rs.startLane), rs.startS), net.segmentAt(net.lane(rs.goalLane), rs.goalS));
@@ -390,6 +395,10 @@ int main(int argc, char** argv) {
             co.outDir = opt["--out"];
             co.config = opt.count("--config") ? opt["--config"] : "";
             co.scenarios = opt.count("--scenario") ? opt["--scenario"] : "";
+            co.rejoin = opt.count("--rejoin") ? opt["--rejoin"] : "";
+            if (!co.rejoin.empty() && co.rejoin != "on" && co.rejoin != "off") {
+                return usage();
+            }
             std::fputs((cmd == "bench-loc" ? runLocalisationCampaign(co) : runClosedLoopCampaign(co)).c_str(), stdout);
             return 0;
         }
