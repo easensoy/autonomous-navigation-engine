@@ -4,6 +4,20 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: a re-join for map-verified corrections only, network R6 (`road_driving/`)
+
+- **`Rejoin`** replaces the boolean `Scenario::rejoin`:
+  - `Off`;
+  - `All`, the R5 stack, written `on`;
+  - `Verified`, the new default, which re-joins only corrections the estimator verified against the map, by the cross-track change each one made. Every other jump meets the R3 and R4 stack.
+
+  Manifests and `closed_loop.jsonl` write the setting by name; older manifests replay with it off.
+- **`StateEstimate::verifiedCorrections`, `verifiedJumpX`, `verifiedJumpY`:** the EKF counts kerb registrations that moved its estimate by more than 0.1 m, and reports the latest. Estimates are unchanged.
+- **`Stack::control` and `Observation`** carry those corrections (`VerifiedCorrection`). The stack takes the count as it stands when the mission starts.
+- **`closed_loop.jsonl`** lines gain `pose_corrections`. Every earlier split still reproduces its recorded closed loop value for value: R4 with the re-join off, R5 off and on.
+- **Network R6** (`buildR6`), its routes, closure scenario and seven conditions (`conditionNamesR6`), and the split `r6`. It drives every filter with no re-join and with the verified re-join. `tools/check_r6_criteria.py` computes the R6 criteria.
+- **Tests:** `road_driving_localisation_tests` grows from 142 to 161 checks.
+
 ### Road-driving: a switch for the re-join, network R5 and its held-out evaluation (`road_driving/`)
 
 - **`Scenario::rejoin`** (default on) and `Stack(..., rejoin)`. Off is the stack evaluated on R3 and R4: no
