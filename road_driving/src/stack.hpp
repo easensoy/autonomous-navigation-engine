@@ -86,7 +86,9 @@ public:
     double currentShift() const { return pathShiftAt(s_); }
     double rejoinAt(double s) const;     // m, sideways offset of the reference after a pose correction
 
-    Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility = true);
+    // rejoin off is the stack evaluated on R3 and R4: no re-join, and the monitor measures from the unshifted path.
+    Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility = true,
+          bool rejoin = true);
     void initialise(const Observation& obs);  // first planning tick: closures known at departure, initial route
     void plan(const Observation& obs);        // every planning tick (10 Hz)
     Command control(const VehicleState& pose, double t);  // every control tick (50 Hz)
@@ -176,6 +178,7 @@ private:
     bool clearLatched_ = false;
 
     // Pose corrections (rejoinpolicy).
+    bool rejoin_ = true;
     double rejoinS0_ = 0.0, rejoinD0_ = 0.0, rejoinLength_ = 0.0;
     double lastErr_ = 0.0;     // cross-track error from the reference at the previous tick
     bool haveLastErr_ = false;
