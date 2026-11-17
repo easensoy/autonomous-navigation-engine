@@ -91,6 +91,7 @@ const char* Stack::modeName() const {
         case Mode::HoldFallback: return "HOLD_AFTER_FALLBACK";
         case Mode::Done: return "DONE";
         case Mode::NoRoute: return "NO_ROUTE";
+        case Mode::LocalisationStop: return "LOCALISATION_STOP";
     }
     return "?";
 }
@@ -284,7 +285,42 @@ void Stack::plan(const Observation& obs) {
         }
         aEnv_ = std::min(vp_.decelFirm, std::max(kEnvDecel, 1.05 * (std::isfinite(aReq) ? aReq : vp_.decelFirm)));
     }
+    localisationPolicy(obs);
     computeEnvelope();
+}
+
+void Stack::localisationPolicy(const Observation& obs) {
+    using namespace locpolicy;
+    if (!obs.estimated) {
+        return;
+    }
+    const std::string detail = "sigma_across=" + fmt(obs.sigmaAcross, 3) + ";sigma_along=" + fmt(obs.sigmaAlong, 3) +
+                               ";valid=" + (obs.estimateValid ? "1" : "0") + ";age=" + fmt(obs.estimateAge, 3);
+    const bool unreliable = !obs.estimateValid || obs.estimateAge > kMaxAge || obs.sigmaAcross > kStopAcross || obs.sigmaAlong > kStopAlong;
+    const bool degraded = obs.sigmaAcross > kSlowAcross || obs.sigmaAlong > kSlowAlong;
+    if (degraded != degraded_) {
+        degraded_ = degraded;
+        event(degraded ? "LOCALISATION_DEGRADED" : "LOCALISATION_NOMINAL", detail);
+    }
+    speedCap_ = degraded ? kDegradedSpeed : 1e9;
+    if (mode_ == Mode::LocalisationStop) {
+        if (unreliable || obs.sigmaAcross >= kResumeAcross) {
+            goodSince_ = -1.0;
+        } else if (goodSince_ < 0.0) {
+            goodSince_ = t_;
+        } else if (t_ - goodSince_ >= 2.0) {
+            mode_ = beforeLocStop_;  // a planned closure stop, if any, is still in force
+            goodSince_ = -1.0;
+            event("LOCALISATION_RECOVERED", detail);
+        }
+        return;
+    }
+    if (unreliable && (mode_ == Mode::Drive || mode_ == Mode::StopForClosure)) {
+        beforeLocStop_ = mode_;
+        mode_ = Mode::LocalisationStop;
+        goodSince_ = -1.0;
+        event("LOCALISATION_UNRELIABLE", detail);
+    }
 }
 
 void Stack::replan(const std::string& reason, double v) {
@@ -509,6 +545,9 @@ Command Stack::control(const VehicleState& pose, double t) {
         case Mode::NoRoute:
             cmd.accel = -kHoldDecel;
             return cmd;
+        case Mode::LocalisationStop:  // stop in lane, steering on the estimate, and wait for it to recover
+            cmd.accel = v < 0.05 ? -kHoldDecel : -locpolicy::kStopDecel;
+            return cmd;
         default:
             break;
     }
@@ -516,6 +555,11 @@ Command Stack::control(const VehicleState& pose, double t) {
     const double ve = envelopeAt(sp), ve2 = envelopeAt(sp + 1.0);
     const double aff = std::max(-aEnv_, std::min(0.0, 0.5 * (ve2 * ve2 - ve * ve)));
     double a = aff + kKp * (ve - v);
+    if (speedCap_ < 1e8) {
+        // Degraded localisation: also hold the capped speed, slowing to it gently. The envelope's own
+        // braking (curves, stops) still applies on top.
+        a = std::min(a, std::max(-1.5, kKp * (speedCap_ - v)));
+    }
     double limit = vp_.decelFirm;
     auto stopLaw = [&](double target, bool& latched, double cap) {
         const double req = stopDecel(target - s_, v, pose.accel, vp_.commandDelay, vp_.longLag);
