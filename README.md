@@ -278,7 +278,9 @@ the engine and the car stops before the barrier instead.
     never did; pooled 95th percentile 4.80 m against 54.8 m. Kerb re-localisation held the kerbs under
     the slow excursion: no failed run, and 40 of 40 episodes as the reference with no crossing. Ten of
     eleven criteria passed. The failure was one episode of 280: after a correct re-localisation mid-turn,
-    the stack's steering oscillated into a fallback stop, and the body went 0.91 m over the kerb
+    the stack's steering oscillated into a fallback stop, and the body went 0.91 m over the kerb. The
+    stack now re-joins its path after such a correction. On development reruns of R3 and R4 that removed
+    the crossing, and no pose source crossed more often or deeper
     ([results](road_driving/LOCALISATION.md#results)).
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
@@ -348,8 +350,9 @@ caller reports; a step is one node.
 - **Tuning:** each evaluation was developed on earlier networks, then run once on a held-out network
   under a protocol pushed before the run.
 - **Known gaps:**
-  - After a large pose correction the stack's steering is lightly damped, and its monitor reads the
-    corrected estimate as a tracking error.
+  - After a large pose correction the stack's steering was lightly damped. The stack now re-joins its
+    path smoothly, which removed the held-out crossing on development reruns; a fresh held-out network has
+    not tested it yet.
   - With GNSS-only localisation, the clearance layer stops the car in every degraded-GNSS episode; so does
     losing kerbs and GNSS together with the kerb filter.
   - A slow GNSS excursion with no jump drags every GNSS-only filter.
@@ -427,7 +430,7 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - 2 benchmark smoke programs.
 - **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds four entries:
   - `test_road_driving` (288 checks);
-  - `test_localisation` (121 checks);
+  - `test_localisation` (123 checks);
   - a replay of the stored failing episode;
   - a replay of a changed copy, which must be rejected.
 
