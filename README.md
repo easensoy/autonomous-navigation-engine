@@ -260,23 +260,30 @@ the engine and the car stops before the barrier instead.
   brakes to a fallback stop; that episode is stored, and CI replays it.
 - **Reproducibility:** 192 episodes (16 scenarios, 6 seeds, 2 variants) gave byte-identical truth logs
   with GCC 14.2 and MSVC 19.51. Cross-track error was at most 0.162 m, with no illegal move.
-- **Driving on its own estimate:** an EKF fuses simulated GNSS, IMU, wheel-speed and steering
-  measurements, and the stack can drive on its output with no access to truth. A second network, R2,
-  was held out of all tuning; there, every estimator processed the same recorded sensor logs. In each
-  of seven sensor conditions, the EKF's RMSE was lower than each of three baselines' (dead reckoning
-  and two GNSS-only estimators) in at least 29 of 30 paired runs. Its nominal 95th-percentile error
-  was 0.355 m.
-  Two of eight predeclared criteria failed, both from one cause: a 6 m multipath offset outlasting the
-  10 s rejection window captured the filter in 8 of 210 runs ([results](road_driving/LOCALISATION.md#results)).
+- **Driving on its own estimate:** simulated GNSS, IMU, wheel-speed, steering and kerb-ranging sensors
+  feed an EKF, and the stack drives on its output with no access to truth, keeping a margin from the kerb
+  that follows the estimate's uncertainty. Two predeclared evaluations, each on a network held out of all
+  tuning, compared estimators on identical recorded logs:
+  - First (R2): the GNSS + IMU + wheel EKF beat dead reckoning and two GNSS-only filters in at least 29
+    of 30 paired runs in every condition. A 6 m multipath offset outlasting its 10 s reset failed 8 of
+    210 runs.
+  - Second (R3, six new fault types): GNSS integrity removed that failure (an 8 m offset: 30 of 30 runs
+    failed before, none after). Adding kerb registration brought the lateral 95th percentile to 0.043 m.
+    The car then ended every one of 200 closed-loop episodes under five conditions as the ground-truth
+    reference did, with the body always on the road. Two of ten criteria failed:
+    - combined faults defeated integrity without kerbs;
+    - a slow GNSS excursion with no jump dragged even the kerb filter on one route
+      ([results](road_driving/LOCALISATION.md#results)).
 
-<img src="road_driving/docs/media/test-drive.gif" width="100%" alt="Animated test drive. A simulated car seen from above follows a road on a grid network, drawn with its real footprint and a roof sensor dome. A dashed teal outline marks where the EKF believes the car is, with a 95% uncertainty ellipse. In a shaded GNSS outage zone the GNSS indicator turns red, the ellipse grows and the estimate drifts about half a metre while a dead-reckoning comparison drifts metres away. When GNSS returns the error snaps back. A roadworks barrier appears; the car stops before it, waits for the lift, then completes the route. Side panels show the network overview, speed, position error, the EKF's 1-sigma, sensor availability and an error-over-time plot.">
+<img src="road_driving/docs/media/test-drive-kerb.gif" width="100%" alt="Animated test drive. A simulated car seen from above turns right at a junction on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns along both kerbs. In an orange-shaded GNSS fault zone the GNSS fixes scatter metres off the road, the GNSS indicator turns red and the status reads GNSS integrity faulted, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car, a few centimetres off. An amber dashed line, the previous EKF replayed on the same sensor log, peels away metres off the road. A logarithmic error plot shows the driving estimate between 0.01 and 0.4 m and the previous EKF jumping to about 5 m. The car completes the route.">
 
-<sub><b>A simulated test drive on the estimate:</b> an I-PACE-sized proxy drives through 101 m without
-GNSS. When GNSS returns its error is 0.64 m, against 5.4 m for dead reckoning on the same log. It then
-stops for an oracle-reported closure and completes after the lift. Independent research simulation on a
-synthetic network.<br>
+<sub><b>Driving on kerb registration through a GNSS fault, in simulation:</b> an I-PACE-sized proxy meets a
+6 m multipath offset. Integrity marks the receiver faulted and excludes it, kerb returns hold the estimate
+within 0.37 m, and the car completes with the body on the road. The previous EKF, replayed on the same
+log, ends 5.2 m off; the previous system drove this episode 4.36 m off the road. Independent research
+simulation on development data.<br>
 [Localisation design and results](road_driving/LOCALISATION.md) ·
-[Predeclared held-out protocol](road_driving/benchmark/PROTOCOL.md)</sub>
+[R3 protocol](road_driving/benchmark/PROTOCOL_R3.md)</sub>
 
 ## Experimental scope
 
@@ -327,14 +334,16 @@ caller reports; a step is one node.
 **Road-driving extension.**
 
 - **Inputs:** synthetic roads and an oracle-reported closure, with no other road user.
-- **Pose:** ground truth, or an EKF fed by simulated GNSS, IMU, wheel-speed and steering sensors with
-  simple error models. There is no camera, lidar or map matching.
+- **Pose:** ground truth, or an EKF fed by simulated GNSS, IMU, wheel-speed, steering and kerb-ranging
+  sensors with simple error models. The kerb scanner is simulated against the same map the filter uses,
+  up to a modelled 0.03 m deviation. There is no real lidar or camera data.
 - **Vehicle:** the model is kinematic, with parameters that approximate an I-PACE's published
   dimensions. It is a simulated proxy; nothing was driven on a physical vehicle.
-- **Tuning:** the controller and the EKF were tuned on one development network. A second network was
-  held out and run once under a predeclared protocol.
-- **Known gap:** driving on the estimate, the body crossed a carriageway edge in 13 of 40 nominal
-  held-out episodes.
+- **Tuning:** each evaluation was developed on earlier networks, then run once on a held-out network
+  under a protocol pushed before the run.
+- **Known gaps:**
+  - A slow GNSS excursion with no jump can drag even the kerb filter after a long straight.
+  - With GNSS-only localisation, the clearance layer stops the car in every degraded-GNSS episode.
 - **Not built:** perception and prediction ([details](road_driving/README.md#experimental-scope)).
 
 ## Known defects and proposed work
@@ -409,7 +418,7 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - 2 benchmark smoke programs.
 - **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds four entries:
   - `test_road_driving` (288 checks);
-  - `test_localisation` (42 checks);
+  - `test_localisation` (95 checks);
   - a replay of the stored failing episode;
   - a replay of a changed copy, which must be rejected.
 
