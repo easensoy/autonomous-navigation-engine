@@ -17,7 +17,9 @@ def main():
     est = [r for r in rows if r["mode"] != "ground_truth"]
     pairs = collections.defaultdict(dict)
     for r in est:
-        pairs[(r["scenario"], r["condition"], r["seed"], r["estimator"])][r["rejoin"]] = r
+        # R5 recorded the setting as true/false; later runs write "off" or "on" for the same two stacks.
+        rj = r["rejoin"] if isinstance(r["rejoin"], bool) else r["rejoin"] != "off"
+        pairs[(r["scenario"], r["condition"], r["seed"], r["estimator"])][rj] = r
     incomplete = [k for k, v in pairs.items() if set(v) != {False, True}]
     if incomplete:
         sys.exit("%d episodes have no partner, e.g. %s" % (len(incomplete), incomplete[0]))
