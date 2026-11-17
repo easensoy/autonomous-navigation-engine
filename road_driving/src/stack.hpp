@@ -52,10 +52,11 @@ constexpr double kShiftRate = 0.05;     // m: largest change of the shift at any
 
 // Pose corrections. An estimate can jump: a kerb re-localisation, a GNSS re-anchor, GNSS returning after
 // dead reckoning. The car itself did not move, so following the old reference would turn the correction
-// into a steering step, and the monitor would read it as a tracking error. When the cross-track error
-// changes between two control ticks by more than the car can move, the reference moves by that change and
-// returns to the path smoothly (a raised cosine), so the error the controller and the monitor see stays
-// continuous. Larger corrections than kMax are left to the monitor.
+// into a steering step, which the steering-rate limit can grow into an oscillation. When the cross-track
+// error changes between two control ticks by more than the car can move, the controller's reference moves
+// by that change and returns to the path smoothly (a raised cosine). The monitor does not use the re-join:
+// a jump may also be a corruption (a filter captured by a biased receiver), so more than 1 m from the path
+// still stops the car. Larger corrections than kMax are not re-joined.
 namespace rejoinpolicy {
 constexpr double kJump = 0.15;    // m of cross-track change in one control tick (20 ms) that is a correction
 constexpr double kSlope = 0.05;   // m of re-join per m of path
