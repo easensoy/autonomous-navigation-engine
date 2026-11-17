@@ -4,14 +4,14 @@ The car can drive on its own state estimate instead of simulator truth. The worl
 
 Labels: **SIMULATED_SENSORS** and **ESTIMATED_POSE**. The kerb scanner is simulated: its ranges are cast from the scanner's true pose to the mapped kerbs, shifted by a modelled deviation of the real kerb from the map. Kerb registration matches those ranges to the map. Nothing here is processed lidar or camera data.
 
-Two evaluations, each predeclared and pushed before its held-out run:
+Three evaluations, each predeclared and pushed before its held-out run:
 
-| | First | Second |
-|---|---|---|
-| Question | does a GNSS + IMU + wheel EKF beat simple baselines? | do GNSS integrity, kerb registration and a clearance-aware stack fix the first one's failures? |
-| Estimators | `ekf` and three baselines | `ekf`, `ekf_int`, `ekf_kerb` and the baselines |
-| Development | R1 | R1 and R2 |
-| Held out | R2 ([protocol](benchmark/PROTOCOL.md), [results](benchmark/heldout)) | R3 ([protocol](benchmark/PROTOCOL_R3.md), [results](benchmark/heldout-r3)) |
+| | First | Second | Third |
+|---|---|---|---|
+| Question | does a GNSS + IMU + wheel EKF beat simple baselines? | do GNSS integrity, kerb registration and a clearance-aware stack fix the first one's failures? | do a confirmed way out of GNSS faults and kerb re-localisation fix the second one's failures? |
+| Estimators | `ekf` and three baselines | `ekf`, `ekf_int`, `ekf_kerb` and the baselines | those, plus `ekf_int2` and `ekf_kerb2` |
+| Development | R1 | R1 and R2 | R1 to R3 |
+| Held out | R2 ([protocol](benchmark/PROTOCOL.md), [results](benchmark/heldout)) | R3 ([protocol](benchmark/PROTOCOL_R3.md), [results](benchmark/heldout-r3)) | R4 ([protocol](benchmark/PROTOCOL_R4.md), [results](benchmark/heldout-r4)) |
 
 ## Frames, units and time
 
@@ -68,6 +68,18 @@ Spans are fractions of the route, turned into map rectangles around the route.
 | — | — | `gnss_jumps_r3`: a 3 m offset switching on and off every 3 s over 30–70% |
 | — | — | `gnss_ramp_r3`: a slow excursion with no jump, growing at 0.25 m/s to 5 m, then decaying |
 | — | — | `kerb_clutter_r3`: parked cars against the opposite kerb, 15% short returns, no scans over 70–80% |
+
+Held out on R4, for the second versions: new magnitudes and combinations, and a kerb map error.
+
+| Condition | Definition |
+|---|---|
+| `nominal_r4` | as development nominal |
+| `gnss_outage_r4` | no fixes over 25–70% |
+| `multipath_r4` | 10 m constant offset, 2.0 m extra noise, over 35–60% |
+| `gnss_ramp_r4` | a slow excursion growing at 0.4 m/s to 7 m over 25–65%, then decaying |
+| `imu_fault_r4` | gyro-bias step +0.015 rad/s at 25 s; 6 m offset with 1.0 m noise over 30–55% |
+| `kerb_faults_r4` | over 20–45% the kerb on the scanner's left lies 0.5 m further out than mapped; no kerb scans over 55–80%; 8 m offset with 0.5 m noise over 60–75% |
+| `combined_r4` | outage over 10–25%; a 0.3 m/s excursion to 5 m over 40–70%; 30% wheel slip over 50–60%; 10% short kerb returns; gyro-bias step +0.008 rad/s at 40 s |
 
 ## Estimators (`src/estimators.cpp`)
 
@@ -144,6 +156,28 @@ A slow excursion with no jump cannot be told apart from filter drift with GNSS a
 
 With a heading reference the gyro bias is observable, so `ekf_kerb` lets it change faster (random walk 3e-4 instead of 1e-4 rad/s per root second). Development on R2 set that value and the floor: with 1e-4, a gyro-bias step left the heading 20 to 40 times overconfident.
 
+### Second versions: `ekf_int2` and `ekf_kerb2`
+
+They answer R3's two failures. Where nothing goes wrong each is its first version exactly; the tests check this trace for trace.
+
+**`ekf_int2`: a way out of a fault.** In `ekf_int` a fault ends only when 5 fixes fit the filter and not the remembered offset. If the filter drifted while GNSS was excluded, neither ever fits again, and the fault never ends: R3's combined condition (T1). `ekf_int2` changes three things:
+- **A candidate end.** The receiver jumps back by most of the onset jump (within 75% of it). Or it returns after a gap of more than 2 s and no longer fits the remembered offset.
+- **Confirmation.** The fault ends only if the next 20 fixes look like a clean receiver: no jump, and at most 0.6 m scatter about a straight-line trend. Multipath noise makes jumps, and a noisy jump back can come by chance; until confirmed, the fault stands. The 5 fixes that clear a fault the first version's way must also be free of jumps.
+- **Heading evidence.** The disagreement that remains is an inconsistency, tested as in `ekf_int`. The 20 fixes may also be re-anchored when the receiver's track and the filter's predicted antenna track over them differ in direction by more than 0.07 rad, both at least 10 m long. A drifted heading shows as such an angle; a constant receiver offset does not, so the persistent-bias case stays excluded.
+
+GNSS integrity cannot bound the drift while GNSS is rightly excluded. With an unmodelled gyro-bias step the error still grows until the fault ends, and `ekf_int2` returns sooner after it.
+
+**`ekf_kerb2`: kerb re-localisation.** A slow GNSS excursion drags `ekf_kerb` along the road, where kerbs say nothing. At the next junction the scans disagree with it beyond the gate, and every one is rejected: R3's T8. After 3 rejected scans in a row (at most every 0.5 s), `ekf_kerb2` searches for the pose the scan fits:
+- a grid within 6 m along and across the filter's heading, in 0.5 m steps, then heading offsets of ±0.02 and ±0.04 rad at the best;
+- a return counts when it ends within 0.3 m of a mapped kerb;
+- the best must count at least 10 returns and half of those scored, and beat the filter's own pose by 5.
+
+Uniqueness decides what is adopted:
+- **Unique in every direction** (a corner, a junction mouth): the best must beat every pose 1.5 m or more away by 4, and the whole offset is adopted.
+- **Unique only across the road** (a straight kerb fits any offset along it): the offset across is adopted, and the filter's position along is kept.
+
+The covariance is widened by the correction, the scan is registered from the found pose, and the receiver, which agreed with the rejected pose, must earn trust again.
+
 ### Baselines
 
 All three get the same log and the same start.
@@ -201,9 +235,12 @@ There is no fallback to truth. A car that stops inside a GNSS outage waits there
 - failures, meaning error above 5 m;
 - NEES with the share inside the 95% chi-square interval, and NIS for GNSS, wheel and kerb;
 - integrity events (jumps detected, faults cleared, re-anchors) and kerb scans used;
+- for the second versions, faults left by the new path, re-anchors on the track angle, and kerb re-localisations;
 - runtime and per-measurement wall-clock latency.
 
 Failed runs stay in every statistic.
+
+**Closed loop in parts.** `bench-closed --scenario` runs some of a split's scenarios, and `tools/merge_closed_loop.py` merges the parts. Each scenario's episodes, its reference included, run in one part, so the merged files equal those of one process. On R3 development data with one seed, both merged files were byte-identical to one process's. The third evaluation's closed loops, development and held out, ran as four parts each.
 
 **Replay without the simulator.**
 
@@ -215,18 +252,17 @@ This reruns every estimator from that folder's `sensors.csv` and `truth.csv` and
 
 ## Results
 
-All measured on 17 November 2026 on one Windows 11 laptop.
+All measured on 17 November 2026 on one Windows 11 laptop, with seeds 1 to 10.
 
-| | First evaluation | Second: development | Second: held out |
-|---|---|---|---|
-| Network | R2 | R2 | R3, never used for tuning |
-| Build | MSVC 19.51 at `62a742a` | GCC 14.2 at `7781fe2` | MSVC 19.51 at `9332dd3` |
-| Seeds | 10 | 10 | 10 |
-| Open loop | 210 drives, 840 runs | 210 drives, 1,260 runs | 210 drives, 1,260 runs |
-| Closed loop | 200 episodes | 680 episodes | 1,000 episodes |
-| Full tables | [`benchmark/heldout/`](benchmark/heldout) | [`benchmark/r2-dev/`](benchmark/r2-dev) | [`benchmark/heldout-r3/`](benchmark/heldout-r3) |
+| Evaluation | Network | Build | Open loop | Closed loop | Full tables |
+|---|---|---|---|---|---|
+| First, held out | R2 | MSVC 19.51 at `62a742a` | 210 drives, 840 runs | 200 episodes | [`benchmark/heldout/`](benchmark/heldout) |
+| Second, development | R2 | GCC 14.2 at `7781fe2` | 210 drives, 1,260 runs | 680 episodes | [`benchmark/r2-dev/`](benchmark/r2-dev) |
+| Second, held out | R3 | MSVC 19.51 at `9332dd3` | 210 drives, 1,260 runs | 1,000 episodes | [`benchmark/heldout-r3/`](benchmark/heldout-r3) |
+| Third, development | R3 | GCC 14.2 at `b7ee7f2` | 210 drives, 1,680 runs | 1,240 episodes | [`benchmark/r3-dev/`](benchmark/r3-dev) |
+| Third, held out | R4 | MSVC 19.51 at `87436de` | 210 drives, 1,680 runs | 1,440 episodes | [`benchmark/heldout-r4/`](benchmark/heldout-r4) |
 
-Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`.
+Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`. No held-out network was used for tuning.
 
 ### First evaluation: held out on R2
 
@@ -325,9 +361,83 @@ Closed loop, against the ground-truth reference with the same seed. The referenc
 
 With the clearance layer, the GNSS-only filters stopped in every outage, multipath and combined episode; `ekf_kerb` never stopped.
 
+### Third evaluation: development on R3
+
+R3 became development data for the second versions. In the two conditions where any version differs, here are the median-run RMSE in metres, the failed runs out of 30, and the pooled lateral 95th percentile:
+
+| Condition | `ekf_int` | `ekf_int2` | `ekf_kerb` | `ekf_kerb2` |
+|---|---|---|---|---|
+| `gnss_ramp_r3` | 2.05, 3; 3.56 | 2.05, 3; 3.56 | 0.10, 0; 1.38 | 0.10, 0; **0.045** |
+| `combined_r3` | 10.36, 20; 29.2 | **2.07**, 20; 3.93 | 0.09, 0; 0.047 | 0.09, 0; 0.047 |
+
+- **Combined faults.** `ekf_int2` left the fault in all 20 runs where `ekf_int` never did. Its largest errors were 6.9–11.2 m instead of 28.4–44.1 m. Those 20 runs still fail: until the fault ends, the filter dead-reckons through a gyro-bias step.
+- **Slow excursion.** `ekf_kerb2` re-localised once in each of 5 R3-B runs, and its NEES fell from 34 to 2.1.
+- **Elsewhere.** In every other condition each second version equals its first, run for run.
+
+Closed loop, 1,240 episodes:
+- **Slow excursion:** `ekf_kerb2` ended 36 of 40 episodes as the reference did (`ekf_kerb`: 33). Its body was over a kerb in 4 (`ekf_kerb`: 8), with one closure incursion (`ekf_kerb`: 3) and no stop (`ekf_kerb`: 4).
+- **Every other condition:** it equals `ekf_kerb`.
+- **`ekf_int2`:** it equals `ekf_int` everywhere. Under combined faults the GNSS-only filters stop for clearance inside the outage, so the multipath, and the way out of it, never comes.
+
+The 4 crossings are two drives, R3-B seeds 2 and 9, each in both R3-B scenarios:
+- **Seed 2.** The excursion builds 1.5 m of along-road error on the straight before J00, where kerbs cannot see it. The only clear match came mid-turn: 17 returns against 14 for the best alternative, one short of the required margin. After that the car was too far off the road to see 20 returns.
+- **Seed 9.** Re-localisation worked: a 1.2 m correction mid-turn, after which the estimate stayed within 0.04 m. But that correction started a steering oscillation in pure pursuit that grew for 5 s, and the monitor's fallback stop ended with the body 1.4 m over the kerb. With the clearance layer off, the same drive's oscillation decays: the drive completes, the body 0.33 m over the kerb. The stack is lightly damped after a large pose correction.
+
+### Third evaluation: held out on R4
+
+Median-run RMSE in metres, then failed runs out of 30, and the pooled lateral 95th percentile:
+
+| Condition | `ekf` | `ekf_int` | `ekf_int2` | `ekf_kerb` | `ekf_kerb2` |
+|---|---|---|---|---|---|
+| `nominal_r4` | 0.18, 0; 0.27 | 0.18, 0; 0.27 | 0.18, 0; 0.27 | **0.08, 0; 0.044** | **0.08, 0; 0.044** |
+| `gnss_outage_r4` | 0.43, 0; 0.81 | 0.43, 0; 0.81 | 0.43, 0; 0.81 | **0.07, 0; 0.044** | **0.07, 0; 0.044** |
+| `multipath_r4` | 4.96, **30**; 9.78 | 0.24, 0; 0.38 | 0.24, 0; 0.38 | **0.08, 0; 0.044** | **0.08, 0; 0.044** |
+| `gnss_ramp_r4` | 3.49, **29**; 6.08 | 3.17, **30**; 11.0 | 2.92, **30**; 5.01 | 0.12, **1**; 0.049 | **0.12, 0; 0.044** |
+| `imu_fault_r4` | 8.39, **30**; 17.6 | 24.9, **30**; 46.4 | 1.83, **20**; 4.16 | **0.08, 0; 0.045** | **0.08, 0; 0.045** |
+| `kerb_faults_r4` | 3.26, **20**; 6.36 | 0.19, 0; 0.29 | 0.20, 0; 0.29 | 0.12, 0; 0.198 | 0.12, 0; 0.201 |
+| `combined_r4` | 2.72, **17**; 6.14 | 2.11, **12**; 10.8 | 2.02, **11**; 3.61 | 0.12, 0; 0.600 | **0.12, 0; 0.045** |
+
+- **Gyro fault during multipath.** `ekf_int2` left the fault in 29 of 30 runs; its largest errors were 2.9–11.3 m, against `ekf_int`'s 29.7–69.8 m. In the remaining run, the first biased fix happened to fall short and the onset jump caught only 3.4 m of the 6 m offset. The 6.7 m jump back then missed the 75% test, and the fault never ended.
+- **Slow excursion.** `ekf_kerb2` re-localised 3 times and failed no run, with a largest error of 1.0 m (`ekf_kerb`: 1 failure, 6.1 m). Its NEES was 2.0, against `ekf_kerb`'s 305: dragged, the first version was confidently wrong.
+- **Combined faults.** `ekf_kerb2` re-localised 6 times. Its lateral 95th percentile was 0.045 m instead of 0.600, and its largest error 2.2 m instead of 4.7.
+- **Kerb faults.** A kerb 0.5 m from where the map has it, over a quarter of the route, triggered no re-localisation, and no run failed. With that stretch and the later blackout, both kerb filters' lateral 95th percentile was 0.20 m (nominal: 0.044 m).
+- **Consistency.** Under the gyro fault both kerb filters' NEES was 14 (overconfident heading). Under the slow excursion, the gyro fault and combined faults, the GNSS-only filters were inconsistent, `ekf_int2` included (NEES 68–302).
+
+| # | Criterion | Held-out result | Verdict |
+|---|---|---|---|
+| U1 | Second versions equal the first under `nominal_r4` | 30 of 30 each | passed |
+| U2 | `imu_fault_r4`: `ekf_int2` pooled 95th percentile at most half of `ekf_int`'s | 4.80 against 54.8 m | passed |
+| U3 | `multipath_r4`: no `ekf_int2` failure | 0 of 30 | passed |
+| U4 | `gnss_ramp_r4`: no `ekf_kerb2` failure, pooled lateral 95th percentile at most 0.20 m | 0 of 30; 0.044 m | passed |
+| U5 | `kerb_faults_r4`: no `ekf_kerb2` failure, pooled lateral 95th percentile at most 0.50 m | 0 of 30; 0.201 m | passed |
+| U6 | NEES 0.5–6 for both second versions under nominal, outage and multipath | 1.32–1.84 | passed |
+| U7 | No condition where a second version fails more runs than its first | none | passed |
+| U8 | Closed loop, `nominal_r4`: `ekf_kerb2` ends as the reference does, never over a kerb, no stop | 40 of 40, 0, 0 | passed |
+| U9 | No `ekf_kerb2` episode over a kerb; no closure incursion with any pose source | 1 of 280 over a kerb (0.91 m); 2 incursions, by `ekf_int` and `ekf_int2` | **failed** |
+| U10 | `ekf_kerb2` ends as the reference does in at least 38 of 40 under outage, multipath, slow excursion and combined faults | 40, 40, 40 and 39 of 40 | passed |
+| U11 | No condition where a second version crosses a kerb in more episodes than its first | none | passed |
+
+Closed loop, against the ground-truth reference with the same seed (1,440 episodes). The reference never crossed a kerb or stopped. Each cell is out of 40 episodes:
+
+| Condition | Measure | `ekf` | `ekf_int` | `ekf_int2` | `ekf_kerb` | `ekf_kerb2` |
+|---|---|---|---|---|---|---|
+| `nominal_r4` | same outcome; over a kerb | 40; 4 | 40; 4 | 40; 4 | **40; 0** | **40; 0** |
+| `gnss_outage_r4` | same outcome; over a kerb; stops (unwarranted) | 0; 3; 40 (21) | 0; 3; 40 (21) | 0; 3; 40 (21) | **40; 0; 0** | **40; 0; 0** |
+| `multipath_r4` | same outcome; over a kerb (deepest) | 0; 5 (1.3 m) | 0; 3 (0.14 m) | 0; 3 (0.14 m) | **40; 0** | **40; 0** |
+| `gnss_ramp_r4` | same outcome; over a kerb (deepest) | 0; 38 (7.3 m) | 0; 40 (7.3 m) | 0; 39 (6.8 m) | 37; 2 (2.1 m) | **40; 0** |
+| `imu_fault_r4` | same outcome; over a kerb (deepest) | 0; 25 (10.9 m) | 0; 29 (1.0 m) | 0; 29 (1.0 m) | **40; 0** | **40; 0** |
+| `kerb_faults_r4` | same outcome; over a kerb; stops (unwarranted) | 10; 4; 31 (18) | 17; 3; 40 (26) | 18; 3; 40 (26) | 14; 0; 40 (34) | 14; 0; 40 (34) |
+| `combined_r4` | same outcome; over a kerb (deepest) | 1; 9 (7.7 m) | 4; 9 (7.7 m) | 4; 9 (3.4 m) | 35; 3 (3.9 m) | **39; 1 (0.9 m)** |
+
+- **The one crossing.** It is the development mechanism again (R4-A, seed 10). `ekf_kerb2` re-localised mid-turn by 0.8 m, after which its estimate stayed within 0.17 m. The car's steering kept oscillating until the monitor's fallback stop, 1.0 m off the path, during which the body went 0.91 m over the kerb.
+- **Kerb faults.** With no kerb scans and GNSS excluded at once, both kerb filters dead-reckon, and the clearance layer stops the car in every episode, 34 of the 40 stops unwarranted. On R4-C the car is still slowing towards that stop when GNSS returns and the estimate is corrected, by up to 0.9 m. In 6 of 10 episodes the monitor then measured 1 m of lateral error and made a fallback stop, with no crossing.
+- **Closure incursions.** Both were by GNSS-only filters, dragged by the slow excursion, on R4-B_late_closure seed 1.
+
 ### Failure cases and the next improvement
 
-**What the second evaluation fixed, on unseen faults:**
+#### After the second evaluation (R3)
+
+**What it fixed, on unseen faults:**
 - **Multipath capture.** An 8 m offset failed `ekf` in 30 of 30 runs; `ekf_int` and `ekf_kerb` in none.
 - **Kerb crossings with good localisation.** `ekf_kerb` drove 200 episodes under five of the six conditions with the body always on the road and the reference's outcome, never stopping.
 - **Lateral accuracy.** `ekf_kerb`'s lateral 95th percentile was 0.043–0.055 m under every condition but the slow excursion.
@@ -343,10 +453,32 @@ With the clearance layer, the GNSS-only filters stopped in every outage, multipa
   - In closed loop that put the body over a kerb in 8 episodes (up to 3.9 m), and a closure stop planned in the dragged frame ended past the barrier in 3. Every pose source had incursions under this condition: 21 in all, none for the reference.
 - **The cost of the clearance layer with GNSS-grade localisation.** With a two-sigma margin on 3 m lanes, the GNSS-only filters stopped in every degraded-GNSS episode, most stops unwarranted (the true error was under 0.3 m). It removed their right-turn-exit crossings but not their departure crossings (3 of 40 nominal).
 
-**The next improvement the evidence supports:** in the kerb filter, give the receiver's slow error states enough freedom that kerbs and odometry can observe it. A slow excursion would then be absorbed as GNSS bias rather than position. A persistent disagreement between many matched kerb returns and one receiver would count against the receiver. The smaller step for `ekf_int` is a recovery path out of FAULTED: once the fault offset is gone, the same consistency-checked re-anchoring used when the filter and GNSS disagree.
+The third increment answered T1 with a way out of FAULTED, and T8 with kerb re-localisation. A persistent kerb-receiver disagreement now counts against the receiver after the kerbs win, but the receiver's slow error is still not a filter state.
+
+#### After the third evaluation (R4)
+
+**What it fixed, on unseen faults:**
+- **Recovery after drift.** Under a gyro fault during multipath, `ekf_int` never left the fault (largest errors 30–70 m). `ekf_int2` left it in 29 of 30 runs, and its pooled 95th percentile was 4.80 m against 54.8 m.
+- **The slow excursion.** `ekf_kerb2` failed no run and drove 40 of 40 episodes with the reference's outcome and no crossing. `ekf_kerb` had 1 failure, and 2 crossings (2.1 m deep) in closed loop.
+- **Combined faults.** `ekf_kerb2`'s lateral 95th percentile was 0.045 m against 0.600 m. Driving, it had 1 crossing against 3 and ended 39 episodes as the reference did against 35.
+- **No regression.** In every condition where nothing triggers them, the second versions equal the first; in no condition do they fail or cross more often.
+
+**What failed or remains:**
+- **Large pose corrections in the stack (U9).** The one crossing came after a correct mid-turn re-localisation: the estimate was right, but pure pursuit oscillated after the 0.8 m jump until the monitor's fallback stop, which ended with the body over the kerb. The same weakness turns a GNSS-return correction into a fallback stop in 6 of 10 kerb-fault episodes on R4-C. The localisation was right in both; the stack reads a corrected estimate as a tracking error.
+- **GNSS-only filters still drift while GNSS is excluded.** Under the gyro fault `ekf_int2` still exceeded 5 m in 20 of 30 runs before recovering. No GNSS rule can bound dead reckoning: only another absolute reference does, and kerbs did (`ekf_kerb2`: 0 failures, 0.045 m lateral).
+- **One fault never ended.** The jump-back test compares the receiver's return with its onset jump. When the first biased fix fell short (3.4 m of a 6 m offset), the return did not match it.
+- **Losing kerbs and GNSS together.** Under `kerb_faults_r4` the kerb filters stopped for clearance in every episode, 34 of the 40 stops unwarranted. The stop is the designed behaviour with no absolute reference; its cost is that the true error is usually small.
+- **A slow excursion still drags every GNSS-only filter** (29 or 30 of 30 runs failed), as the R3 protocol expected: a slow excursion with no jump cannot be detected from GNSS and odometry alone.
+
+**The next improvement the evidence supports:** in the stack, treat a pose correction as a correction:
+- re-join the path smoothly from the corrected pose;
+- measure tracking error against that re-joined path, so the monitor does not see the jump as an error;
+- damp the steering response for a few seconds after a jump larger than the tracking allowance.
+
+The held-out crossing and one of the two development crossings (R3-B, seed 9) share this cause. The other development crossing (seed 2) was a re-localisation that came too late. The smaller step for `ekf_int2` is to remember the fault offset from several fixes after the onset rather than one.
 
 ## Not done
 
-- **UKF:** not implemented. Every failure above is a model or integrity gap (an unobservable bias, a missing recovery path), not linearisation error, so no question remains that a UKF would answer.
-- **Real sensor data:** none. The kerb scanner is simulated against the same map the filter uses, up to a modelled 0.03 m deviation. Moved kerbs, roadworks and lane markings were not tested.
+- **UKF:** not implemented. Every failure above is a model, integrity or stack gap (an unobservable bias, a missing recovery path, a controller's response to a pose jump), not linearisation error, so no question remains that a UKF would answer.
+- **Real sensor data:** none. The kerb scanner is simulated against the same map the filter uses, up to a modelled 0.03 m deviation. One map error was tested on R4: a kerb section 0.5 m further out than mapped. Roadworks, kerbs moved inwards and lane markings were not.
 - **Comparison with published results:** none is made. No public localisation result uses this simulator, these sensors and these metrics. Every comparison here is between the estimators run here, on identical inputs.
