@@ -36,6 +36,9 @@ add_library(road_driving STATIC
     src/stack.cpp
     src/episode.cpp
     src/evaluator.cpp
+    src/sensors.cpp
+    src/estimators.cpp
+    src/benchmark.cpp
 )
 target_include_directories(road_driving PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
                                         PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -52,7 +55,10 @@ target_link_libraries(road_drive PRIVATE road_driving)
 add_executable(test_road_driving tests/test_road_driving.cpp)
 target_link_libraries(test_road_driving PRIVATE road_driving)
 
-foreach(_road_target road_driving road_drive test_road_driving)
+add_executable(test_localisation tests/test_localisation.cpp)
+target_link_libraries(test_localisation PRIVATE road_driving)
+
+foreach(_road_target road_driving road_drive test_road_driving test_localisation)
   if(MSVC)
     target_compile_options(${_road_target} PRIVATE /W4)
   else()
@@ -62,6 +68,7 @@ endforeach()
 
 enable_testing()
 add_test(NAME road_driving_tests COMMAND test_road_driving)
+add_test(NAME road_driving_localisation_tests COMMAND test_localisation)
 # The stored failing episode (variant B0, notification 3 m before J10) must replay to the same outcome
 # and route decisions; the trace hash must also match when the toolchain is the one that recorded it.
 add_test(NAME road_driving_regression_replay
