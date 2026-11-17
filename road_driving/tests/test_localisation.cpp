@@ -684,6 +684,34 @@ void testSecondVersions() {
     }
 }
 
+// ---- L21 pose corrections in the stack ------------------------------------------------------------------
+void testPoseCorrections() {
+    auto drive = [](const std::string& routeName, const std::string& condition, std::uint64_t seed, int& corrections, int& fallbacks) {
+        Scenario s = benchmarkScenario(route(routeName), condition, seed, "estimated");
+        s.estimator = "ekf_kerb2";
+        const EpisodeResult r = runEpisode(s);
+        corrections = fallbacks = 0;
+        for (const LogEvent& e : r.events) {
+            corrections += e.type == "POSE_CORRECTION" ? 1 : 0;
+            fallbacks += e.type == "MONITOR_TRIGGER" ? 1 : 0;
+        }
+        return r;
+    };
+    int corrections = 0, fallbacks = 0;
+    // R3-B under the slow excursion, seed 9: ekf_kerb2 re-localises by about 1.2 m in the middle of a turn.
+    // Chasing the old reference turned that into a steering oscillation and a fallback stop over the kerb.
+    const EpisodeResult a = drive("R3-B", "gnss_ramp_r3", 9, corrections, fallbacks);
+    check(corrections >= 1 && fallbacks == 0 && a.outcome == "COMPLETED" && a.metrics.clearanceViolations == 0,
+          "L21 R3-B slow excursion, seed 9: the stack re-joins the path after the mid-turn correction and completes on the road",
+          a.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
+    // R4-C under kerb faults, seed 1: GNSS returns and corrects the estimate where the clearance layer has
+    // shifted the path; the monitor measures from that shifted, re-joined reference.
+    const EpisodeResult b = drive("R4-C", "kerb_faults_r4", 1, corrections, fallbacks);
+    check(corrections >= 1 && fallbacks == 0 && b.outcome == "COMPLETED" && b.metrics.clearanceViolations == 0,
+          "L21 R4-C kerb faults, seed 1: GNSS corrections near a shifted path end in no fallback stop",
+          b.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
+}
+
 }  // namespace
 
 int main() {
@@ -700,6 +728,7 @@ int main() {
     testR3();
     testR4();
     testSecondVersions();
+    testPoseCorrections();
     std::printf("localisation tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
