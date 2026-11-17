@@ -340,9 +340,46 @@ std::vector<Scenario> closedLoopScenariosR4() {
     return out;
 }
 
+std::vector<RouteSpec> benchmarkRoutesR5() {
+    return {{"R5-A", "R5", "J00>J10", 10.0, "J14>J24", 30.0}, {"R5-B", "R5", "J24>J23", 10.0, "J01>J00", 30.0},
+            {"R5-C", "R5", "J04>J03", 10.0, "J23>J13", 30.0}};
+}
+
+std::vector<Scenario> closedLoopScenariosR5() {
+    std::vector<Scenario> out;
+    for (const RouteSpec& r : benchmarkRoutesR5()) {
+        out.push_back(benchmarkScenario(r, "", 0, "ground_truth"));
+    }
+    Scenario c = benchmarkScenario(benchmarkRoutesR5()[1], "", 0, "ground_truth");
+    c.name = "R5-B_late_closure";
+    c.scenarioClass = "C3";
+    c.closure = true;
+    c.closureLane = "J12>J02";
+    c.barrierLaneS = 35.0;
+    c.worksLength = 15.0;
+    c.reveal = Reveal::BeforeBarrier;
+    c.revealDistance = 30.0;
+    out.push_back(c);
+    return out;
+}
+
 SplitSpec splitSpec(const std::string& name) {
     SplitSpec s;
     s.name = name;
+    if (name == "r5") {
+        s.title = "held-out evaluation of the re-join after pose corrections (network R5)";
+        s.routes = benchmarkRoutesR5();
+        s.conditions = conditionNamesR5();
+        s.estimators = estimatorNamesV2();
+        s.scenarios = closedLoopScenariosR5();
+        s.closedConditions = conditionNamesR5();
+        for (const char* e : {"ekf", "ekf_int", "ekf_int2", "ekf_kerb", "ekf_kerb2"}) {
+            s.sources.push_back({std::string(e) + ", no re-join", "estimated", e, true, false});
+            s.sources.push_back({e, "estimated", e, true, true});
+        }
+        s.referenceFeasibility = true;
+        return s;
+    }
     if (name == "r3dev" || name == "r4") {
         const bool r4 = name == "r4";
         s.title = r4 ? "held-out evaluation of the second versions (network R4)"
@@ -353,11 +390,11 @@ SplitSpec splitSpec(const std::string& name) {
         s.scenarios = r4 ? closedLoopScenariosR4() : closedLoopScenariosR3();
         s.closedConditions = r4 ? conditionNamesR4()
                                 : std::vector<std::string>{"nominal_r3", "gnss_outage_r3", "multipath_r3", "gnss_ramp_r3", "kerb_clutter_r3", "combined_r3"};
-        s.sources = {{"ekf", "estimated", "ekf", true},
-                     {"ekf_int", "estimated", "ekf_int", true},
-                     {"ekf_int2", "estimated", "ekf_int2", true},
-                     {"ekf_kerb", "estimated", "ekf_kerb", true},
-                     {"ekf_kerb2", "estimated", "ekf_kerb2", true}};
+        s.sources = {{"ekf", "estimated", "ekf", true, false},
+                     {"ekf_int", "estimated", "ekf_int", true, false},
+                     {"ekf_int2", "estimated", "ekf_int2", true, false},
+                     {"ekf_kerb", "estimated", "ekf_kerb", true, false},
+                     {"ekf_kerb2", "estimated", "ekf_kerb2", true, false}};
         s.referenceFeasibility = true;
         return s;
     }
@@ -370,7 +407,7 @@ SplitSpec splitSpec(const std::string& name) {
         s.scenarios = closedLoopScenarios(h);
         s.closedConditions = h ? std::vector<std::string>{"nominal_h", "gnss_outage_h", "multipath_h", "combined_h"}
                                : std::vector<std::string>{"nominal", "gnss_outage", "multipath"};
-        s.sources = {{"EKF", "estimated", "ekf", false}};
+        s.sources = {{"EKF", "estimated", "ekf", false, false}};
         s.referenceFeasibility = false;
         return s;
     }
@@ -385,10 +422,10 @@ SplitSpec splitSpec(const std::string& name) {
         s.closedConditions = r3 ? std::vector<std::string>{"nominal_r3", "gnss_outage_r3", "multipath_r3", "gnss_ramp_r3", "kerb_clutter_r3",
                                                             "combined_r3"}
                                 : std::vector<std::string>{"nominal_h", "gnss_outage_h", "multipath_h", "combined_h"};
-        s.sources = {{"ekf, previous stack", "estimated", "ekf", false},
-                     {"ekf", "estimated", "ekf", true},
-                     {"ekf_int", "estimated", "ekf_int", true},
-                     {"ekf_kerb", "estimated", "ekf_kerb", true}};
+        s.sources = {{"ekf, previous stack", "estimated", "ekf", false, false},
+                     {"ekf", "estimated", "ekf", true, false},
+                     {"ekf_int", "estimated", "ekf_int", true, false},
+                     {"ekf_kerb", "estimated", "ekf_kerb", true, false}};
         s.referenceFeasibility = true;
         return s;
     }
@@ -464,7 +501,9 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                 // Raw logs for replay without the simulator: the first route, seed 1, a few conditions (every
                 // other run is reproducible from its route, condition and seed).
                 bool keepLog = false;  // development splits (r2, r3dev) keep none
-                if (sp.name == "r4") {
+                if (sp.name == "r5") {
+                    keepLog = cond == "gnss_ramp_r5" || cond == "kerb_faults_r5" || cond == "combined_r5";
+                } else if (sp.name == "r4") {
                     keepLog = cond == "multipath_r4" || cond == "gnss_ramp_r4" || cond == "combined_r4";
                 } else if (sp.name == "r3") {
                     keepLog = cond == "multipath_r3" || cond == "gnss_ramp_r3" || cond == "kerb_clutter_r3";
@@ -601,6 +640,7 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
         gt.mode = "ground_truth";
         gt.condition = sp.closedConditions.front();
         gt.feasibility = sp.referenceFeasibility;
+        gt.rejoin = opt.rejoin.empty() || opt.rejoin == "on";  // nothing jumps on simulator truth
         variants.push_back({"ground truth (reference)", gt});
         for (const std::string& c : sp.closedConditions) {
             for (const PoseSource& src : sp.sources) {
@@ -608,6 +648,7 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
                 e.mode = src.mode;
                 e.estimator = src.estimator;
                 e.feasibility = src.feasibility;
+                e.rejoin = opt.rejoin.empty() ? src.rejoin : opt.rejoin == "on";
                 e.condition = c;
                 variants.push_back({src.label + ", " + c, e});
             }
@@ -623,7 +664,8 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
                 const bool isRef = sc.mode == "ground_truth";
                 if (isRef) refOutcome[seed] = r.outcome;
                 jl << "{\"split\":\"" << sp.name << "\",\"scenario\":\"" << base.name << "\",\"mode\":\"" << sc.mode << "\",\"estimator\":\""
-                   << (isRef ? "-" : sc.estimator) << "\",\"feasibility\":" << (sc.feasibility ? "true" : "false") << ",\"condition\":\"" << sc.condition
+                   << (isRef ? "-" : sc.estimator) << "\",\"feasibility\":" << (sc.feasibility ? "true" : "false")
+                   << ",\"rejoin\":" << (sc.rejoin ? "true" : "false") << ",\"condition\":\"" << sc.condition
                    << "\",\"seed\":" << seed << ",\"outcome\":\"" << r.outcome << "\",\"stack_mode\":\"" << r.stackFinalMode
                    << "\",\"time\":" << num(r.simSeconds, 2) << ",\"stop_margin\":" << num(m.stopMargin, 3) << ",\"incursion_depth\":" << num(m.incursionDepth, 3)
                    << ",\"xtrack_link\":" << num(m.maxCrossTrackLink, 3) << ",\"xtrack_connector\":" << num(m.maxCrossTrackConnector, 3)
@@ -669,6 +711,12 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
     if (previousStack && sp.sources.size() > 1) {
         md << " \"previous stack\" is the stack evaluated on R2 in November 2026, without the clearance layer; every other row, and the "
               "reference, use the clearance layer.";
+    }
+    const bool mixedRejoin = std::any_of(sp.sources.begin(), sp.sources.end(), [](const PoseSource& p) { return p.rejoin; }) &&
+                             std::any_of(sp.sources.begin(), sp.sources.end(), [](const PoseSource& p) { return !p.rejoin; });
+    if (mixedRejoin && opt.rejoin.empty()) {
+        md << " \"no re-join\" is the stack evaluated on R3 and R4: the clearance layer without the re-join after pose corrections, its "
+              "monitor measuring from the unshifted path. Every other row uses the re-join; nothing jumps on simulator truth.";
     }
     md << "\n\n";
     for (const auto& sv : rows) {
