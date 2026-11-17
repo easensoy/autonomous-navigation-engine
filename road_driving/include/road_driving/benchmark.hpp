@@ -55,6 +55,7 @@ std::vector<RouteSpec> benchmarkRoutes(bool heldOut);  // three development rout
 std::vector<RouteSpec> benchmarkRoutesR3();             // three routes on R3
 std::vector<RouteSpec> benchmarkRoutesR4();             // three routes on R4
 std::vector<RouteSpec> benchmarkRoutesR5();             // three routes on R5
+std::vector<RouteSpec> benchmarkRoutesR6();             // three routes on R6
 Scenario benchmarkScenario(const RouteSpec& route, const std::string& condition, std::uint64_t seed, const std::string& mode);
 // Closed-loop scenarios: development uses R1's closure scenarios; held out uses the R2 routes and one
 // R2 closure scenario; R3 and R4 their three routes and one closure scenario each.
@@ -62,6 +63,7 @@ std::vector<Scenario> closedLoopScenarios(bool heldOut);
 std::vector<Scenario> closedLoopScenariosR3();
 std::vector<Scenario> closedLoopScenariosR4();
 std::vector<Scenario> closedLoopScenariosR5();
+std::vector<Scenario> closedLoopScenariosR6();
 
 // A benchmark split. "dev" (R1) and "heldout" (R2) are the November 2026 evaluation exactly as recorded:
 // estimator "ekf" against the baselines, and the stack without the clearance layer. "r2" reuses R2 as
@@ -69,11 +71,11 @@ std::vector<Scenario> closedLoopScenariosR5();
 // "r3dev" reuses R3 as development data for the second versions (ekf_int2, ekf_kerb2); "r4" is their
 // held-out evaluation. Every one of those splits drives the stack it was evaluated with, so the stack's
 // later re-join after pose corrections is off in them. "r5" is the re-join's held-out evaluation: every
-// filter drives each episode with and without it.
+// filter drives each episode with and without it. "r6" does the same for the verified re-join.
 struct PoseSource {
     std::string label, mode, estimator;
     bool feasibility = true;
-    bool rejoin = true;
+    Rejoin rejoin = Rejoin::Verified;
 };
 struct SplitSpec {
     std::string name, title;
@@ -96,7 +98,8 @@ struct CampaignOptions {
     // so one process per scenario, merged in the split's scenario order by tools/merge_closed_loop.py,
     // gives the same files as one process running them all.
     std::string scenarios;
-    // Closed loop only: "on" or "off" sets the re-join for every pose source; empty keeps the split's own.
+    // Closed loop only: "off", "on" or "verified" sets the re-join for every pose source; empty keeps the
+    // split's own.
     std::string rejoin;
 };
 // Open loop. Writes runs.jsonl, summary.md, campaign.txt and a few sensor logs; returns summary.md.
