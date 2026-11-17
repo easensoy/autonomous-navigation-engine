@@ -31,6 +31,7 @@ struct LocMetrics {
     // Lateral error: the position error across the true heading (what keeps the car off the kerb).
     double lateralRmse = 0.0, lateralP95 = 0.0, lateralMax = 0.0;
     int stepAlarms = 0, faultExits = 0, gnssExcluded = 0, reanchors = 0, kerbUsed = 0, kerbRejected = 0;
+    int faultRecoveries = 0, headingReanchors = 0, kerbRelocalisations = 0;  // second versions
     double nisKerbMean = -1.0;
     std::vector<double> errors;     // per-sample position errors (pooled statistics; not serialised)
     std::vector<double> lateral;    // per-sample absolute lateral errors (not serialised)
@@ -52,15 +53,19 @@ struct RouteSpec {
 };
 std::vector<RouteSpec> benchmarkRoutes(bool heldOut);  // three development routes on R1, three held-out on R2
 std::vector<RouteSpec> benchmarkRoutesR3();             // three routes on R3
+std::vector<RouteSpec> benchmarkRoutesR4();             // three routes on R4
 Scenario benchmarkScenario(const RouteSpec& route, const std::string& condition, std::uint64_t seed, const std::string& mode);
 // Closed-loop scenarios: development uses R1's closure scenarios; held out uses the R2 routes and one
-// R2 closure scenario; R3 its three routes and one R3 closure scenario.
+// R2 closure scenario; R3 and R4 their three routes and one closure scenario each.
 std::vector<Scenario> closedLoopScenarios(bool heldOut);
 std::vector<Scenario> closedLoopScenariosR3();
+std::vector<Scenario> closedLoopScenariosR4();
 
 // A benchmark split. "dev" (R1) and "heldout" (R2) are the November 2026 evaluation exactly as recorded:
 // estimator "ekf" against the baselines, and the stack without the clearance layer. "r2" reuses R2 as
 // development and regression data for the integrity and kerb increment; "r3" is its held-out evaluation.
+// "r3dev" reuses R3 as development data for the second versions (ekf_int2, ekf_kerb2); "r4" is their
+// held-out evaluation.
 struct PoseSource {
     std::string label, mode, estimator;
     bool feasibility = true;
