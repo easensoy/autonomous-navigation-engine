@@ -2,13 +2,14 @@
 
 Reads only files written by road_drive: the map export (road_drive map R1 --json map.json), and an
 episode folder written by `road_drive drive ... --out DIR` in estimated mode, after
-`road_drive localise DIR` has added the offline estimator traces (trace_dr.csv).
+`road_drive localise DIR` has added the offline estimator traces (trace_<estimator>.csv).
 
-    python render_demo.py --map map.json --episode DIR --out test-drive.gif --poster test-drive.png
+    python render_demo.py --map map.json --episode DIR --out test-drive.gif --poster test-drive.png [--compare ekf]
 
 Needs matplotlib, numpy and Pillow. Everything drawn comes from the logs: the footprint is the
-vehicle's simulated pose, the estimate is what the stack drove on, and the ellipse is the EKF's own
-position covariance.
+vehicle's simulated pose, the estimate is what the stack drove on, the ellipse is the estimator's own
+position covariance, the kerb returns are the scanner's ranges drawn from the true scanner pose, and the
+comparison trace is another estimator replayed offline on the same sensor log.
 """
 import argparse
 import csv
@@ -34,6 +35,8 @@ EKF = "#3fb6b2"
 DR = "#e0a43c"
 GNSS = "#b48cf2"
 ALERT = "#e5534b"
+KERBPT = "#f7d774"
+MULTI = "#d9822b"
 LENGTH, WIDTH, MIRRORS, REAR = 4.682, 2.011, 2.139, 0.842
 
 
@@ -144,6 +147,7 @@ def main():
     ap.add_argument("--speedup", type=float, default=4.0)
     ap.add_argument("--idle-speedup", type=float, default=12.0)
     ap.add_argument("--width", type=int, default=960)
+    ap.add_argument("--compare", default="dr", help="offline trace to draw for comparison (trace_<name>.csv)")
     args = ap.parse_args()
 
     net = json.load(open(args.map, encoding="utf-8"))
@@ -152,11 +156,20 @@ def main():
     truth = read_csv(d + "/truth.csv")
     est = read_csv(d + "/estimates.csv")
     events = read_csv(d + "/events.csv")
-    sensors = [r for r in read_csv(d + "/sensors.csv") if r["sensor"] == "GNSS"]
+    all_sensors = read_csv(d + "/sensors.csv")
+    sensors = [r for r in all_sensors if r["sensor"] == "GNSS"]
+    kerb_scans = [r for r in all_sensors if r["sensor"] == "KERB"]
+    KT = np.array([float(r["t_meas"]) for r in kerb_scans]) if kerb_scans else np.array([])
     try:
-        dr = read_csv(d + "/trace_dr.csv")
+        dr = read_csv(d + "/trace_%s.csv" % args.compare)
     except FileNotFoundError:
         dr = []
+    names = {"dr": "dead reckoning", "ekf": "previous EKF (10 s reset)", "ekf_int": "EKF with GNSS integrity",
+             "gnss_cv": "GNSS-only filter", "gnss_hold": "GNSS fix held"}
+    compare_label = names.get(args.compare, args.compare) + ", same log"
+    driver = man.get("estimator", "ekf")
+    driver_label = {"ekf": "a GNSS + IMU + wheel EKF", "ekf_int": "a GNSS + IMU + wheel EKF with GNSS integrity",
+                    "ekf_kerb": "a GNSS + IMU + wheel + kerb-ranging EKF"}.get(driver, driver)
     T = np.array([float(r["t"]) for r in truth])
     TX = np.array([float(r["x"]) for r in truth])
     TY = np.array([float(r["y"]) for r in truth])
@@ -175,6 +188,7 @@ def main():
         a, b = item.split(":")
         outages.append((float(a), float(b)))
     zone_out = zones(man.get("zones_outage", ""))
+    zone_mp = zones(man.get("zones_multipath", "")) + zones(man.get("zones_ramp", ""))
     gx = np.array([float(r["a"]) for r in sensors])
     gy = np.array([float(r["b"]) for r in sensors])
     gt = np.array([float(r["t_meas"]) for r in sensors])
@@ -214,6 +228,8 @@ def main():
         draw_roads(ax, net)
         for (x0, y0, x1, y1) in zone_out:
             ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor="#6d4bc2", alpha=0.16, edgecolor="none", zorder=3))
+        for (x0, y0, x1, y1) in zone_mp:
+            ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor=MULTI, alpha=0.10, edgecolor="none", zorder=3))
         present = has_closure and (t_lift < 0 or t < t_lift)
         if present:
             dx, dy = lane["x1"] - lane["x0"], lane["y1"] - lane["y0"]
@@ -232,6 +248,21 @@ def main():
         ax.plot(EX[: k + 1], EY[: k + 1], color=EKF, lw=1.3, zorder=7)
         recent = (gt <= t) & (gt > t - 3.0)
         ax.scatter(gx[recent], gy[recent], s=6, color=GNSS, zorder=7)
+        if len(KT):
+            j = int(np.searchsorted(KT, t, side="right")) - 1
+            if j >= 0:
+                kr = kerb_scans[j]
+                ti = min(len(T) - 1, int(round(float(kr["t_meas"]) / 0.02)))
+                mx, b0, db = float(kr["c"]), float(kr["a"]), float(kr["b"])
+                sxp, syp = TX[ti] + mx * math.cos(TYAW[ti]), TY[ti] + mx * math.sin(TYAW[ti])
+                pts = []
+                for n_, rv in enumerate(kr["ranges"].split()):
+                    r_ = float(rv)
+                    if r_ > 0:
+                        th = TYAW[ti] + b0 + n_ * db
+                        pts.append((sxp + r_ * math.cos(th), syp + r_ * math.sin(th)))
+                if pts:
+                    ax.scatter([p[0] for p in pts], [p[1] for p in pts], s=7, color=KERBPT, zorder=13)
         draw_car(ax, TX[i], TY[i], TYAW[i], (EX[i], EY[i], EYAW[i]))
         e = est[i]
         ellipse(ax, EX[i], EY[i], float(e["pxx"]), float(e["pxy"]), float(e["pyy"]), 4.0, EKF)
@@ -258,17 +289,18 @@ def main():
         ov.set_aspect("equal")
         ov.axis("off")
         # Error plot.
-        ep = fig.add_axes([0.66, 0.08, 0.32, 0.20])
+        ep = fig.add_axes([0.66, 0.08, 0.32, 0.165])
         ep.set_facecolor(BG)
         for a, b in outages:
             ep.axvspan(a, min(b, T[-1]), color="#6d4bc2", alpha=0.25, lw=0)
         upto = slice(0, i + 1)
-        ep.plot(T[upto], EERR[upto], color=EKF, lw=1.2, label="EKF error")
-        ep.plot(T[upto], ESIG[upto], color=EKF, lw=0.8, ls=":", label="EKF 1-sigma")
+        ep.plot(T[upto], np.maximum(EERR[upto], 0.005), color=EKF, lw=1.2, label="error")
+        ep.plot(T[upto], np.maximum(ESIG[upto], 0.005), color=EKF, lw=0.8, ls=":", label="1-sigma")
         if DERR is not None:
-            ep.plot(T[upto], DERR[upto], color=DR, lw=1.0, ls=(0, (2, 2)), label="dead reckoning")
+            ep.plot(T[upto], np.maximum(DERR[upto], 0.005), color=DR, lw=1.0, ls=(0, (2, 2)), label=names.get(args.compare, args.compare))
         ep.set_xlim(0, T[-1])
-        ep.set_ylim(0, 1.0)
+        ep.set_yscale("log")
+        ep.set_ylim(0.01, 20.0)
         ep.set_ylabel("position error (m)", color=MUTED, fontsize=7)
         ep.tick_params(colors=MUTED, labelsize=6)
         for sp in ep.spines.values():
@@ -279,29 +311,34 @@ def main():
         status = e["status"]
         last = [ev for ev in events if float(ev["t"]) <= t and ev["type"] in (
             "CLOSURE_NOTIFIED", "STOP_PLANNED", "STOPPED", "CLOSURE_LIFTED", "RECOVERED", "GOAL_REACHED", "LOCALISATION_DEGRADED",
-            "LOCALISATION_NOMINAL", "LOCALISATION_UNRELIABLE", "LOCALISATION_RECOVERED", "REPLAN")]
+            "LOCALISATION_NOMINAL", "LOCALISATION_UNRELIABLE", "LOCALISATION_RECOVERED", "REPLAN", "NO_CLEAR_CONTINUATION",
+            "CLEAR_CONTINUATION", "MONITOR_TRIGGER")]
         lines = [
             ("t", f"{t:5.1f} s"),
             ("speed", f"{TV[i] * 3.6:5.1f} km/h"),
-            ("EKF error", f"{EERR[i]:5.2f} m"),
-            ("EKF 1-sigma", f"{ESIG[i]:5.2f} m"),
-            ("estimator", status.replace("_", " ").lower()),
+            ("error", f"{EERR[i]:5.2f} m"),
+            ("1-sigma", f"{ESIG[i]:5.2f} m"),
+            ("GNSS integrity", e.get("gnss", "-").replace("_", " ").lower()),
+            ("kerb match", e.get("kerb", "-").lower()),
+            ("path shift", f"{float(e.get('shift', '0') or 0):+5.2f} m"),
         ]
-        y0 = 0.47
+        y0 = 0.505
         for kk, (label, value) in enumerate(lines):
-            fig.text(0.63, y0 - kk * 0.035, label, color=MUTED, fontsize=8)
-            fig.text(0.76, y0 - kk * 0.035, value, color=TEXT, fontsize=8, family="monospace")
-        for kk, (name, ok) in enumerate((("GNSS", not in_outage), ("IMU", True), ("WHEEL", True))):
-            fig.text(0.86, 0.47 - kk * 0.035, ("● " if ok else "○ ") + name, color=(EKF if ok else ALERT), fontsize=8)
+            fig.text(0.63, y0 - kk * 0.031, label, color=MUTED, fontsize=8)
+            fig.text(0.76, y0 - kk * 0.031, value, color=TEXT, fontsize=8, family="monospace")
+        gnss_ok = not in_outage and e.get("gnss", "TRUSTED") in ("TRUSTED", "-")
+        for kk, (name, ok) in enumerate((("GNSS", gnss_ok), ("IMU", True), ("WHEEL", True), ("KERB", e.get("kerb", "-") != "NONE"))):
+            fig.text(0.87, 0.505 - kk * 0.031, ("● " if ok else "○ ") + name, color=(EKF if ok else ALERT), fontsize=8)
         if last:
             ev = last[-1]
-            fig.text(0.63, 0.29, f"{float(ev['t']):.1f} s  {ev['type'].replace('_', ' ').lower()}", color=TEXT, fontsize=7.5)
+            fig.text(0.63, 0.272, f"{float(ev['t']):.1f} s  {ev['type'].replace('_', ' ').lower()}", color=TEXT, fontsize=7.5)
         # Titles and labels.
         fig.text(0.01, 0.955, "Autonomous Navigation Engine · road_driving", color=TEXT, fontsize=12, weight="bold")
         fig.text(0.01, 0.92, "Independent research simulation · simulated I-PACE-sized proxy on synthetic left-hand-traffic roads · "
-                             "the stack drives on a GNSS + IMU + wheel EKF", color=MUTED, fontsize=8)
-        fig.text(0.01, 0.02, "white: true footprint · teal: EKF estimate (dashed) and 95% ellipse x4 · amber: dead reckoning, same sensors "
-                             "· violet: GNSS fixes, outage zone · red: roadworks barrier", color=MUTED, fontsize=6.5)
+                             "the stack drives on " + driver_label, color=MUTED, fontsize=8)
+        fig.text(0.01, 0.02, "white: true footprint \u00b7 teal: estimate (dashed) and 95% ellipse x4 \u00b7 amber: " + compare_label +
+                 " \u00b7 violet: GNSS fixes, outage \u00b7 orange: GNSS fault zone \u00b7 yellow: kerb returns \u00b7 red: barrier",
+                 color=MUTED, fontsize=6.3)
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=dpi, facecolor=BG)
         plt.close(fig)
