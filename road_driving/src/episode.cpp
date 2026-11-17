@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 
@@ -171,10 +172,17 @@ EpisodeResult runEpisode(const Scenario& sc) {
     r.scenario = sc;
     NetworkSpec ns;
     ns.maxSegment = sc.maxSegment;
-    const LaneNetwork net = buildR1(ns);
+    const LaneNetwork net = buildNetwork(sc.network, ns);
     const std::vector<std::string> errs = net.validate();
     if (!errs.empty()) {
-        throw std::runtime_error("network R1 fails validation: " + errs.front());
+        throw std::runtime_error("network " + sc.network + " fails validation: " + errs.front());
+    }
+    const bool estimatedMode = sc.mode == "estimated";
+    if (!estimatedMode && sc.mode != "ground_truth") {
+        throw std::runtime_error("unknown mode " + sc.mode);
+    }
+    if (estimatedMode && sc.condition.empty()) {
+        throw std::runtime_error("estimated mode needs a sensor condition");
     }
     const VehicleParams vp;
     const double dt = 0.01;
@@ -233,14 +241,62 @@ EpisodeResult runEpisode(const Scenario& sc) {
         }
     }
 
+    // Sensors (world side) and, in estimated mode, the estimator that drives. Condition spans along the
+    // route become map-frame rectangles around the route elements they cover.
+    std::unique_ptr<SensorSimulator> sensors;
+    std::unique_ptr<Estimator> est;
+    if (!sc.condition.empty()) {
+        const SensorConditions cond = sensorConditions(sc.condition);
+        const double L = corridor.length();
+        auto spanZones = [&](const Span& span, std::vector<Zone>& out) {
+            if (!span.active()) {
+                return;
+            }
+            const double s0 = span.from * L, s1 = span.to * L;
+            const size_t n = corridor.elements().size();
+            for (size_t i = 0; i < n; ++i) {
+                const double a = std::max(corridor.elementStart(i), s0);
+                const double b = std::min(i + 1 < n ? corridor.elementStart(i + 1) : L, s1);
+                if (b <= a) {
+                    continue;
+                }
+                Zone z{1e18, 1e18, -1e18, -1e18};
+                for (double s = a;; s = std::min(b, s + 0.5)) {
+                    const PathSample p = corridor.at(s);
+                    z.x0 = std::min(z.x0, p.x - 4.0);
+                    z.y0 = std::min(z.y0, p.y - 4.0);
+                    z.x1 = std::max(z.x1, p.x + 4.0);
+                    z.y1 = std::max(z.y1, p.y + 4.0);
+                    if (s >= b) {
+                        break;
+                    }
+                }
+                out.push_back(z);
+            }
+        };
+        spanZones(cond.outage, r.zones.outage);
+        spanZones(cond.multipath, r.zones.multipath);
+        spanZones(cond.slip, r.zones.slip);
+        sensors.reset(new SensorSimulator(cond, r.zones, sc.seed, vp.wheelbase));
+        if (estimatedMode) {
+            est = makeEstimator(sc.estimator, EstimatorConfig{}, net);
+            if (!est) {
+                throw std::runtime_error("unknown estimator " + sc.estimator);
+            }
+        }
+    }
+
     Vehicle veh(vp, dt, init);
     Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS);
     bool present = sc.closure, revealed = false, lifted = false;
     double tRest = -1.0;
     std::vector<LogEvent> world;
+    const std::string labels =
+        estimatedMode ? "SYNTHETIC_ROADS,ESTIMATED_POSE(" + sc.estimator + "),ORACLE_CLOSURE" : "SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE";
     world.push_back({0.0, "WORLD", "EPISODE_START",
-                     "network=R1;labels=SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE;start=" + net.elements[static_cast<size_t>(startElem)].name +
-                         ";goal=" + net.elements[static_cast<size_t>(goalElem)].name});
+                     "network=" + sc.network + ";labels=" + labels + ";start=" + net.elements[static_cast<size_t>(startElem)].name +
+                         ";goal=" + net.elements[static_cast<size_t>(goalElem)].name +
+                         (sc.condition.empty() ? std::string() : ";sensors=" + sc.condition)});
     if (sc.closure && sc.reveal == Reveal::AtStart) {
         revealed = true;
         r.tReveal = 0.0;
@@ -254,12 +310,44 @@ EpisodeResult runEpisode(const Scenario& sc) {
     const double revealDist = sc.revealDistance + r.jitterReveal;
 
     std::string truth = "t,x,y,yaw,v,steer,accel,cmd_steer,cmd_accel,closure\n";
+    std::string estimates = "t,x,y,yaw,v,pxx,pxy,pyy,pyawyaw,sigma_pos,status\n";
     Command cmd;
-    double restTime = 0.0;
+    double restTime = 0.0, outageStart = -1.0, doneSince = -1.0;
+    bool stackStarted = false;
     const long maxTicks = std::lround(sc.timeBudget / dt);
     for (long k = 0;; ++k) {
         const double t = static_cast<double>(k) * dt;
         const VehicleState vs = veh.state();
+
+        // World: sensors; in estimated mode the estimator consumes what has arrived.
+        StateEstimate estNow;
+        if (sensors) {
+            std::vector<Measurement> arrived;
+            sensors->step(t, dt, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel, arrived);
+            if (est) {
+                for (const Measurement& m : arrived) {
+                    est->process(m);
+                }
+                estNow = est->estimateAt(t);
+            }
+            if (!sensors->gnssAvailable() && outageStart < 0.0) {
+                outageStart = t;
+            } else if (sensors->gnssAvailable() && outageStart >= 0.0) {
+                r.outages.push_back({outageStart, t});
+                outageStart = -1.0;
+            }
+        }
+        // What the stack is given as its pose: simulator truth, or the estimate (never both).
+        VehicleState stackPose = vs;
+        if (est) {
+            stackPose.x = estNow.x;
+            stackPose.y = estNow.y;
+            stackPose.yaw = estNow.yaw;
+            stackPose.v = estNow.v;
+            stackPose.steer = estNow.steer;
+            stackPose.accel = estNow.accel;
+        }
+        const bool missionStarted = t >= sc.departDelay - 1e-9 && (!est || estNow.valid);
 
         // World: oracle notification and lift.
         const DrivePath::Projection pc = corridor.project(vs.x, vs.y, sCorr, 3.0, 10.0);
@@ -300,7 +388,14 @@ EpisodeResult runEpisode(const Scenario& sc) {
         if (k % 10 == 0) {
             Observation obs;
             obs.t = t;
-            obs.pose = vs;
+            obs.pose = stackPose;
+            if (est) {
+                obs.estimated = true;
+                obs.estimateValid = estNow.valid && estNow.hasCov;  // quality unknown without a covariance: not usable
+                obs.estimateAge = t - estNow.t;
+                obs.sigmaAlong = estNow.sigmaAlong(estNow.yaw);
+                obs.sigmaAcross = estNow.sigmaAcross(estNow.yaw);
+            }
             if (sc.closure && revealed) {
                 ClosureReport c;
                 c.id = "X1";
@@ -312,14 +407,26 @@ EpisodeResult runEpisode(const Scenario& sc) {
                 c.active = present;
                 obs.closures.push_back(c);
             }
-            if (k == 0) {
-                stack.initialise(obs);
+            if (!stackStarted) {
+                if (missionStarted) {
+                    stack.initialise(obs);
+                    stackStarted = true;
+                }
             } else {
                 stack.plan(obs);
             }
         }
         if (k % 2 == 0) {
-            cmd = stack.control(vs, t);
+            cmd = stackStarted ? stack.control(stackPose, t) : Command{0.0, -2.0};  // brake hold until the mission starts
+            r.belief.push_back({t, stackStarted ? stack.believedElement() : -1});
+            if (est) {
+                r.estimates.push_back(estNow);
+                char eline[320];
+                std::snprintf(eline, sizeof eline, "%.2f,%.4f,%.4f,%.5f,%.4f,%.6g,%.6g,%.6g,%.6g,%.4f,%s\n", t, estNow.x, estNow.y, estNow.yaw,
+                              estNow.v, estNow.pxx, estNow.pxy, estNow.pyy, estNow.pyawyaw, estNow.valid ? estNow.sigmaPos() : -1.0,
+                              estNow.status);
+                estimates += eline;
+            }
             const int code = !sc.closure ? 0 : (lifted ? 3 : (revealed ? 2 : 1));
             r.truth.push_back({t, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel, cmd.steer, cmd.accel, code});
             char line[256];
@@ -329,14 +436,28 @@ EpisodeResult runEpisode(const Scenario& sc) {
         }
 
         restTime = vs.v < 0.01 ? restTime + dt : 0.0;
-        if (stack.mode() == Stack::Mode::Done || (stack.mode() == Stack::Mode::HoldFallback && restTime >= 3.0) || restTime >= 45.0 ||
-            k >= maxTicks) {
+        // In estimated mode the stack's "done" rests on its estimate: the world waits for the true car to stop.
+        if (stack.mode() == Stack::Mode::Done && doneSince < 0.0) {
+            doneSince = t;
+        }
+        const bool done = stack.mode() == Stack::Mode::Done && (!estimatedMode || vs.v < 0.01 || t - doneSince >= 3.0);
+        if (done || (stack.mode() == Stack::Mode::HoldFallback && restTime >= 3.0) || restTime >= 45.0 || k >= maxTicks) {
             r.simSeconds = t;
             break;
         }
         veh.step(cmd);
     }
 
+    if (outageStart >= 0.0) {
+        r.outages.push_back({outageStart, r.simSeconds});
+    }
+    if (sensors) {
+        r.sensors = sensors->log();
+        r.sensorsCsv = sensorLogCsv(r.sensors);
+    }
+    if (est) {
+        r.estimatesCsv = estimates;
+    }
     r.truthCsv = truth;
     r.traceHash = fnv1a(truth);
     r.stackFinalMode = stack.modeName();
@@ -376,6 +497,47 @@ EpisodeResult runEpisode(const Scenario& sc) {
         } else if (e.type == "STOP_PLANNED") {
             const size_t a = e.detail.find("class=");
             r.metrics.stopClass = e.detail.substr(a + 6, e.detail.find(';', a) - a - 6);
+        } else if (e.type == "LOCALISATION_UNRELIABLE") {
+            ++r.metrics.localisationStops;
+        } else if (e.type == "LOCALISATION_DEGRADED") {
+            ++r.metrics.localisationDegraded;
+        }
+    }
+
+    // Lane association: the element the stack believes it is in against the evaluator's association from
+    // truth, sample by sample. Movements of one approach overlap at the junction mouth, and an element
+    // boundary is ambiguous by the position error, so lane-level agreement is what is counted.
+    auto compatible = [&](int b, int t) {
+        const Element& eb = net.elements[static_cast<size_t>(b)];
+        const Element& et = net.elements[static_cast<size_t>(t)];
+        if (b == t || (!eb.isConnector() && !et.isConnector() && eb.lane == et.lane)) return true;
+        if (eb.isConnector() && !et.isConnector() && (eb.fromLane == et.lane || eb.toLane == et.lane)) return true;
+        if (et.isConnector() && !eb.isConnector() && (et.fromLane == eb.lane || et.toLane == eb.lane)) return true;
+        return eb.isConnector() && et.isConnector() && eb.fromLane == et.fromLane;
+    };
+    for (size_t i = 0; i < r.belief.size() && i < r.metrics.truthElement.size(); ++i) {
+        const int b = r.belief[i].second, t = r.metrics.truthElement[i];
+        if (b >= 0 && t >= 0) {
+            ++r.metrics.associationSamples;
+            r.metrics.associationErrors += compatible(b, t) ? 0 : 1;
+        }
+    }
+    // The driving estimate's error against truth (estimated mode).
+    if (!r.estimates.empty()) {
+        std::vector<double> err;
+        double sum2 = 0.0;
+        for (size_t i = 0; i < r.estimates.size() && i < r.truth.size(); ++i) {
+            if (r.estimates[i].valid) {
+                const double e = std::hypot(r.estimates[i].x - r.truth[i].x, r.estimates[i].y - r.truth[i].y);
+                err.push_back(e);
+                sum2 += e * e;
+            }
+        }
+        if (!err.empty()) {
+            std::sort(err.begin(), err.end());
+            r.metrics.estRmse = std::sqrt(sum2 / static_cast<double>(err.size()));
+            r.metrics.estP95 = err[std::min(err.size() - 1, static_cast<size_t>(0.95 * static_cast<double>(err.size())))];
+            r.metrics.estMax = err.back();
         }
     }
     return r;
@@ -410,6 +572,26 @@ std::string manifestText(const EpisodeResult& r) {
       << "\nsim_seconds=" << fixed(r.simSeconds, 2) << "\ntruth_rows=" << r.truth.size() << "\ntrace_hash=" << hex64(r.traceHash)
       << "\nroute_hash=" << hex64(r.routeHash) << "\nengine_nodes=" << r.engineNodes << "\nengine_edges=" << r.engineEdges
       << "\nengine_stdout_bytes_silenced=" << r.engineSilencedBytes << "\nengine_ms_wall_clock_not_hashed=" << fixed(r.engineMs, 3) << "\n";
+    // Localisation fields (absent from manifests written before they existed; read as defaults).
+    o << "network_name=" << s.network << "\ncondition=" << (s.condition.empty() ? "none" : s.condition) << "\nmode=" << s.mode
+      << "\nestimator=" << s.estimator << "\ndepart_delay=" << exact(s.departDelay) << "\nmin_clearance=" << fixed(m.minClearance, 3)
+      << "\nclearance_violations=" << m.clearanceViolations << "\nassociation_errors=" << m.associationErrors
+      << "\nassociation_samples=" << m.associationSamples << "\nlocalisation_stops=" << m.localisationStops
+      << "\nlocalisation_degraded=" << m.localisationDegraded << "\nest_rmse=" << fixed(m.estRmse, 4) << "\nest_p95=" << fixed(m.estP95, 4)
+      << "\nest_max=" << fixed(m.estMax, 4) << "\ngnss_outages=" << r.outages.size() << "\noutage_windows=";
+    for (size_t i = 0; i < r.outages.size(); ++i) {
+        o << (i ? "," : "") << fixed(r.outages[i].first, 2) << ":" << fixed(r.outages[i].second, 2);
+    }
+    auto zones = [&](const char* key, const std::vector<Zone>& zs) {
+        o << "\n" << key << "=";
+        for (size_t i = 0; i < zs.size(); ++i) {
+            o << (i ? ";" : "") << fixed(zs[i].x0, 2) << ":" << fixed(zs[i].y0, 2) << ":" << fixed(zs[i].x1, 2) << ":" << fixed(zs[i].y1, 2);
+        }
+    };
+    zones("zones_outage", r.zones.outage);
+    zones("zones_multipath", r.zones.multipath);
+    zones("zones_slip", r.zones.slip);
+    o << "\n";
     return o.str();
 }
 
@@ -420,9 +602,13 @@ bool writeEpisode(const EpisodeResult& r, const std::string& dir, std::string& e
         error = "cannot create " + dir + ": " + ec.message();
         return false;
     }
-    const std::pair<const char*, std::string> files[] = {
-        {"manifest.txt", manifestText(r)}, {"truth.csv", r.truthCsv}, {"events.csv", r.eventsCsv}, {"routes.csv", r.routesCsv}};
+    const std::pair<const char*, std::string> files[] = {{"manifest.txt", manifestText(r)}, {"truth.csv", r.truthCsv},
+                                                         {"events.csv", r.eventsCsv},     {"routes.csv", r.routesCsv},
+                                                         {"sensors.csv", r.sensorsCsv},   {"estimates.csv", r.estimatesCsv}};
     for (const auto& f : files) {
+        if (f.second.empty()) {
+            continue;  // no sensors, or no estimator in the loop
+        }
         std::ofstream out(std::filesystem::path(dir) / f.first, std::ios::binary);
         out << f.second;
         if (!out) {
@@ -495,6 +681,18 @@ bool scenarioFromManifest(const std::map<std::string, std::string>& kv, Scenario
         sc.revealJunction = get("reveal_junction");
         sc.liftAfterStop = std::stod(get("lift_after_stop"));
         sc.timeBudget = std::stod(get("time_budget"));
+        auto optional = [&](const char* k, const std::string& fallback) {
+            const auto it = kv.find(k);
+            return it == kv.end() ? fallback : it->second;
+        };
+        sc.network = optional("network_name", "R1");
+        sc.condition = optional("condition", "none");
+        if (sc.condition == "none") {
+            sc.condition.clear();
+        }
+        sc.mode = optional("mode", "ground_truth");
+        sc.estimator = optional("estimator", "ekf");
+        sc.departDelay = std::stod(optional("depart_delay", "0"));
     } catch (const std::exception& ex) {
         error = ex.what();
         return false;
