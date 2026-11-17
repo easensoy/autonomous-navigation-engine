@@ -37,6 +37,16 @@ enum class Reveal { None, AtStart, BeforeJunction, BeforeBarrier };
 const char* revealName(Reveal r);
 bool parseReveal(const std::string& s, Reveal& r);
 
+// The stack's response to a pose correction (rejoinpolicy in src/stack.hpp):
+// - Off: the stack evaluated on R3 and R4. It chases the path; its monitor measures from the unshifted path.
+// - All: the stack evaluated on R5. It re-joins every sideways jump of the estimate; its monitor measures
+//   from the path with its clearance shift.
+// - Verified: it re-joins only corrections the estimator verified against the map, by the amount the map
+//   moved the estimate; every other jump meets the R3 and R4 stack, monitor included.
+enum class Rejoin { Off, All, Verified };
+const char* rejoinName(Rejoin r);                      // "off", "on" (All, as R5 recorded it), "verified"
+bool parseRejoin(const std::string& s, Rejoin& out);  // accepts those names
+
 struct Scenario {
     std::string name = "c0_nominal";
     std::string scenarioClass = "C0";
@@ -67,9 +77,9 @@ struct Scenario {
     // The stack's clearance feasibility layer (sideways shift and explicit stop). Off reproduces the stack
     // evaluated on R2 in November 2026; manifests written before it existed replay with it off.
     bool feasibility = true;
-    // The stack's re-join after a pose correction (rejoinpolicy). Off reproduces the stack evaluated on R3
-    // and R4; manifests written before it existed replay with it off.
-    bool rejoin = true;
+    // The stack's response to a pose correction (rejoinpolicy). Manifests written before it existed replay
+    // with it off.
+    Rejoin rejoin = Rejoin::Verified;
 };
 
 std::vector<Scenario> catalogue();
