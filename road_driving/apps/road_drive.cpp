@@ -8,7 +8,7 @@
 //   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--estimator NAME] [--feasibility on|off] [--seed N] [--out DIR]
 //   road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]   (stored sensor log; no world simulation)
 //   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR
-//   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR
+//   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] [--scenario A,B] --out DIR
 //   road_drive map R1|R2|R3|R4 [--json FILE]
 //
 // Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
@@ -47,7 +47,8 @@ int usage() {
                  "                   [--feasibility on|off] [--seed N] [--out DIR]\n"
                  "  road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]\n"
                  "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR\n"
-                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR\n  road_drive map R1|R2|R3|R4 [--json FILE]\n");
+                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] [--scenario A,B] --out DIR\n"
+                 "  road_drive map R1|R2|R3|R4 [--json FILE]\n");
     return 2;
 }
 
@@ -388,6 +389,7 @@ int main(int argc, char** argv) {
             co.seeds = opt.count("--seeds") ? std::stoi(opt["--seeds"]) : (co.split == "dev" ? 5 : 10);
             co.outDir = opt["--out"];
             co.config = opt.count("--config") ? opt["--config"] : "";
+            co.scenarios = opt.count("--scenario") ? opt["--scenario"] : "";
             std::fputs((cmd == "bench-loc" ? runLocalisationCampaign(co) : runClosedLoopCampaign(co)).c_str(), stdout);
             return 0;
         }
