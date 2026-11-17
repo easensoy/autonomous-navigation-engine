@@ -130,6 +130,94 @@ road_drive localise <episode dir>
 
 This reruns every estimator from that folder's `sensors.csv` and `truth.csv` and writes their traces. A test confirms it reproduces the in-process estimates to 1e-9 m.
 
+## Results
+
+Measured on 17 November 2026, freshly run.
+
+| | Development | Held out |
+|---|---|---|
+| Network | R1 | R2, never used for tuning |
+| Build | GCC 14.2 | MSVC 19.51, frozen commit `62a742a` |
+| Seeds | 5 | 10 |
+| Open-loop drives | 90 | 210 |
+| Closed-loop episodes | 80 | 200 |
+| Full tables | [`benchmark/dev/`](benchmark/dev) | [`benchmark/heldout/`](benchmark/heldout) |
+
+The criteria were [predeclared](benchmark/PROTOCOL.md) and pushed in that commit before any held-out run.
+
+### Held out, open loop: position error
+
+The table gives median-run RMSE and pooled 95th percentile, in metres, then the number of failed runs out of 30. A run fails when its error exceeds 5 m.
+
+| Condition | EKF | GNSS constant-velocity | GNSS hold | Dead reckoning |
+|---|---|---|---|---|
+| `nominal_h` | **0.18 / 0.36**, 0 | 0.62 / 1.23, 0 | 1.25 / 1.98, 0 | 4.23 / 10.5, 16 |
+| `gnss_outage_h` | **0.22 / 0.45**, 0 | 7.14 / 18.7, 30 | 43.5 / 113, 30 | 4.23 / 10.5, 16 |
+| `multipath_h` | 0.29 / **5.65**, **8** | 3.63 / 11.4, 30 | 2.99 / 6.89, 30 | 4.23 / 10.5, 16 |
+| `wheel_slip_h` | **0.18 / 0.36**, 0 | 0.62 / 1.23, 0 | 1.25 / 1.98, 0 | 19.7 / 33.6, 30 |
+| `imu_bias_h` | **0.23 / 0.47**, 0 | 0.62 / 1.23, 0 | 1.25 / 1.98, 0 | 4.51 / 11.6, 18 |
+| `delay_drop_h` | **0.20 / 0.38**, 0 | 0.80 / 1.51, 0 | 4.28 / 6.91, 30 | 4.41 / 10.5, 16 |
+| `combined_h` | **0.21 / 0.43**, 0 | 5.73 / 15.7, 30 | 21.3 / 60.7, 30 | 9.49 / 18.5, 30 |
+
+**Outages.** When GNSS returns, the EKF's median error is 0.40 m, against dead reckoning's 5.57 m. The EKF is back below 0.5 m 0.01 s later (median).
+
+**NEES** (3 dof, ideal 3):
+
+| Condition | NEES |
+|---|---|
+| `nominal_h`, `wheel_slip_h` | 1.78 |
+| `delay_drop_h` | 1.74 |
+| `combined_h` | 1.64 |
+| `gnss_outage_h` | 1.63 |
+| `imu_bias_h` | 19.0 (overconfident) |
+| `multipath_h` | 39.9 (overconfident) |
+
+**Measurement-processing latency** (wall clock, on the campaign machine). Per run, the median is 0.8–2.6 µs per measurement. The 99th percentile is about 19–20 µs, rising to 54 µs under `combined_h` and 88 µs under `delay_drop_h`, where late fixes replay the buffer.
+
+### Predeclared criteria
+
+| # | Criterion | Held-out result | Verdict |
+|---|---|---|---|
+| S1 | No EKF failure | 8 of 210 runs failed, all R2-B under `multipath_h` (6.1–8.0 m) | **failed** |
+| S2 | EKF better than each baseline in at least 27 of 30 paired runs, every condition | 29 or 30 of 30 everywhere | passed |
+| S3 | `nominal_h` pooled 95th percentile at most 0.50 m | 0.355 m | passed |
+| S4 | Outage error at most half of dead reckoning's; recovery within 5 s | 0.40 against 5.57 m; 0.01 s | passed |
+| S5 | `multipath_h` pooled 95th percentile at most 1.0 m | 5.65 m | **failed** |
+| S6 | NEES 0.5–6 in nominal, outage, wheel-slip and delay conditions | 1.63–1.78 | passed |
+| S7 | Closed loop, `nominal_h`: same outcome as the reference, no association error | 40 of 40, no errors | passed |
+| S8 | No closure incursion in any EKF episode | 0 of 160 | passed |
+
+### Held out, closed loop: driving on the EKF
+
+Each cell is out of 10 seeds, against the ground-truth reference with the same seed.
+
+- **Under `nominal_h`:**
+  - Every mission ends as the reference does.
+  - Closure stops end at least 1.73 m from the barrier (reference: at least 1.86 m).
+  - Estimate error has a median RMSE of 0.17 m.
+  - In 13 of 40 episodes the body crosses a carriageway edge, and the footprint with mirrors reaches 0.24 m past it. The reference crosses in none.
+  - There is little margin for estimate error. Driven exactly, R2's tightest left turn clears the edge by 0.001 m with mirrors, and its straight-ahead movements by 0.43 m.
+- **Under `gnss_outage_h`:**
+  - R2-B and R2-C complete.
+  - On R2-A the outage lies on one 127 m straight, and the lateral 1-sigma grows with distance driven. In all 20 episodes it passes the 0.75 m stop threshold after about 107 m.
+  - The car stops in lane inside the outage, about 13 m short of where GNSS returns, and waits there. Those episodes end `STOPPED_EN_ROUTE`.
+  - R2-B's outage is longer (143 m) but contains a 90° turn, which turns lateral uncertainty into along-track uncertainty. Its lateral 1-sigma peaked at 0.71 m (seed 1).
+- **Under `multipath_h`:**
+  - 28 of 40 episodes end away from the reference outcome.
+  - The 6 m offset outlasts the 10 s rejection window, so the filter resets onto the biased fixes, and the estimate error reaches 9.2 m.
+  - In every episode that stopped en route, the constraint monitor saw a large lateral error from the path on the estimate and braked to a fallback stop.
+  - In one episode (R2-B, seed 3) the car left the carriageway before that stop; its footprint with mirrors reached 4.36 m past the edge.
+  - The filter's covariance did not flag this (NEES 39.9), so no localisation stop fired.
+- **Under `combined_h`:** every mission ends as the reference does.
+
+### Failure cases and the next improvement
+
+**Two weaknesses** (the failure cases above):
+- **Persistent multipath.** A bias longer than the 10 s reset window can capture the filter, and nothing in the covariance warns of it.
+- **Lateral accuracy.** GNSS-grade lateral accuracy (0.2–0.4 m) is not enough for kerb clearance on 3 m lanes, nor for keeping lateral uncertainty bounded through a long outage on a straight.
+
+**The next improvement the evidence supports** is a measured lateral reference that does not depend on GNSS. This means lane-marking or kerb detection from simulated camera or lidar measurements, matched to the map, as a further EKF measurement. It targets all three failure modes: multipath capture, outage stops and kerb clearance. A plausibility check of GNSS jumps against odometry at the onset of multipath is the smaller, immediate step.
+
 ## Not done
 
 - **UKF:** not implemented. The EKF's nominal NEES is near its ideal and the motion is gentle, so no question remains that a UKF would answer here.
