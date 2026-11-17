@@ -8,8 +8,8 @@ robot in Gazebo through ROS 2, then runs on its own on a warehouse graph. Both a
 regenerated from recorded runs, and CI recomputes the routes and checks the headline numbers against the
 data in [`docs/data`](docs/data) and [`ros2/evidence`](ros2/evidence/README.md). An opt-in extension,
 [`road_driving/`](road_driving/README.md), uses the same routing and replanning for a car-sized
-kinematic vehicle on a synthetic left-hand-traffic road network
-([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
+kinematic vehicle on synthetic left-hand-traffic road networks. It drives either on ground truth or on
+its own EKF estimate from simulated sensors ([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
 
 <img src="ros2/evidence/media/simulation-mission-preview.gif" width="100%" alt="Recording of one simulated trial in four parts. Top: Gazebo Harmonic, a camera following an orange differential-drive robot along a warehouse aisle between blue-and-orange pallet racks; a red pallet appears in the aisle ahead; the view widens over the middle and south aisles while the robot turns back, then follows it through the south aisle to the delivery station. Bottom left: RViz2, a top-down view of the roadmap with the engine's route in green, the ground-truth trajectory in blue and the lidar-blocked nodes in red; the green route switches from the middle aisle to the south aisle. Bottom right: the navigator's recorded telemetry: simulation time, mission and engine state, waypoint, remaining route cost, tracking error, velocity command, last blockage and last engine call. A caption and a timeline name each recorded event, and a label states the playback speed.">
 
@@ -260,6 +260,23 @@ the engine and the car stops before the barrier instead.
   brakes to a fallback stop; that episode is stored, and CI replays it.
 - **Reproducibility:** 192 episodes (16 scenarios, 6 seeds, 2 variants) gave byte-identical truth logs
   with GCC 14.2 and MSVC 19.51. Cross-track error was at most 0.162 m, with no illegal move.
+- **Driving on its own estimate:** an EKF fuses simulated GNSS, IMU, wheel-speed and steering
+  measurements, and the stack can drive on its output with no access to truth. A second network, R2,
+  was held out of all tuning; there, every estimator processed the same recorded sensor logs. In each
+  of seven sensor conditions, the EKF's RMSE was lower than each of three baselines' (dead reckoning
+  and two GNSS-only estimators) in at least 29 of 30 paired runs. Its nominal 95th-percentile error
+  was 0.355 m.
+  Two of eight predeclared criteria failed, both from one cause: a 6 m multipath offset outlasting the
+  10 s rejection window captured the filter in 8 of 210 runs ([results](road_driving/LOCALISATION.md#results)).
+
+<img src="road_driving/docs/media/test-drive.gif" width="100%" alt="Animated test drive. A simulated car seen from above follows a road on a grid network, drawn with its real footprint and a roof sensor dome. A dashed teal outline marks where the EKF believes the car is, with a 95% uncertainty ellipse. In a shaded GNSS outage zone the GNSS indicator turns red, the ellipse grows and the estimate drifts about half a metre while a dead-reckoning comparison drifts metres away. When GNSS returns the error snaps back. A roadworks barrier appears; the car stops before it, waits for the lift, then completes the route. Side panels show the network overview, speed, position error, the EKF's 1-sigma, sensor availability and an error-over-time plot.">
+
+<sub><b>A simulated test drive on the estimate:</b> an I-PACE-sized proxy drives through 101 m without
+GNSS. When GNSS returns its error is 0.64 m, against 5.4 m for dead reckoning on the same log. It then
+stops for an oracle-reported closure and completes after the lift. Independent research simulation on a
+synthetic network.<br>
+[Localisation design and results](road_driving/LOCALISATION.md) ·
+[Predeclared held-out protocol](road_driving/benchmark/PROTOCOL.md)</sub>
 
 ## Experimental scope
 
@@ -307,10 +324,18 @@ the engine and the car stops before the barrier instead.
 **Library.** Graph planning only: no time, kinematics or vehicle model; obstacles are node ids the
 caller reports; a step is one node.
 
-**Road-driving extension.** Synthetic roads, ground-truth pose and an oracle-reported closure, with no
-other road user. The vehicle model is kinematic, with parameters that approximate an I-PACE's published
-dimensions. It was tuned and tested on one development network. A held-out network, perception,
-prediction and localisation are not built yet ([details](road_driving/README.md#experimental-scope)).
+**Road-driving extension.**
+
+- **Inputs:** synthetic roads and an oracle-reported closure, with no other road user.
+- **Pose:** ground truth, or an EKF fed by simulated GNSS, IMU, wheel-speed and steering sensors with
+  simple error models. There is no camera, lidar or map matching.
+- **Vehicle:** the model is kinematic, with parameters that approximate an I-PACE's published
+  dimensions. It is a simulated proxy; nothing was driven on a physical vehicle.
+- **Tuning:** the controller and the EKF were tuned on one development network. A second network was
+  held out and run once under a predeclared protocol.
+- **Known gap:** driving on the estimate, the body crossed a carriageway edge in 13 of 40 nominal
+  held-out episodes.
+- **Not built:** perception and prediction ([details](road_driving/README.md#experimental-scope)).
 
 ## Known defects and proposed work
 
@@ -382,9 +407,14 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - `test_api_link_coverage`, which takes the address of all 172 public member functions of the 15
     classes whose declarations were audited, so a declared but undefined member fails the build;
   - 2 benchmark smoke programs.
-- **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds `test_road_driving` (288
-  checks), a replay of the stored failing episode, and a replay of a changed copy that must be
-  rejected. CI turns the option on in the four build jobs.
+- **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds four entries:
+  - `test_road_driving` (288 checks);
+  - `test_localisation` (42 checks);
+  - a replay of the stored failing episode;
+  - a replay of a changed copy, which must be rejected.
+
+  CI turns the option on in the four build jobs. The Linux jobs also replay a stored sensor log through
+  every estimator without the simulator.
 - **CI** (`.github/workflows/ci.yml`) runs seven jobs. Four build and test on Windows (MSVC, MSYS2 GCC)
   and Ubuntu 24.04 (GCC, Clang). The fifth, *Evidence checks*, needs only Python's standard library:
   `check_outputs.py` recomputes every exported route from the exported edge lists, re-reads the raw
