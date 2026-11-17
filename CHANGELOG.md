@@ -4,6 +4,19 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: a switch for the re-join, network R5 and its held-out evaluation (`road_driving/`)
+
+- **`Scenario::rejoin`** (default on) and `Stack(..., rejoin)`. Off is the stack evaluated on R3 and R4: no
+  re-join, and the monitor measuring from the unshifted path. Manifests record `rejoin=on|off`; older
+  manifests replay with it off.
+- **Splits keep their stacks.** Every split up to `r4` now drives with the re-join off, and so reproduces
+  its recorded closed loop: the held-out R4 run value for value. `bench-closed --rejoin on|off` overrides
+  every pose source, and `drive --rejoin on|off` one episode. `closed_loop.jsonl` lines gain `rejoin`.
+- **Network R5** (`buildR5`), its routes and closure scenario, seven conditions (`conditionNamesR5`), and the
+  split `r5`, which drives every filter with and without the re-join.
+- **`tools/check_r5_criteria.py`** computes the predeclared R5 criteria from `closed_loop.jsonl`.
+- **Tests:** `road_driving_localisation_tests` grows from 123 to 142 checks.
+
 ### Road-driving: the stack re-joins its path after a pose correction (`road_driving/`)
 
 - **Behaviour change in estimated mode only.** When the estimate jumps sideways by more than 0.15 m between
