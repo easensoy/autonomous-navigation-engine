@@ -69,10 +69,20 @@ struct NetworkSpec {
     double penaltyLeft = 1.0, penaltyRight = 4.0, penaltyAhead = 0.0;  // engine cost, s
     double tieBreak = 1e-3;    // s; removes exact cost ties on the symmetric grid
     double sampleStep = 0.1;   // m between stored centreline points
+    double kerbRadius = 6.0;       // corner kerb radius of an ordinary junction
+    double tightKerbRadius = 3.0;  // corner kerb radius of a tight junction (side-road entry class)
+    double tightLeftRadius = 5.5;  // left-turn arc at a tight junction; uses carriageway beyond its own lane
+    double tightSpeed = 2.5;       // m/s, limit on a tight junction's left turns
 };
 
 struct BannedTurn {
     std::string junction, fromLane, toLane;
+};
+
+// A street's carriageway centreline between two junctions, or from a junction to a dead end (b = -1).
+struct Street {
+    int a = -1, b = -1;
+    double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
 };
 
 struct LaneNetwork {
@@ -81,6 +91,8 @@ struct LaneNetwork {
     std::vector<Lane> lanes;
     std::vector<Element> elements;
     std::vector<BannedTurn> banned;
+    std::vector<Street> streets;
+    std::vector<double> kerbRadius;  // per junction
 
     int junction(const std::string& name) const;   // -1 if absent
     int lane(const std::string& name) const;       // -1 if absent
@@ -88,15 +100,55 @@ struct LaneNetwork {
     int segmentAt(int lane, double laneS) const;   // the segment containing a lane arc length
     double cost(int element) const;                // engine cost of entering and traversing an element, s
     PathPoint lanePoint(int lane, double laneS) const;
+    // Signed distance from a point to the edge of the drivable carriageway (positive inside): street
+    // carriageways two lanes wide, junction boxes, and corner kerbs rounded with the junction's radius.
+    double roadClearance(double x, double y) const;
     // Empty when every invariant holds. unitsPerMetre is the graph scale handed to the engine, whose
     // nodes reject coordinates beyond +-10000 units.
     std::vector<std::string> validate(double unitsPerMetre = 1.0) const;
 };
 
-// Network R1: a 3 by 3 grid at x = 0, 120, 240 m and y = 0, 80, 160 m. Two-way streets with one 3.0 m
-// lane each way at 20 mph, except the one-way eastbound middle street J01-J11-J21; no right turn from
-// the northbound approach at J11 into it; a 60 m two-way cul-de-sac east of J21 with no turning head.
+// The smallest roadClearance over a rectangular footprint (rear-axle pose; rear overhang behind it,
+// front offset ahead of it, full width), sampled along its edges. Negative: part of it is off the road.
+double footprintClearance(const LaneNetwork& net, double x, double y, double yaw, double rearOverhang, double frontOffset,
+                          double width);
+
+// A junction grid: junction Jcr at (xs[c], ys[r]); every street between neighbours is two-way unless
+// listed one-way; banned turns are never built; dead ends add a cul-de-sac without a turning head;
+// tight junctions get the small kerb radius and slow, wide left turns.
+struct GridSpec {
+    struct Directed {
+        std::string from, to;
+    };
+    struct DeadEnd {
+        std::string junction, name;
+        double dx = 0.0, dy = 0.0;
+    };
+    std::string name;
+    std::vector<double> xs, ys;
+    std::vector<Directed> oneWay;
+    std::vector<BannedTurn> banned;
+    std::vector<DeadEnd> deadEnds;
+    std::vector<std::string> tight;
+    // Junction design overrides for this grid (<= 0: keep NetworkSpec's value).
+    double mouth = -1.0, rightRadius = -1.0, tightLeftRadius = -1.0, tightKerbRadius = -1.0;
+};
+GridSpec gridR1();
+GridSpec gridR2();
+LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& spec = NetworkSpec{});
+
+// Network R1 (development): a 3 by 3 grid at x = 0, 120, 240 m and y = 0, 80, 160 m. Two-way streets
+// with one 3.0 m lane each way at 20 mph, except the one-way eastbound middle street J01-J11-J21; no
+// right turn from the northbound approach at J11 into it; a 60 m cul-de-sac east of J21 with no
+// turning head.
 LaneNetwork buildR1(const NetworkSpec& spec = NetworkSpec{});
+// Network R2 (held out): a 4 by 3 grid at x = 0, 90, 240, 350 m and y = 0, 70, 170 m; one-way streets
+// J10->J11 (northbound) and J32->J22 (westbound); no right turn J11>J21 -> J21>J20 or J11>J12 ->
+// J12>J22; tight junctions J11 and J31 (4 m kerbs, 5.5 m left-turn arcs at 2.5 m/s); 16 m junction mouths
+// and 14 m right-turn arcs.
+LaneNetwork buildR2(const NetworkSpec& spec = NetworkSpec{});
+// "R1" or "R2"; throws for any other name.
+LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec = NetworkSpec{});
 // A right-hand-traffic copy (x mirrored). validate() must reject it.
 LaneNetwork mirrored(const LaneNetwork& net);
 
