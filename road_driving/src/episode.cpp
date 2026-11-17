@@ -277,7 +277,25 @@ EpisodeResult runEpisode(const Scenario& sc) {
         spanZones(cond.outage, r.zones.outage);
         spanZones(cond.multipath, r.zones.multipath);
         spanZones(cond.slip, r.zones.slip);
-        sensors.reset(new SensorSimulator(cond, r.zones, sc.seed, vp.wheelbase));
+        spanZones(cond.ramp, r.zones.ramp);
+        spanZones(cond.kerbBlackout, r.zones.kerbBlackout);
+        if (cond.parked.active()) {
+            // Parked cars against the opposite kerb along the route's lanes (not in junctions): unmapped
+            // objects for the kerb scanner, outside the car's own lane.
+            const double s0 = cond.parked.from * L, s1 = cond.parked.to * L;
+            for (double s = s0; s + 4.5 <= s1; s += 7.0) {
+                const PathSample p = corridor.at(s + 2.25);
+                const PathSample q = corridor.at(s + 4.5);
+                const PathSample a = corridor.at(s);
+                if (net.elements[static_cast<size_t>(p.element)].isConnector() || net.elements[static_cast<size_t>(q.element)].isConnector() ||
+                    net.elements[static_cast<size_t>(a.element)].isConnector()) {
+                    continue;
+                }
+                const double off = -(net.spec.laneWidth + 0.5 * net.spec.laneWidth - 1.0);  // car centre 0.1 m off the far kerb
+                r.zones.obstacles.push_back({p.x - std::sin(p.yaw) * off, p.y + std::cos(p.yaw) * off, p.yaw, 4.5, 1.8});
+            }
+        }
+        sensors.reset(new SensorSimulator(cond, r.zones, sc.seed, vp.wheelbase, &net));
         if (estimatedMode) {
             est = makeEstimator(sc.estimator, EstimatorConfig{}, net);
             if (!est) {
@@ -287,7 +305,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
     }
 
     Vehicle veh(vp, dt, init);
-    Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS);
+    Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility);
     bool present = sc.closure, revealed = false, lifted = false;
     double tRest = -1.0;
     std::vector<LogEvent> world;
@@ -310,7 +328,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
     const double revealDist = sc.revealDistance + r.jitterReveal;
 
     std::string truth = "t,x,y,yaw,v,steer,accel,cmd_steer,cmd_accel,closure\n";
-    std::string estimates = "t,x,y,yaw,v,pxx,pxy,pyy,pyawyaw,sigma_pos,status\n";
+    std::string estimates = "t,x,y,yaw,v,pxx,pxy,pyy,pyawyaw,sigma_pos,status,gnss,kerb,shift\n";
     Command cmd;
     double restTime = 0.0, outageStart = -1.0, doneSince = -1.0;
     bool stackStarted = false;
@@ -395,6 +413,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
                 obs.estimateAge = t - estNow.t;
                 obs.sigmaAlong = estNow.sigmaAlong(estNow.yaw);
                 obs.sigmaAcross = estNow.sigmaAcross(estNow.yaw);
+                obs.sigmaHeading = std::isfinite(estNow.pyawyaw) && estNow.pyawyaw > 0.0 ? std::sqrt(estNow.pyawyaw) : 0.0;
             }
             if (sc.closure && revealed) {
                 ClosureReport c;
@@ -422,9 +441,9 @@ EpisodeResult runEpisode(const Scenario& sc) {
             if (est) {
                 r.estimates.push_back(estNow);
                 char eline[320];
-                std::snprintf(eline, sizeof eline, "%.2f,%.4f,%.4f,%.5f,%.4f,%.6g,%.6g,%.6g,%.6g,%.4f,%s\n", t, estNow.x, estNow.y, estNow.yaw,
-                              estNow.v, estNow.pxx, estNow.pxy, estNow.pyy, estNow.pyawyaw, estNow.valid ? estNow.sigmaPos() : -1.0,
-                              estNow.status);
+                std::snprintf(eline, sizeof eline, "%.2f,%.4f,%.4f,%.5f,%.4f,%.6g,%.6g,%.6g,%.6g,%.4f,%s,%s,%s,%.3f\n", t, estNow.x, estNow.y,
+                              estNow.yaw, estNow.v, estNow.pxx, estNow.pxy, estNow.pyy, estNow.pyawyaw, estNow.valid ? estNow.sigmaPos() : -1.0,
+                              estNow.status, estNow.gnss, estNow.kerb, stackStarted ? stack.currentShift() : 0.0);
                 estimates += eline;
             }
             const int code = !sc.closure ? 0 : (lifted ? 3 : (revealed ? 2 : 1));
@@ -501,6 +520,16 @@ EpisodeResult runEpisode(const Scenario& sc) {
             ++r.metrics.localisationStops;
         } else if (e.type == "LOCALISATION_DEGRADED") {
             ++r.metrics.localisationDegraded;
+        } else if (e.type == "NO_CLEAR_CONTINUATION") {
+            ++r.metrics.clearanceStops;
+        }
+        // A stop decided on the estimate, judged against truth at the moment of the decision.
+        if (estimatedMode && (e.type == "LOCALISATION_UNRELIABLE" || e.type == "NO_CLEAR_CONTINUATION") && !r.estimates.empty()) {
+            const size_t i = std::min(r.estimates.size() - 1, static_cast<size_t>(std::max(0.0, std::round(e.t / (2.0 * dt)))));
+            if (i < r.truth.size() && r.estimates[i].valid &&
+                std::hypot(r.estimates[i].x - r.truth[i].x, r.estimates[i].y - r.truth[i].y) < kUnwarrantedError) {
+                ++r.metrics.unwarrantedStops;
+            }
         }
     }
 
@@ -578,7 +607,9 @@ std::string manifestText(const EpisodeResult& r) {
       << "\nclearance_violations=" << m.clearanceViolations << "\nassociation_errors=" << m.associationErrors
       << "\nassociation_samples=" << m.associationSamples << "\nlocalisation_stops=" << m.localisationStops
       << "\nlocalisation_degraded=" << m.localisationDegraded << "\nest_rmse=" << fixed(m.estRmse, 4) << "\nest_p95=" << fixed(m.estP95, 4)
-      << "\nest_max=" << fixed(m.estMax, 4) << "\ngnss_outages=" << r.outages.size() << "\noutage_windows=";
+      << "\nest_max=" << fixed(m.estMax, 4) << "\nfeasibility=" << (s.feasibility ? "on" : "off") << "\nmax_crossing=" << fixed(m.maxCrossing, 3)
+      << "\nclearance_stops=" << m.clearanceStops << "\nunwarranted_stops=" << m.unwarrantedStops << "\ngnss_outages=" << r.outages.size()
+      << "\noutage_windows=";
     for (size_t i = 0; i < r.outages.size(); ++i) {
         o << (i ? "," : "") << fixed(r.outages[i].first, 2) << ":" << fixed(r.outages[i].second, 2);
     }
@@ -591,6 +622,13 @@ std::string manifestText(const EpisodeResult& r) {
     zones("zones_outage", r.zones.outage);
     zones("zones_multipath", r.zones.multipath);
     zones("zones_slip", r.zones.slip);
+    zones("zones_ramp", r.zones.ramp);
+    zones("zones_kerb_blackout", r.zones.kerbBlackout);
+    o << "\nobstacles=";
+    for (size_t i = 0; i < r.zones.obstacles.size(); ++i) {
+        const Obstacle& ob = r.zones.obstacles[i];
+        o << (i ? ";" : "") << fixed(ob.cx, 2) << ":" << fixed(ob.cy, 2) << ":" << fixed(ob.yaw, 4) << ":" << fixed(ob.length, 2) << ":" << fixed(ob.width, 2);
+    }
     o << "\n";
     return o.str();
 }
@@ -693,6 +731,7 @@ bool scenarioFromManifest(const std::map<std::string, std::string>& kv, Scenario
         sc.mode = optional("mode", "ground_truth");
         sc.estimator = optional("estimator", "ekf");
         sc.departDelay = std::stod(optional("depart_delay", "0"));
+        sc.feasibility = optional("feasibility", "off") == "on";  // older manifests: the stack before the layer existed
     } catch (const std::exception& ex) {
         error = ex.what();
         return false;
