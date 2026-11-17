@@ -4,6 +4,29 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving localisation (additive, `road_driving/`)
+
+- **Additive.** With `BUILD_ROAD_DRIVING` off, the build is unchanged. No engine source, public header
+  or file under `ros2/` changed. Ground-truth driving is unchanged: the stored regression episode
+  replays byte for byte.
+- **Contents:**
+  - simulated GNSS, IMU, wheel-speed and steering sensors with fault conditions;
+  - a 9-state EKF and three baselines: dead reckoning, a GNSS-only constant-velocity filter, and the
+    latest fix held;
+  - an estimated-pose mode, in which the stack drives on the EKF through an explicit interface and a
+    localisation policy;
+  - whole-vehicle clearance and lane-association metrics;
+  - the held-out network R2;
+  - open- and closed-loop benchmark campaigns under a predeclared protocol;
+  - a renderer for the recorded test drive.
+
+  See [road_driving/LOCALISATION.md](road_driving/LOCALISATION.md).
+- **`road_drive`:** new commands `drive`, `localise`, `map`, `bench-loc` and `bench-closed`. Episode
+  manifests gain optional keys: network, sensor condition, pose mode, estimator and departure delay.
+  Older manifests still replay.
+- **Tests:** CTest gains `road_driving_localisation_tests`, so the extension has four entries. The
+  Linux CI jobs also replay a stored sensor log through every estimator.
+
 ### Road-driving extension (new, `road_driving/`)
 
 - **Additive and off by default.** The root `CMakeLists.txt` gains `option(BUILD_ROAD_DRIVING ... OFF)`;
