@@ -4,6 +4,16 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: the stack re-joins its path after a pose correction (`road_driving/`)
+
+- **Behaviour change in estimated mode only.** When the estimate jumps sideways by more than 0.15 m between
+  two control ticks, the controller's reference moves with it and returns to the path along a raised
+  cosine (`rejoinpolicy` in `src/stack.hpp`). A `POSE_CORRECTION` event records each one. On simulator
+  truth nothing jumps: R1's 192 closure episodes stay byte-identical.
+- **Monitor.** Its 1 m lateral limit is now measured from the path plus its clearance shift (before: from
+  the unshifted path). It does not use the re-join, so a larger jump still triggers the fallback stop.
+- **Tests:** `road_driving_localisation_tests` grows from 121 to 123 checks.
+
 ### Road-driving: second filter versions, network R4 and a kerb map error (`road_driving/`)
 
 - **Additive.** With `BUILD_ROAD_DRIVING` off, the build is unchanged. No engine source, public header,
