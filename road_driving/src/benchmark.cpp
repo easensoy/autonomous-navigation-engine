@@ -593,6 +593,9 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
     std::map<std::string, std::map<std::string, Row>> rows;  // scenario -> pose source label -> row
     std::vector<std::string> modeOrder;
     for (const Scenario& base : sp.scenarios) {
+        if (!opt.scenarios.empty() && ("," + opt.scenarios + ",").find("," + base.name + ",") == std::string::npos) {
+            continue;
+        }
         std::vector<std::pair<std::string, Scenario>> variants;
         Scenario gt = base;
         gt.mode = "ground_truth";
