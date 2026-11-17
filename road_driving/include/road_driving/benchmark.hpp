@@ -28,13 +28,20 @@ struct LocMetrics {
     double nisGnssMean = -1.0, nisGnssInside = -1.0, nisWheelMean = -1.0, nisWheelInside = -1.0;
     int gnssUsed = 0, gnssRejected = 0, wheelRejected = 0, resets = 0, lateDropped = 0;
     double runtimeMs = 0.0, latencyMedianUs = 0.0, latencyP99Us = 0.0, latencyMaxUs = 0.0;  // wall clock
+    // Lateral error: the position error across the true heading (what keeps the car off the kerb).
+    double lateralRmse = 0.0, lateralP95 = 0.0, lateralMax = 0.0;
+    int stepAlarms = 0, faultExits = 0, gnssExcluded = 0, reanchors = 0, kerbUsed = 0, kerbRejected = 0;
+    double nisKerbMean = -1.0;
     std::vector<double> errors;     // per-sample position errors (pooled statistics; not serialised)
+    std::vector<double> lateral;    // per-sample absolute lateral errors (not serialised)
 };
 constexpr double kFailError = 5.0;  // m
 
+// Every estimator in `names` (default: estimatorNames()) processes the same sensor log.
 std::vector<LocMetrics> evaluateLocalisation(const std::vector<TruthSample>& truth, const std::vector<Measurement>& sensors,
                                              const std::vector<std::pair<double, double>>& outages, const LaneNetwork& net,
-                                             const EstimatorConfig& cfg, std::vector<std::vector<StateEstimate>>* traces = nullptr);
+                                             const EstimatorConfig& cfg, std::vector<std::vector<StateEstimate>>* traces = nullptr,
+                                             const std::vector<std::string>* names = nullptr);
 std::string locMetricsJson(const LocMetrics& m);
 
 struct RouteSpec {
@@ -44,13 +51,34 @@ struct RouteSpec {
     double goalS;
 };
 std::vector<RouteSpec> benchmarkRoutes(bool heldOut);  // three development routes on R1, three held-out on R2
+std::vector<RouteSpec> benchmarkRoutesR3();             // three routes on R3
 Scenario benchmarkScenario(const RouteSpec& route, const std::string& condition, std::uint64_t seed, const std::string& mode);
 // Closed-loop scenarios: development uses R1's closure scenarios; held out uses the R2 routes and one
-// R2 closure scenario.
+// R2 closure scenario; R3 its three routes and one R3 closure scenario.
 std::vector<Scenario> closedLoopScenarios(bool heldOut);
+std::vector<Scenario> closedLoopScenariosR3();
+
+// A benchmark split. "dev" (R1) and "heldout" (R2) are the November 2026 evaluation exactly as recorded:
+// estimator "ekf" against the baselines, and the stack without the clearance layer. "r2" reuses R2 as
+// development and regression data for the integrity and kerb increment; "r3" is its held-out evaluation.
+struct PoseSource {
+    std::string label, mode, estimator;
+    bool feasibility = true;
+};
+struct SplitSpec {
+    std::string name, title;
+    std::vector<RouteSpec> routes;
+    std::vector<std::string> conditions;        // open loop
+    std::vector<std::string> estimators;        // open loop
+    std::vector<Scenario> scenarios;            // closed loop
+    std::vector<std::string> closedConditions;  // closed loop
+    std::vector<PoseSource> sources;            // closed loop, after the ground-truth reference
+    bool referenceFeasibility = false;
+};
+SplitSpec splitSpec(const std::string& name);  // throws for an unknown split
 
 struct CampaignOptions {
-    bool heldOut = false;
+    std::string split = "dev";
     int seeds = 5;
     std::string outDir;
     std::string config;  // EstimatorConfig overrides for development tuning; empty for the frozen configuration
