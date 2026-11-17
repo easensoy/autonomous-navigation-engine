@@ -7,6 +7,7 @@
 #include <queue>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <utility>
 
 namespace road {
@@ -155,38 +156,106 @@ PathPoint LaneNetwork::lanePoint(int laneIndex, double laneS) const {
     return {l.x0 + l.dirX * s, l.y0 + l.dirY * s, std::atan2(l.dirY, l.dirX), 0.0, s};
 }
 
-LaneNetwork buildR1(const NetworkSpec& spec) {
+GridSpec gridR1() {
+    GridSpec g;
+    g.name = "R1";
+    g.xs = {0.0, 120.0, 240.0};
+    g.ys = {0.0, 80.0, 160.0};
+    g.oneWay = {{"J01", "J11"}, {"J11", "J21"}};
+    g.banned = {{"J11", "J10>J11", "J11>J21"}};
+    g.deadEnds = {{"J21", "D21", 60.0, 0.0}};
+    return g;
+}
+
+GridSpec gridR2() {
+    GridSpec g;
+    g.name = "R2";
+    g.xs = {0.0, 90.0, 240.0, 350.0};
+    g.ys = {0.0, 70.0, 170.0};
+    g.oneWay = {{"J10", "J11"}, {"J32", "J22"}};
+    g.banned = {{"J21", "J11>J21", "J21>J20"}, {"J12", "J11>J12", "J12>J22"}};
+    g.tight = {"J11", "J31"};
+    // Junction design checked by footprint clearance (road_drive map R2): with 16 m mouths, 14 m right-turn
+    // arcs keep the swept footprint (with mirrors) on the carriageway; tight junctions need 4 m kerbs for
+    // their 5.5 m left-turn arcs (3 m kerbs put the footprint over the kerb whatever the arc).
+    g.mouth = 16.0;
+    g.rightRadius = 14.0;
+    g.tightKerbRadius = 4.0;
+    return g;
+}
+
+LaneNetwork buildR1(const NetworkSpec& spec) { return buildGrid(gridR1(), spec); }
+
+LaneNetwork buildR2(const NetworkSpec& spec) { return buildGrid(gridR2(), spec); }
+
+LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
+    if (name == "R1") {
+        return buildR1(spec);
+    }
+    if (name == "R2") {
+        return buildR2(spec);
+    }
+    throw std::invalid_argument("unknown network " + name);
+}
+
+LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& baseSpec) {
+    NetworkSpec spec = baseSpec;
+    if (grid.mouth > 0.0) spec.mouth = grid.mouth;
+    if (grid.rightRadius > 0.0) spec.rightRadius = grid.rightRadius;
+    if (grid.tightLeftRadius > 0.0) spec.tightLeftRadius = grid.tightLeftRadius;
+    if (grid.tightKerbRadius > 0.0) spec.tightKerbRadius = grid.tightKerbRadius;
     LaneNetwork net;
     net.spec = spec;
-    const double xs[3] = {0.0, 120.0, 240.0};
-    const double ys[3] = {0.0, 80.0, 160.0};
-    for (int r = 0; r < 3; ++r) {
-        for (int c = 0; c < 3; ++c) {
-            net.junctions.push_back({"J" + std::to_string(c) + std::to_string(r), xs[c], ys[r]});
+    net.spec.name = grid.name;
+    const int nx = static_cast<int>(grid.xs.size()), ny = static_cast<int>(grid.ys.size());
+    for (int r = 0; r < ny; ++r) {
+        for (int c = 0; c < nx; ++c) {
+            net.junctions.push_back({"J" + std::to_string(c) + std::to_string(r), grid.xs[static_cast<size_t>(c)],
+                                     grid.ys[static_cast<size_t>(r)]});
         }
+    }
+    auto isTight = [&](const std::string& name) { return std::find(grid.tight.begin(), grid.tight.end(), name) != grid.tight.end(); };
+    for (const Junction& jn : net.junctions) {
+        net.kerbRadius.push_back(isTight(jn.name) ? spec.tightKerbRadius : spec.kerbRadius);
     }
     auto J = [&](int c, int r) {
-        const int j = r * 3 + c;
-        return EndPoint{net.junctions[static_cast<size_t>(j)].name, xs[c], ys[r], j};
+        const int j = r * nx + c;
+        return EndPoint{net.junctions[static_cast<size_t>(j)].name, grid.xs[static_cast<size_t>(c)], grid.ys[static_cast<size_t>(r)], j};
     };
-    const EndPoint deadEnd{"D21", 300.0, 80.0, -1};
 
-    struct Street {
+    struct GridStreet {
         EndPoint a, b;
-        bool twoWay;
+        bool ab, ba;  // lanes a -> b and b -> a exist
     };
-    std::vector<Street> streets;
-    for (int r = 0; r < 3; ++r) {
-        for (int c = 0; c < 2; ++c) {
-            streets.push_back({J(c, r), J(c + 1, r), r != 1});  // r = 1: one-way eastbound (a -> b)
+    std::vector<GridStreet> streets;
+    auto addStreet = [&](const EndPoint& a, const EndPoint& b) {
+        GridStreet st{a, b, true, true};
+        for (const GridSpec::Directed& ow : grid.oneWay) {
+            if (ow.from == a.name && ow.to == b.name) {
+                st.ba = false;
+            }
+            if (ow.from == b.name && ow.to == a.name) {
+                st.ab = false;
+            }
+        }
+        streets.push_back(st);
+        net.streets.push_back({a.junction, b.junction, a.x, a.y, b.x, b.y});
+    };
+    for (int r = 0; r < ny; ++r) {
+        for (int c = 0; c + 1 < nx; ++c) {
+            addStreet(J(c, r), J(c + 1, r));
         }
     }
-    for (int c = 0; c < 3; ++c) {
-        for (int r = 0; r < 2; ++r) {
-            streets.push_back({J(c, r), J(c, r + 1), true});
+    for (int c = 0; c < nx; ++c) {
+        for (int r = 0; r + 1 < ny; ++r) {
+            addStreet(J(c, r), J(c, r + 1));
         }
     }
-    streets.push_back({J(2, 1), deadEnd, true});  // cul-de-sac, no turning head
+    for (const GridSpec::DeadEnd& de : grid.deadEnds) {
+        const int j = net.junction(de.junction);
+        const Junction& jn = net.junctions.at(static_cast<size_t>(j));
+        addStreet(EndPoint{jn.name, jn.x, jn.y, j}, EndPoint{de.name, jn.x + de.dx, jn.y + de.dy, -1});  // no turning head
+    }
 
     const double half = 0.5 * spec.laneWidth;
     auto addLane = [&](const EndPoint& p, const EndPoint& q) {
@@ -209,9 +278,11 @@ LaneNetwork buildR1(const NetworkSpec& spec) {
         l.length = len - inset0 - inset1;
         net.lanes.push_back(l);
     };
-    for (const Street& st : streets) {
-        addLane(st.a, st.b);
-        if (st.twoWay) {
+    for (const GridStreet& st : streets) {
+        if (st.ab) {
+            addLane(st.a, st.b);
+        }
+        if (st.ba) {
             addLane(st.b, st.a);
         }
     }
@@ -245,8 +316,8 @@ LaneNetwork buildR1(const NetworkSpec& spec) {
         }
     }
 
-    // Turning movements. U-turns do not exist; the banned turn is listed and never built.
-    net.banned.push_back({"J11", "J10>J11", "J11>J21"});
+    // Turning movements. U-turns do not exist; banned turns are listed and never built.
+    net.banned = grid.banned;
     for (size_t j = 0; j < net.junctions.size(); ++j) {
         const Junction& jn = net.junctions[j];
         for (size_t in = 0; in < net.lanes.size(); ++in) {
@@ -287,7 +358,11 @@ LaneNetwork buildR1(const NetworkSpec& spec) {
                     e.pts = straight(li.x1, li.y1, lo.x0, lo.y0, spec.sampleStep);
                 } else {
                     e.turn = delta > 0.0 ? Turn::Left : Turn::Right;
-                    const double radius = e.turn == Turn::Left ? spec.leftRadius : spec.rightRadius;
+                    const bool tightLeft = e.turn == Turn::Left && isTight(jn.name);
+                    const double radius = tightLeft ? spec.tightLeftRadius : (e.turn == Turn::Left ? spec.leftRadius : spec.rightRadius);
+                    if (tightLeft) {
+                        e.speedLimit = spec.tightSpeed;
+                    }
                     const double sign = delta > 0.0 ? 1.0 : -1.0;
                     const double k = sign / radius;
                     const double ls = spec.clothoid;
@@ -336,10 +411,77 @@ LaneNetwork buildR1(const NetworkSpec& spec) {
     return net;
 }
 
+double LaneNetwork::roadClearance(double x, double y) const {
+    const double hw = spec.laneWidth;  // half the carriageway: one lane each side of the centreline
+    double best = -std::numeric_limits<double>::infinity();
+    for (const Street& st : streets) {
+        const double len = std::hypot(st.bx - st.ax, st.by - st.ay);
+        const double ux = (st.bx - st.ax) / len, uy = (st.by - st.ay) / len;
+        const double u = (x - st.ax) * ux + (y - st.ay) * uy;
+        const double w = -(x - st.ax) * uy + (y - st.ay) * ux;
+        const double u0 = st.a >= 0 ? -hw : 0.0;          // across the junction box at a junction end
+        const double u1 = st.b >= 0 ? len + hw : len;     // a dead end stops at its end kerb
+        best = std::max(best, std::min({u - u0, u1 - u, hw - std::fabs(w)}));
+    }
+    // Corner kerbs: between two perpendicular arms of a junction the kerb is an arc of the junction's radius.
+    for (size_t j = 0; j < junctions.size(); ++j) {
+        const Junction& jn = junctions[j];
+        double arms[8][2];
+        int n = 0;
+        for (const Street& st : streets) {
+            if (n < 8 && (st.a == static_cast<int>(j) || st.b == static_cast<int>(j))) {
+                const double ox = st.a == static_cast<int>(j) ? st.bx : st.ax, oy = st.a == static_cast<int>(j) ? st.by : st.ay;
+                const double len = std::hypot(ox - jn.x, oy - jn.y);
+                arms[n][0] = (ox - jn.x) / len;
+                arms[n][1] = (oy - jn.y) / len;
+                ++n;
+            }
+        }
+        const double r = kerbRadius[j];
+        for (int i = 0; i < n; ++i) {
+            for (int k = i + 1; k < n; ++k) {
+                if (std::fabs(arms[i][0] * arms[k][0] + arms[i][1] * arms[k][1]) > 0.1) {
+                    continue;  // not perpendicular neighbours
+                }
+                const double cx = jn.x + hw * (arms[i][0] + arms[k][0]), cy = jn.y + hw * (arms[i][1] + arms[k][1]);
+                const double a = (x - cx) * arms[i][0] + (y - cy) * arms[i][1];
+                const double b = (x - cx) * arms[k][0] + (y - cy) * arms[k][1];
+                if (a >= 0.0 && b >= 0.0 && a <= r && b <= r) {
+                    const double fx = cx + r * (arms[i][0] + arms[k][0]), fy = cy + r * (arms[i][1] + arms[k][1]);
+                    best = std::max(best, std::hypot(x - fx, y - fy) - r);
+                }
+            }
+        }
+    }
+    return best;
+}
+
+double footprintClearance(const LaneNetwork& net, double x, double y, double yaw, double rearOverhang, double frontOffset,
+                          double width) {
+    const double c = std::cos(yaw), s = std::sin(yaw), hw = 0.5 * width;
+    double best = std::numeric_limits<double>::infinity();
+    auto eval = [&](double u, double w) { best = std::min(best, net.roadClearance(x + c * u - s * w, y + s * u + c * w)); };
+    for (int i = 0; i <= 8; ++i) {
+        const double u = -rearOverhang + (frontOffset + rearOverhang) * i / 8.0;
+        eval(u, -hw);
+        eval(u, hw);
+    }
+    for (int i = 1; i < 4; ++i) {
+        const double w = -hw + width * i / 4.0;
+        eval(-rearOverhang, w);
+        eval(frontOffset, w);
+    }
+    return best;
+}
+
 LaneNetwork mirrored(const LaneNetwork& net) {
     LaneNetwork m = net;
     for (Junction& j : m.junctions) {
         j.x = -j.x;
+    }
+    for (Street& st : m.streets) {
+        st.ax = -st.ax;
+        st.bx = -st.bx;
     }
     for (Lane& l : m.lanes) {
         l.x0 = -l.x0;
