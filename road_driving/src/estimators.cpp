@@ -199,10 +199,13 @@ private:
 // after it.
 class Ekf : public Estimator {
 public:
-    Ekf(const EstimatorConfig& cfg, const LaneNetwork& map) : cfg_(cfg), map_(map) {}
-    const char* name() const override { return "ekf"; }
+    Ekf(const EstimatorConfig& cfg, const LaneNetwork& map, const char* name) : cfg_(cfg), map_(map), name_(name) {}
+    const char* name() const override { return name_; }
 
     void process(const Measurement& m) override {
+        if (m.kind == Measurement::Kerb && !cfg_.kerb) {
+            return;  // a filter without kerb ranging never sees the scans
+        }
         Timer timer(stats);
         if (!init_) {
             if (m.kind == Measurement::Gnss) {
@@ -272,10 +275,18 @@ public:
         e.lastGnssUsed = c.lastGnss;
         const double sp = e.sigmaPos();
         e.status = sp > 2.0 ? "LOST" : (sp > 0.5 ? "DEGRADED" : (t - c.lastGnss > 2.0 ? "DEAD_RECKONING" : "OK"));
+        if (cfg_.integrity) {
+            e.gnss = c.lastFixSeen >= 0.0 && t - c.lastFixSeen > 2.0 ? "OUTAGE"
+                                                                       : (c.gnssMode == 1 ? "FAULTED" : (c.gnssMode == 2 ? "INCONSISTENT" : "TRUSTED"));
+        }
+        if (cfg_.kerb) {
+            e.kerb = c.lastKerbSeen < 0.0 || t - c.lastKerbSeen > 0.5 ? "NONE" : (c.lastKerbOk ? "MATCHED" : "REJECTED");
+        }
         return e;
     }
 
 private:
+    static constexpr int kWindow = 32;
     struct Core {
         double t = 0.0;
         Vec x{};
@@ -284,6 +295,18 @@ private:
         bool haveImu = false;
         double wheel = -1.0, stillSince = -1.0, lastGnss = -1.0;
         int rejectRun = 0;
+        // GNSS integrity: an odometry-only track (never corrected by GNSS or kerbs) for the jump test.
+        double odoX = 0.0, odoY = 0.0, odoYaw = 0.0;
+        double prevFixT = -1.0, prevFixX = 0.0, prevFixY = 0.0, prevOdoX = 0.0, prevOdoY = 0.0, lastFixSeen = -1.0;
+        int gnssMode = 0;  // 0 trusted, 1 faulted (jump detected), 2 inconsistent (persistent disagreement)
+        double faultX = 0.0, faultY = 0.0;  // the innovation when the jump was detected
+        int exitRun = 0, agreeRun = 0;
+        double winT[kWindow] = {}, winX[kWindow] = {}, winY[kWindow] = {};
+        bool winStepOk[kWindow] = {};
+        int winN = 0, winHead = 0;
+        // Kerb ranging.
+        double lastKerbSeen = -1.0, lastKerbGood = -1.0, distSinceKerb = 0.0;
+        bool lastKerbOk = false;
     };
     struct Entry {
         Measurement m;
@@ -295,6 +318,9 @@ private:
         cur_ = Core{};
         cur_.t = fix.tMeas;
         cur_.x = {p.x, p.y, p.yaw, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        cur_.odoX = p.x;
+        cur_.odoY = p.y;
+        cur_.odoYaw = p.yaw;
         const double d[N] = {cfg_.initPosSigma, cfg_.initPosSigma, cfg_.initYawSigma, 0.1, cfg_.initGyroBiasSigma, cfg_.initAccelBiasSigma,
                              cfg_.initScaleSigma, cfg_.gnssCorrSigma, cfg_.gnssCorrSigma};
         for (int i = 0; i < N; ++i) {
@@ -334,6 +360,15 @@ private:
         x[PY] += v * sn * dt;
         x[YAW] = wrapAngle(x[YAW] + w * dt);
         x[VEL] = std::max(0.0, x[VEL] + a * dt);  // no reverse
+        if (cfg_.integrity) {
+            const double om = c.odoYaw + 0.5 * w * dt;
+            c.odoX += v * std::cos(om) * dt;
+            c.odoY += v * std::sin(om) * dt;
+            c.odoYaw = wrapAngle(c.odoYaw + w * dt);
+        }
+        if (cfg_.kerb) {
+            c.distSinceKerb += std::fabs(v) * dt;
+        }
         const double phi = std::exp(-dt / cfg_.gnssCorrTau);
         F[GX][GX] = F[GY][GY] = phi;
         x[GX] *= phi;
@@ -421,6 +456,10 @@ private:
                 bool probe = false;
                 const double nis = kalmanUpdate<2>(xs, Ps, H, y, R, 0.0, probe);  // NIS only (copies)
                 stats.nisGnss.push_back(nis);
+                if (cfg_.integrity) {
+                    gnssWithIntegrity(c, m, H, y, nis);
+                    break;
+                }
                 if (nis <= cfg_.gateGnss) {
                     // Robust update: in the outer tail, inflate the noise in proportion to the NIS.
                     const double scale = (cfg_.robustNis > 0.0 && nis > cfg_.robustNis) ? nis / cfg_.robustNis : 1.0;
@@ -454,13 +493,372 @@ private:
             case Measurement::Steer:
                 c.steer = m.a;
                 break;
+            case Measurement::Kerb:
+                kerbUpdate(c, m);
+                break;
         }
         c.x[YAW] = wrapAngle(c.x[YAW]);
         c.x[VEL] = std::max(0.0, c.x[VEL]);
     }
 
+    // GNSS with integrity monitoring. Three tests, none of them a timer:
+    //  - jump test: a fix-to-fix displacement that the odometry track cannot explain marks the receiver
+    //    FAULTED, remembering the offset it jumped to; fixes are then excluded until several in a row fit
+    //    the filter and clearly not that offset (the fault has ended);
+    //  - gate: a fix outside the filter's chi-square gate is not used; after many in a row with no jump,
+    //    the filter and the receiver are INCONSISTENT;
+    //  - re-anchoring, only when INCONSISTENT: if the recent fixes agree with each other and with
+    //    odometry (no jumps, small scatter) and their offset is plausible for a filter up to 3 times
+    //    overconfident, the filter admits the disagreement as uncertainty and uses them. A kerb match
+    //    that supports the filter blocks this.
+    void gnssWithIntegrity(Core& c, const Measurement& m, const double (&H)[2][N], const double (&y)[2], double nis) {
+        const double cyo = std::cos(c.odoYaw), syo = std::sin(c.odoYaw);
+        const double antX = c.odoX + cyo * cfg_.antennaX - syo * cfg_.antennaY, antY = c.odoY + syo * cfg_.antennaX + cyo * cfg_.antennaY;
+        bool jump = false;
+        if (c.prevFixT >= 0.0 && m.tMeas - c.prevFixT <= cfg_.stepMaxGap && m.tMeas > c.prevFixT) {
+            const double rx = (m.a - c.prevFixX) - (antX - c.prevOdoX), ry = (m.b - c.prevFixY) - (antY - c.prevOdoY);
+            const double moved = std::hypot(antX - c.prevOdoX, antY - c.prevOdoY);
+            const double var = 2.0 * cfg_.gnssSigma * cfg_.gnssSigma + 0.0004 * moved * moved;  // fix noise, odometry 2%
+            jump = (rx * rx + ry * ry) / var > cfg_.stepGate;
+        }
+        // Re-synchronise the odometry heading with the filter, then remember this fix and the track position.
+        c.odoYaw = c.x[YAW];
+        c.prevFixT = m.tMeas;
+        c.prevFixX = m.a;
+        c.prevFixY = m.b;
+        c.prevOdoX = c.odoX + std::cos(c.odoYaw) * cfg_.antennaX - std::sin(c.odoYaw) * cfg_.antennaY;
+        c.prevOdoY = c.odoY + std::sin(c.odoYaw) * cfg_.antennaX + std::cos(c.odoYaw) * cfg_.antennaY;
+        c.lastFixSeen = m.tMeas;
+        if (jump) {
+            ++stats.stepAlarms;
+        }
+        // Innovation covariance S = H P H^T + R, for the fault hypothesis test.
+        const double r2 = cfg_.gnssSigma * cfg_.gnssSigma;
+        double S[2][2];
+        for (int a = 0; a < 2; ++a)
+            for (int b = 0; b < 2; ++b) {
+                double s = a == b ? r2 : 0.0;
+                for (int i = 0; i < N; ++i)
+                    for (int j = 0; j < N; ++j) s += H[a][i] * c.P[i][j] * H[b][j];
+                S[a][b] = s;
+            }
+        const double det = S[0][0] * S[1][1] - S[0][1] * S[1][0];
+        auto nisOf = [&](double ex, double ey) { return det > 1e-24 ? (S[1][1] * ex * ex - 2.0 * S[0][1] * ex * ey + S[0][0] * ey * ey) / det : 1e18; };
+        bool use = false;
+        // Fixes the filter does not use are remembered (innovation, and whether they passed the jump test)
+        // for the re-anchoring test; any used fix clears the record.
+        auto remember = [&]() {
+            c.winT[c.winHead] = m.tMeas;
+            c.winX[c.winHead] = y[0];
+            c.winY[c.winHead] = y[1];
+            c.winStepOk[c.winHead] = !jump;
+            c.winHead = (c.winHead + 1) % kWindow;
+            c.winN = std::min(c.winN + 1, kWindow);
+        };
+        if (c.gnssMode == 0) {
+            if (jump) {
+                c.gnssMode = 1;
+                c.faultX = y[0];
+                c.faultY = y[1];
+                c.exitRun = 0;
+                c.winN = 0;
+            } else if (nis <= cfg_.gateGnss) {
+                use = true;
+                c.winN = 0;
+            } else {
+                remember();
+                if (++c.rejectRun >= cfg_.inconsistentAfter) {
+                    c.gnssMode = 2;
+                    c.agreeRun = 0;
+                }
+            }
+        } else if (c.gnssMode == 1) {
+            const double nis1 = nisOf(y[0] - c.faultX, y[1] - c.faultY);
+            c.exitRun = (nis <= cfg_.gateGnss && nis + 2.0 < nis1) ? c.exitRun + 1 : 0;
+            if (c.exitRun >= cfg_.faultExitFixes) {
+                c.gnssMode = 0;
+                c.winN = 0;
+                c.rejectRun = 0;
+                ++stats.faultExits;
+                use = true;
+            }
+        } else {
+            remember();
+            c.agreeRun = nis <= cfg_.gateGnss ? c.agreeRun + 1 : 0;
+            if (c.agreeRun >= 3) {  // the filter and the receiver agree again
+                c.gnssMode = 0;
+                c.winN = 0;
+                c.rejectRun = 0;
+                use = true;
+            } else if (c.winN >= cfg_.reanchorWindow) {
+                // The window's innovations: a drifting filter makes them grow steadily, so their scatter is
+                // taken about a straight-line trend in time; what remains is the receiver's own noise.
+                const int n = cfg_.reanchorWindow;
+                bool stepsOk = true;
+                double st = 0.0, sxv = 0.0, syv = 0.0;
+                for (int k = 0; k < n; ++k) {
+                    const int i = (c.winHead - 1 - k + 2 * kWindow) % kWindow;
+                    st += c.winT[i] / n;
+                    sxv += c.winX[i] / n;
+                    syv += c.winY[i] / n;
+                    stepsOk = stepsOk && c.winStepOk[i];
+                }
+                double stt = 0.0, stx = 0.0, sty = 0.0;
+                for (int k = 0; k < n; ++k) {
+                    const int i = (c.winHead - 1 - k + 2 * kWindow) % kWindow;
+                    stt += (c.winT[i] - st) * (c.winT[i] - st);
+                    stx += (c.winT[i] - st) * (c.winX[i] - sxv);
+                    sty += (c.winT[i] - st) * (c.winY[i] - syv);
+                }
+                const double gx = stt > 1e-9 ? stx / stt : 0.0, gy = stt > 1e-9 ? sty / stt : 0.0;  // m/s
+                double scatter = 0.0;
+                for (int k = 0; k < n; ++k) {
+                    const int i = (c.winHead - 1 - k + 2 * kWindow) % kWindow;
+                    const double ex = c.winX[i] - sxv - gx * (c.winT[i] - st), ey = c.winY[i] - syv - gy * (c.winT[i] - st);
+                    scatter += (ex * ex + ey * ey) / n;
+                }
+                // Plausible for an overconfident filter: test the latest offset against an inflated S.
+                const double mx = y[0], my = y[1];
+                const double k = cfg_.reanchorInflation;
+                const double a = k * (S[0][0] - r2) + r2, b = k * S[0][1], d = k * (S[1][1] - r2) + r2, dd = a * d - b * b;
+                const double plaus = dd > 1e-24 ? (d * mx * mx - 2.0 * b * mx * my + a * my * my) / dd : 1e18;
+                const bool kerbSupports = cfg_.kerb && c.lastKerbGood >= 0.0 && m.tMeas - c.lastKerbGood < 1.0;
+                if (stepsOk && std::sqrt(scatter) <= cfg_.reanchorScatter && plaus <= cfg_.gateGnss && !kerbSupports) {
+                    // Admit the disagreement as uncertainty, then use the fix normally: the position by the
+                    // offset itself; the heading by the drift rate it implies; the gyro bias with it.
+                    const double drift = std::hypot(gx, gy) / std::max(1.0, c.x[VEL]);
+                    c.P[PX][PX] += mx * mx + r2;
+                    c.P[PY][PY] += my * my + r2;
+                    c.P[PX][PY] += mx * my;
+                    c.P[PY][PX] += mx * my;
+                    c.P[YAW][YAW] += 4.0 * drift * drift + 0.02 * 0.02;
+                    c.P[BG][BG] += 0.01 * 0.01;
+                    symmetrise(c.P);
+                    c.gnssMode = 0;
+                    c.winN = 0;
+                    c.rejectRun = 0;
+                    ++stats.reanchors;
+                    use = true;
+                }
+            }
+        }
+        bool applied = false;
+        if (use) {
+            const double sc = (cfg_.robustNis > 0.0 && nis > cfg_.robustNis && nis <= cfg_.gateGnss) ? nis / cfg_.robustNis : 1.0;
+            const double Rr[2][2] = {{r2 * sc, 0.0}, {0.0, r2 * sc}};
+            // The gate has been applied above (or deliberately waived after re-anchoring, whose inflated
+            // covariance then sets the fix's weight).
+            kalmanUpdate<2>(c.x, c.P, H, y, Rr, -1.0, applied);
+        }
+        if (applied) {
+            c.rejectRun = 0;
+            c.lastGnss = m.tMeas;
+            ++stats.gnssUsed;
+        } else {
+            ++stats.gnssRejected;
+            if (c.gnssMode == 1) ++stats.gnssExcluded;
+        }
+    }
+
+    // Scan-to-map registration of a kerb scan, folded into the filter. Each return's end point should lie
+    // on a mapped kerb: its signed distance to the nearest kerb is the residual. A robust Gauss-Newton
+    // search over (x, y, heading), anchored by the filter's own prediction, gives the pose that fits the
+    // scan; its information matrix says which directions the scan constrains (along a straight kerb only
+    // lateral position and heading; at a corner all three). Each constrained direction becomes a scalar
+    // measurement of the filter. The kerb deviation is correlated along the scan, so the information is
+    // scaled to kerbEffective independent returns. A scan that disagrees with the filter beyond the gate
+    // is rejected, and counts as no support for the filter.
+    void kerbUpdate(Core& c, const Measurement& m) {
+        c.lastKerbSeen = m.tMeas;
+        c.lastKerbOk = false;
+        const double p0[3] = {c.x[PX], c.x[PY], c.x[YAW]};
+        double P0[3][3];
+        const int idx[3] = {PX, PY, YAW};
+        for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b) P0[a][b] = c.P[idx[a]][idx[b]];
+        double P0i[3][3];
+        if (!invert3(P0, P0i)) {
+            ++stats.kerbRejected;
+            return;
+        }
+        const double sig2 = cfg_.kerbSigma * cfg_.kerbSigma;
+        // Lateral prior uncertainty sets how far from a kerb a return may start out.
+        const double latSig = std::sqrt(std::max(P0[0][0], P0[1][1]));
+        double p[3] = {p0[0], p0[1], p0[2]};
+        struct Pt {
+            double d, J[3];
+        };
+        auto residuals = [&](const double (&q)[3], double gate, std::vector<Pt>& out) {
+            out.clear();
+            const double sx = q[0] + m.c * std::cos(q[2]), sy = q[1] + m.c * std::sin(q[2]);
+            for (size_t i = 0; i < m.ranges.size(); ++i) {
+                const double r = m.ranges[i];
+                if (r <= 0.0) continue;
+                const double th = q[2] + m.a + static_cast<double>(i) * m.b;
+                const double ex = sx + r * std::cos(th), ey = sy + r * std::sin(th);
+                double nx = 0.0, ny = 0.0;
+                const double d = map_.kerbDistance(ex, ey, nx, ny);
+                if (std::fabs(d) > gate) continue;
+                out.push_back({d, {nx, ny, nx * -(ey - q[1]) + ny * (ex - q[0])}});
+            }
+        };
+        std::vector<Pt> pts;
+        double gate = std::min(1.5, std::max(0.4, 3.0 * latSig));
+        for (int it = 0; it < 6; ++it) {
+            residuals(p, gate, pts);
+            if (static_cast<int>(pts.size()) < cfg_.kerbMinReturns) break;
+            const double kappa = std::min(1.0, cfg_.kerbEffective / static_cast<double>(pts.size()));
+            double A[3][3], g[3];
+            for (int a = 0; a < 3; ++a) {
+                g[a] = 0.0;
+                for (int b = 0; b < 3; ++b) {
+                    A[a][b] = P0i[a][b];
+                    g[a] -= P0i[a][b] * (p[b] - p0[b]);
+                }
+            }
+            for (const Pt& q : pts) {
+                const double u = std::fabs(q.d) / cfg_.kerbSigma;
+                const double w = kappa * (u <= 2.0 ? 1.0 : 2.0 / u) / sig2;  // Huber weight
+                for (int a = 0; a < 3; ++a) {
+                    g[a] -= w * q.J[a] * q.d;
+                    for (int b = 0; b < 3; ++b) A[a][b] += w * q.J[a] * q.J[b];
+                }
+            }
+            double Ai[3][3];
+            if (!invert3(A, Ai)) break;
+            double step = 0.0;
+            for (int a = 0; a < 3; ++a) {
+                double dlt = 0.0;
+                for (int b = 0; b < 3; ++b) dlt += Ai[a][b] * g[b];
+                p[a] += dlt;
+                step += dlt * dlt;
+            }
+            gate = std::max(3.0 * cfg_.kerbSigma, 0.5 * gate);
+            if (step < 1e-8 && it >= 1) break;
+        }
+        residuals(p, 3.0 * cfg_.kerbSigma, pts);
+        if (static_cast<int>(pts.size()) < cfg_.kerbMinReturns) {
+            ++stats.kerbRejected;
+            return;
+        }
+        const double kappa = std::min(1.0, cfg_.kerbEffective / static_cast<double>(pts.size()));
+        double L[3][3] = {}, gr[3] = {};
+        for (const Pt& q : pts) {
+            for (int a = 0; a < 3; ++a) {
+                gr[a] += kappa * q.J[a] * q.d / sig2;
+                for (int b = 0; b < 3; ++b) L[a][b] += kappa * q.J[a] * q.J[b] / sig2;
+            }
+        }
+        double ev[3], V[3][3];
+        eigenSym3(L, ev, V);
+        const double emax = std::max(ev[0], std::max(ev[1], ev[2]));
+        struct Dir {
+            double z, r, h[3];
+        };
+        std::vector<Dir> dirs;
+        double nisTot = 0.0;
+        for (int j = 0; j < 3; ++j) {
+            if (ev[j] < 1.0 || ev[j] < 1e-4 * emax) continue;  // a direction the scan does not constrain
+            const double v[3] = {V[0][j], V[1][j], V[2][j]};
+            double vp = 0.0, vg = 0.0, vp0 = 0.0, s = 0.0;
+            for (int a = 0; a < 3; ++a) {
+                vp += v[a] * p[a];
+                vg += v[a] * gr[a];
+                vp0 += v[a] * p0[a];
+                for (int b = 0; b < 3; ++b) s += v[a] * P0[a][b] * v[b];
+            }
+            // The measurement alone along v: the converged pose minus the prior's pull on it.
+            double z = vp - vg / ev[j];
+            if (std::fabs(v[2]) > 0.5) {  // keep heading differences wrapped
+                z = vp0 + wrapAngle(z - vp0);
+            }
+            // White noise of the returns, plus the kerb-deviation floor counted once per correlation length.
+            const double floor = (v[0] * v[0] + v[1] * v[1]) * cfg_.kerbFloorPos * cfg_.kerbFloorPos + v[2] * v[2] * cfg_.kerbFloorYaw * cfg_.kerbFloorYaw;
+            const double r = 1.0 / ev[j] + floor * std::max(1.0, cfg_.kerbCorrLength / std::max(0.5, c.distSinceKerb));
+            nisTot += (z - vp0) * (z - vp0) / (s + r);
+            dirs.push_back({z, r, {v[0], v[1], v[2]}});
+        }
+        stats.nisKerb.push_back(nisTot);
+        if (dirs.empty() || nisTot > cfg_.kerbGate) {
+            ++stats.kerbRejected;
+            return;
+        }
+        const double scale = nisTot > cfg_.kerbRobust ? nisTot / cfg_.kerbRobust : 1.0;
+        for (const Dir& d : dirs) {
+            double Hd[1][N] = {};
+            Hd[0][PX] = d.h[0];
+            Hd[0][PY] = d.h[1];
+            Hd[0][YAW] = d.h[2];
+            const double pred = d.h[0] * c.x[PX] + d.h[1] * c.x[PY] + d.h[2] * c.x[YAW];
+            const double yv[1] = {d.z - pred};
+            const double Rv[1][1] = {{d.r * scale}};
+            bool applied = false;
+            kalmanUpdate<1>(c.x, c.P, Hd, yv, Rv, -1.0, applied);
+        }
+        ++stats.kerbUsed;
+        c.lastKerbOk = true;
+        c.distSinceKerb = 0.0;
+        if (nisTot <= cfg_.kerbRobust) {
+            c.lastKerbGood = m.tMeas;
+        }
+    }
+
+    static bool invert3(const double (&A)[3][3], double (&B)[3][3]) {
+        const double a = A[0][0], b = A[0][1], cc = A[0][2], d = A[1][0], e = A[1][1], f = A[1][2], g = A[2][0], h = A[2][1], i = A[2][2];
+        const double C00 = e * i - f * h, C01 = -(d * i - f * g), C02 = d * h - e * g;
+        const double det = a * C00 + b * C01 + cc * C02;
+        if (!(std::fabs(det) > 1e-30)) return false;
+        B[0][0] = C00 / det;
+        B[1][0] = C01 / det;
+        B[2][0] = C02 / det;
+        B[0][1] = -(b * i - cc * h) / det;
+        B[1][1] = (a * i - cc * g) / det;
+        B[2][1] = -(a * h - b * g) / det;
+        B[0][2] = (b * f - cc * e) / det;
+        B[1][2] = -(a * f - cc * d) / det;
+        B[2][2] = (a * e - b * d) / det;
+        return true;
+    }
+
+    // Eigen-decomposition of a symmetric 3x3 matrix by Jacobi rotations; columns of V are eigenvectors.
+    static void eigenSym3(const double (&Ain)[3][3], double (&ev)[3], double (&V)[3][3]) {
+        double A[3][3];
+        for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b) {
+                A[a][b] = 0.5 * (Ain[a][b] + Ain[b][a]);
+                V[a][b] = a == b ? 1.0 : 0.0;
+            }
+        for (int sweep = 0; sweep < 30; ++sweep) {
+            const double off = A[0][1] * A[0][1] + A[0][2] * A[0][2] + A[1][2] * A[1][2];
+            if (off < 1e-24) break;
+            for (int pq = 0; pq < 3; ++pq) {
+                const int pI = pq == 2 ? 1 : 0, qI = pq == 0 ? 1 : 2;
+                if (std::fabs(A[pI][qI]) < 1e-300) continue;
+                const double theta = 0.5 * std::atan2(2.0 * A[pI][qI], A[qI][qI] - A[pI][pI]);
+                const double cs = std::cos(theta), sn = std::sin(theta);
+                for (int k = 0; k < 3; ++k) {  // A = J^T A J
+                    const double akp = A[k][pI], akq = A[k][qI];
+                    A[k][pI] = cs * akp - sn * akq;
+                    A[k][qI] = sn * akp + cs * akq;
+                }
+                for (int k = 0; k < 3; ++k) {
+                    const double apk = A[pI][k], aqk = A[qI][k];
+                    A[pI][k] = cs * apk - sn * aqk;
+                    A[qI][k] = sn * apk + cs * aqk;
+                }
+                for (int k = 0; k < 3; ++k) {
+                    const double vkp = V[k][pI], vkq = V[k][qI];
+                    V[k][pI] = cs * vkp - sn * vkq;
+                    V[k][qI] = sn * vkp + cs * vkq;
+                }
+            }
+        }
+        for (int a = 0; a < 3; ++a) ev[a] = A[a][a];
+    }
+
     EstimatorConfig cfg_;
     const LaneNetwork& map_;
+    const char* name_;
     bool init_ = false;
     Core cur_;
     std::deque<Entry> buf_;
@@ -518,6 +916,7 @@ public:
                 s.steer = m.a;
                 break;
             case Measurement::Gnss:
+            case Measurement::Kerb:
                 break;
         }
     }
@@ -741,8 +1140,19 @@ private:
 
 std::vector<std::string> estimatorNames() { return {"ekf", "dr", "gnss_cv", "gnss_hold"}; }
 
+std::vector<std::string> estimatorNamesExtended() { return {"ekf", "ekf_int", "ekf_kerb", "dr", "gnss_cv", "gnss_hold"}; }
+
 std::unique_ptr<Estimator> makeEstimator(const std::string& name, const EstimatorConfig& cfg, const LaneNetwork& map) {
-    if (name == "ekf") return std::unique_ptr<Estimator>(new Ekf(cfg, map));
+    if (name == "ekf" || name == "ekf_int" || name == "ekf_kerb") {
+        EstimatorConfig c = cfg;
+        c.integrity = name != "ekf";
+        c.kerb = name == "ekf_kerb";
+        if (c.kerb) {
+            c.gyroBiasWalk = c.kerbGyroBiasWalk;
+        }
+        const char* label = name == "ekf" ? "ekf" : (name == "ekf_int" ? "ekf_int" : "ekf_kerb");
+        return std::unique_ptr<Estimator>(new Ekf(c, map, label));
+    }
     if (name == "dr") return std::unique_ptr<Estimator>(new DeadReckoning(cfg, map));
     if (name == "gnss_hold") return std::unique_ptr<Estimator>(new GnssHold(cfg, map));
     if (name == "gnss_cv") return std::unique_ptr<Estimator>(new GnssCv(cfg, map));
@@ -760,7 +1170,13 @@ bool applyConfigOverrides(const std::string& text, EstimatorConfig& cfg, std::st
         {"accel_bias_walk", &cfg.accelBiasWalk}, {"scale_walk", &cfg.scaleWalk},       {"gate_gnss", &cfg.gateGnss},
         {"gate_wheel", &cfg.gateWheel},          {"robust_nis", &cfg.robustNis},       {"cv_accel_sigma", &cfg.cvAccelSigma},
         {"init_pos_sigma", &cfg.initPosSigma},   {"init_yaw_sigma", &cfg.initYawSigma}, {"init_gyro_bias_sigma", &cfg.initGyroBiasSigma},
-        {"gnss_corr_sigma", &cfg.gnssCorrSigma}, {"gnss_corr_tau", &cfg.gnssCorrTau}};
+        {"gnss_corr_sigma", &cfg.gnssCorrSigma}, {"gnss_corr_tau", &cfg.gnssCorrTau},   {"step_gate", &cfg.stepGate},
+        {"reanchor_scatter", &cfg.reanchorScatter}, {"reanchor_inflation", &cfg.reanchorInflation}, {"kerb_sigma", &cfg.kerbSigma},
+        {"kerb_effective", &cfg.kerbEffective}, {"kerb_floor_pos", &cfg.kerbFloorPos}, {"kerb_floor_yaw", &cfg.kerbFloorYaw},
+        {"kerb_corr_length", &cfg.kerbCorrLength}, {"kerb_gate", &cfg.kerbGate}, {"kerb_robust", &cfg.kerbRobust},
+        {"kerb_gyro_bias_walk", &cfg.kerbGyroBiasWalk}};
+    std::map<std::string, int*> ints = {{"fault_exit_fixes", &cfg.faultExitFixes}, {"inconsistent_after", &cfg.inconsistentAfter},
+                                        {"reanchor_window", &cfg.reanchorWindow}, {"kerb_min_returns", &cfg.kerbMinReturns}};
     std::size_t start = 0;
     while (start < text.size()) {
         const std::size_t end = text.find(',', start);
@@ -773,6 +1189,8 @@ bool applyConfigOverrides(const std::string& text, EstimatorConfig& cfg, std::st
         const std::string key = item.substr(0, eq);
         if (key == "reset_after_rejected") {
             cfg.resetAfterRejected = std::stoi(item.substr(eq + 1));
+        } else if (ints.count(key)) {
+            *ints[key] = std::stoi(item.substr(eq + 1));
         } else if (fields.count(key)) {
             *fields[key] = std::stod(item.substr(eq + 1));
         } else {
@@ -791,7 +1209,12 @@ std::string configText(const EstimatorConfig& c) {
       << " pos_process=" << c.posProcess << " gyro_bias_walk=" << c.gyroBiasWalk << " accel_bias_walk=" << c.accelBiasWalk
       << " scale_walk=" << c.scaleWalk << " gate_gnss=" << c.gateGnss << " gate_wheel=" << c.gateWheel << " robust_nis=" << c.robustNis
       << " reset_after_rejected=" << c.resetAfterRejected << " cv_accel_sigma=" << c.cvAccelSigma << " init_pos_sigma=" << c.initPosSigma
-      << " init_yaw_sigma=" << c.initYawSigma << " init_gyro_bias_sigma=" << c.initGyroBiasSigma;
+      << " init_yaw_sigma=" << c.initYawSigma << " init_gyro_bias_sigma=" << c.initGyroBiasSigma << " step_gate=" << c.stepGate
+      << " fault_exit_fixes=" << c.faultExitFixes << " inconsistent_after=" << c.inconsistentAfter << " reanchor_window=" << c.reanchorWindow
+      << " reanchor_scatter=" << c.reanchorScatter << " reanchor_inflation=" << c.reanchorInflation << " kerb_sigma=" << c.kerbSigma
+      << " kerb_effective=" << c.kerbEffective << " kerb_floor_pos=" << c.kerbFloorPos << " kerb_floor_yaw=" << c.kerbFloorYaw
+      << " kerb_corr_length=" << c.kerbCorrLength << " kerb_gyro_bias_walk=" << c.kerbGyroBiasWalk << " kerb_min_returns=" << c.kerbMinReturns << " kerb_gate=" << c.kerbGate
+      << " kerb_robust=" << c.kerbRobust;
     return o.str();
 }
 
