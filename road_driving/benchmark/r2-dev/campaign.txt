@@ -1,0 +1,20 @@
+split=r2
+seeds=1..10
+routes=R2-A:R2:J01>J11@10->J31>J32@40 R2-B:R2:J30>J20@10->J01>J02@30 R2-C:R2:J02>J12@10->J11>J01@30 
+conditions=nominal_h gnss_outage_h multipath_h wheel_slip_h imu_bias_h delay_drop_h combined_h 
+estimators=ekf ekf_int ekf_kerb dr gnss_cv gnss_hold 
+estimator_config=gnss_sigma=0.28 gnss_corr_sigma=0.15 gnss_corr_tau=60 wheel_sigma=0.03 gyro_sigma=0.0015 accel_sigma=0.03 pos_process=0.0006 gyro_bias_walk=0.0001 accel_bias_walk=0.0002 scale_walk=1e-05 gate_gnss=11 gate_wheel=10.83 robust_nis=3 reset_after_rejected=100 cv_accel_sigma=1.5 init_pos_sigma=1 init_yaw_sigma=0.05 init_gyro_bias_sigma=0.01 step_gate=18.4 fault_exit_fixes=5 inconsistent_after=20 reanchor_window=20 reanchor_scatter=0.6 reanchor_inflation=9 kerb_sigma=0.04 kerb_effective=15 kerb_floor_pos=0.03 kerb_floor_yaw=0.004 kerb_corr_length=5 kerb_gyro_bias_walk=0.0003 kerb_min_returns=8 kerb_gate=16.3 kerb_robust=7.8
+toolchain=GCC 14.2.0
+engine_commit_at_configure=7781fe2351ef59ec5fdc3f39add02e95c2e50290
+config.gnss_sigma=0.28
+config.wheel_sigma=0.03
+config.gyro_sigma=0.0015
+config.accel_sigma=0.03
+config.pos_process=0.0006
+config.gyro_bias_walk=0.0001
+config.accel_bias_walk=0.0002
+config.scale_walk=1e-05
+config.gate_gnss=11
+config.gate_wheel=10.83
+config.reset_after_rejected=100
+config.cv_accel_sigma=1.5
