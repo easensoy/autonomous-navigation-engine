@@ -465,10 +465,11 @@ void Stack::plan(const Observation& obs) {
         if (mode_ == Mode::Drive && aReq > vp_.decelFirm) {
             fallback("speed caps ahead need " + (std::isfinite(aReq) ? fmt(aReq) : std::string("inf")) +
                      " m/s^2, above the firm limit");
-        } else if (std::fabs(lateral_ - pathShiftAt(s_) - rejoinAt(s_)) > 1.0) {
-            // Tracking error from the reference the controller follows: the path, its clearance shift and any
-            // re-join after a pose correction.
-            fallback("lateral error " + fmt(lateral_ - pathShiftAt(s_) - rejoinAt(s_)) + " m");
+        } else if (std::fabs(lateral_ - pathShiftAt(s_)) > 1.0) {
+            // From the path the car should follow, its clearance shift included, but not any re-join: the
+            // re-join only keeps the steering smooth. An estimate that jumps more than 1 m off that path may be
+            // a correction or a corruption, and the stack cannot tell which, so it still stops.
+            fallback("lateral error " + fmt(lateral_ - pathShiftAt(s_)) + " m");
         } else if (mode_ == Mode::Drive && entersKnownClosure(path_, s_)) {
             planClosureStop("monitor: known closure ahead", v_);
         }
