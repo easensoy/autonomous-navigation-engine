@@ -5,11 +5,11 @@
 //   road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]
 //   road_drive replay <episode dir>
 //   road_drive suite [--variant B0|B1] [--seeds N]
-//   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--seed N] [--out DIR]
+//   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--estimator NAME] [--feasibility on|off] [--seed N] [--out DIR]
 //   road_drive localise <episode dir>            (estimators on a stored sensor log; no world simulation)
-//   road_drive bench-loc --split dev|heldout [--seeds N] --out DIR
+//   road_drive bench-loc --split dev|heldout|r2|r3 [--seeds N] --out DIR
 //   road_drive bench-closed --split dev|heldout [--seeds N] --out DIR
-//   road_drive map R1|R2 [--json FILE]
+//   road_drive map R1|R2|R3 [--json FILE]
 //
 // Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
 // mode is "estimated", when the stack drives on the estimator's output.
@@ -43,9 +43,10 @@ int usage() {
     std::fprintf(stderr,
                  "usage:\n  road_drive list\n  road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]\n"
                  "  road_drive replay <episode dir>\n  road_drive suite [--variant B0|B1] [--seeds N]\n"
-                 "  road_drive drive <scenario|route> [--condition C] [--mode ground_truth|estimated] [--seed N] [--out DIR]\n"
-                 "  road_drive localise <episode dir>\n  road_drive bench-loc --split dev|heldout [--seeds N] --out DIR\n"
-                 "  road_drive bench-closed --split dev|heldout [--seeds N] --out DIR\n  road_drive map R1|R2 [--json FILE]\n");
+                 "  road_drive drive <scenario|route> [--condition C] [--mode ground_truth|estimated] [--estimator NAME]\n"
+                 "                   [--feasibility on|off] [--seed N] [--out DIR]\n"
+                 "  road_drive localise <episode dir>\n  road_drive bench-loc --split dev|heldout|r2|r3 [--seeds N] --out DIR\n"
+                 "  road_drive bench-closed --split dev|heldout|r2|r3 [--seeds N] --out DIR\n  road_drive map R1|R2|R3 [--json FILE]\n");
     return 2;
 }
 
@@ -131,6 +132,18 @@ bool scenarioByName(const std::string& name, Scenario& sc) {
             }
         }
     }
+    for (const RouteSpec& r : benchmarkRoutesR3()) {
+        if (r.name == name) {
+            sc = benchmarkScenario(r, "", 0, "ground_truth");
+            return true;
+        }
+    }
+    for (const Scenario& s : closedLoopScenariosR3()) {
+        if (s.name == name) {
+            sc = s;
+            return true;
+        }
+    }
     return false;
 }
 
@@ -144,14 +157,18 @@ int drive(const std::string& name, std::map<std::string, std::string>& opt) {
     sc.mode = opt.count("--mode") ? opt["--mode"] : "estimated";
     sc.seed = opt.count("--seed") ? std::stoull(opt["--seed"]) : 1;
     sc.departDelay = opt.count("--delay") ? std::stod(opt["--delay"]) : 2.0;
+    sc.estimator = opt.count("--estimator") ? opt["--estimator"] : "ekf";
+    sc.feasibility = !opt.count("--feasibility") || opt["--feasibility"] != "off";
     if (opt.count("--variant") && !parseVariant(opt["--variant"], sc.variant)) return usage();
     const EpisodeResult r = runEpisode(sc);
     printSummary(r);
     const Metrics& m = r.metrics;
-    std::printf("  mode=%s condition=%s: min clearance %.3f m, off-road samples %d, lane-association errors %d of %d, localisation stops %d, "
-                "estimate RMSE %.3f m (p95 %.3f, max %.3f), GNSS outages %zu\n",
-                sc.mode.c_str(), sc.condition.c_str(), m.minClearance, m.clearanceViolations, m.associationErrors, m.associationSamples,
-                m.localisationStops, m.estRmse, m.estP95, m.estMax, r.outages.size());
+    std::printf("  mode=%s estimator=%s feasibility=%s condition=%s: min clearance %.3f m, body over a kerb in %d samples (deepest %.3f m), "
+                "lane-association errors %d of %d, localisation stops %d, clearance stops %d (unwarranted %d), estimate RMSE %.3f m (p95 %.3f, "
+                "max %.3f), GNSS outages %zu\n",
+                sc.mode.c_str(), sc.estimator.c_str(), sc.feasibility ? "on" : "off", sc.condition.c_str(), m.minClearance, m.clearanceViolations,
+                m.maxCrossing, m.associationErrors, m.associationSamples, m.localisationStops, m.clearanceStops, m.unwarrantedStops, m.estRmse, m.estP95,
+                m.estMax, r.outages.size());
     if (opt.count("--out")) {
         std::string error;
         if (!writeEpisode(r, opt["--out"], error)) {
@@ -163,7 +180,7 @@ int drive(const std::string& name, std::map<std::string, std::string>& opt) {
     return 0;
 }
 
-int localise(const std::string& dir) {
+int localise(const std::string& dir, std::map<std::string, std::string>& opt) {
     std::map<std::string, std::string> kv;
     std::string error, truthText, sensorText;
     if (!readKeyValues(dir + "/manifest.txt", kv, error) || !readText(dir + "/truth.csv", truthText) || !readText(dir + "/sensors.csv", sensorText)) {
@@ -178,15 +195,27 @@ int localise(const std::string& dir) {
     }
     const LaneNetwork net = buildNetwork(kv.count("network_name") ? kv["network_name"] : "R1");
     std::vector<std::vector<StateEstimate>> traces;
-    const auto ms = evaluateLocalisation(truth, sensors, parseWindows(kv["outage_windows"]), net, EstimatorConfig{}, &traces);
+    // Development options: --estimators a,b,c and --config key=value,... (defaults: all estimators, the frozen configuration).
+    std::vector<std::string> names = estimatorNamesExtended();
+    if (opt.count("--estimators")) {
+        names.clear();
+        std::istringstream in(opt["--estimators"]);
+        for (std::string n; std::getline(in, n, ',');) names.push_back(n);
+    }
+    EstimatorConfig cfg;
+    if (opt.count("--config") && !applyConfigOverrides(opt["--config"], cfg, error)) {
+        std::fprintf(stderr, "localise: %s\n", error.c_str());
+        return 2;
+    }
+    const auto ms = evaluateLocalisation(truth, sensors, parseWindows(kv["outage_windows"]), net, cfg, &traces, &names);
     // Every estimator's trace, for plots and the demonstration (offline products, not inputs).
     for (size_t k = 0; k < ms.size() && k < traces.size(); ++k) {
         std::ofstream tr(dir + "/trace_" + ms[k].estimator + ".csv", std::ios::binary);
-        tr << "t,valid,x,y,yaw,v,pxx,pxy,pyy,sigma_pos,status\n";
-        char line[256];
+        tr << "t,valid,x,y,yaw,v,pxx,pxy,pyy,sigma_pos,status,pyawyaw,pxyaw,pyyaw,gnss,kerb\n";
+        char line[320];
         for (const StateEstimate& e : traces[k]) {
-            std::snprintf(line, sizeof line, "%.2f,%d,%.4f,%.4f,%.5f,%.4f,%.6g,%.6g,%.6g,%.4f,%s\n", e.t, e.valid ? 1 : 0, e.x, e.y, e.yaw, e.v, e.pxx,
-                          e.pxy, e.pyy, e.hasCov ? e.sigmaPos() : -1.0, e.status);
+            std::snprintf(line, sizeof line, "%.2f,%d,%.4f,%.4f,%.5f,%.4f,%.6g,%.6g,%.6g,%.4f,%s,%.6g,%.6g,%.6g,%s,%s\n", e.t, e.valid ? 1 : 0, e.x, e.y,
+                          e.yaw, e.v, e.pxx, e.pxy, e.pyy, e.hasCov ? e.sigmaPos() : -1.0, e.status, e.pyawyaw, e.pxyaw, e.pyyaw, e.gnss, e.kerb);
             tr << line;
         }
     }
@@ -330,15 +359,15 @@ int main(int argc, char** argv) {
             return drive(positional, opt);
         }
         if (cmd == "localise" && !positional.empty()) {
-            return localise(positional);
+            return localise(positional, opt);
         }
         if (cmd == "map" && !positional.empty()) {
             return mapCmd(positional, opt);
         }
         if ((cmd == "bench-loc" || cmd == "bench-closed") && opt.count("--out")) {
             CampaignOptions co;
-            co.heldOut = opt.count("--split") && opt["--split"] == "heldout";
-            co.seeds = opt.count("--seeds") ? std::stoi(opt["--seeds"]) : (co.heldOut ? 10 : 5);
+            co.split = opt.count("--split") ? opt["--split"] : "dev";
+            co.seeds = opt.count("--seeds") ? std::stoi(opt["--seeds"]) : (co.split == "dev" ? 5 : 10);
             co.outDir = opt["--out"];
             co.config = opt.count("--config") ? opt["--config"] : "";
             std::fputs((cmd == "bench-loc" ? runLocalisationCampaign(co) : runClosedLoopCampaign(co)).c_str(), stdout);
