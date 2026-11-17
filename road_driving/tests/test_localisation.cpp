@@ -44,6 +44,9 @@ RouteSpec route(const std::string& name) {
     for (const RouteSpec& r : benchmarkRoutesR4()) {
         if (r.name == name) return r;
     }
+    for (const RouteSpec& r : benchmarkRoutesR5()) {
+        if (r.name == name) return r;
+    }
     return {};
 }
 
@@ -283,7 +286,7 @@ void testHeldOutNetwork() {
 
 // ---- L13 kerb geometry ---------------------------------------------------------------------------------
 void testKerbGeometry() {
-    for (const char* name : {"R1", "R2", "R3", "R4"}) {
+    for (const char* name : {"R1", "R2", "R3", "R4", "R5"}) {
         const LaneNetwork net = buildNetwork(name);
         std::uint64_t st = 12345;
         auto uni = [&](double a, double b) {
@@ -712,6 +715,66 @@ void testPoseCorrections() {
           b.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
 }
 
+// ---- L22 network R5 ------------------------------------------------------------------------------------
+// Static checks only: R5 is held out, so nothing drives on it here.
+void testR5() {
+    const LaneNetwork r5 = buildR5();
+    const VehicleParams vp;
+    check(r5.validate().empty(), "L22 R5 passes every map invariant");
+    double worst = 1e9;
+    for (const Element& e : r5.elements) {
+        if (!e.isConnector()) continue;
+        for (const PathPoint& p : e.pts) {
+            worst = std::min(worst, footprintClearance(r5, p.x, p.y, p.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors));
+        }
+    }
+    check(worst >= 0.0, "L22 every R5 movement, driven exactly, keeps the footprint with mirrors on the carriageway (exact kerb)", f3(worst));
+    for (const RouteSpec& rs : benchmarkRoutesR5()) {
+        const int s = r5.segmentAt(r5.lane(rs.startLane), rs.startS), g = r5.segmentAt(r5.lane(rs.goalLane), rs.goalS);
+        const RefRoute rr = referenceRoute(r5, s, g);
+        check(rr.found && routeLegal(r5, rr.nodes), "L22 R5 benchmark route " + rs.name + " is legal and reachable", rr.found ? routeText(r5, rr.nodes) : "");
+    }
+    const Scenario closure = closedLoopScenariosR5().back();
+    const RouteSpec rb = route("R5-B");
+    const RefRoute rr = referenceRoute(r5, r5.segmentAt(r5.lane(rb.startLane), rb.startS), r5.segmentAt(r5.lane(rb.goalLane), rb.goalS));
+    bool onRoute = false;
+    for (int n : rr.nodes) onRoute = onRoute || r5.elements[n].lane == r5.lane(closure.closureLane);
+    check(closure.closure && onRoute, "L22 the R5 closure lane " + closure.closureLane + " lies on R5-B's route");
+    for (const std::string& c : conditionNamesR5()) {
+        bool ok = true;
+        try {
+            sensorConditions(c);
+        } catch (const std::exception&) {
+            ok = false;
+        }
+        check(ok, "L22 R5 condition " + c + " is defined");
+    }
+}
+
+// ---- L23 the re-join switch -----------------------------------------------------------------------------
+// Off is the stack evaluated on R3 and R4: the same drive as L21's first case fails as it did there.
+void testRejoinSwitch() {
+    Scenario s = benchmarkScenario(route("R3-B"), "gnss_ramp_r3", 9, "estimated");
+    s.estimator = "ekf_kerb2";
+    s.rejoin = false;
+    const EpisodeResult off = runEpisode(s);
+    int corrections = 0, fallbacks = 0;
+    for (const LogEvent& e : off.events) {
+        corrections += e.type == "POSE_CORRECTION" ? 1 : 0;
+        fallbacks += e.type == "MONITOR_TRIGGER" ? 1 : 0;
+    }
+    check(corrections == 0 && fallbacks == 1 && off.outcome == "STOPPED_EN_ROUTE" && off.metrics.clearanceViolations > 0,
+          "L23 with the re-join off, R3-B seed 9 ends in the recorded fallback stop over the kerb",
+          off.outcome + ", fallbacks " + std::to_string(fallbacks) + ", crossing samples " + std::to_string(off.metrics.clearanceViolations));
+    // On simulator truth nothing jumps: the switch changes nothing.
+    Scenario g = benchmarkScenario(route("R3-B"), "gnss_ramp_r3", 9, "ground_truth");
+    g.rejoin = false;
+    const EpisodeResult a = runEpisode(g);
+    g.rejoin = true;
+    const EpisodeResult b = runEpisode(g);
+    check(a.traceHash == b.traceHash, "L23 on simulator truth the re-join switch leaves the trace unchanged");
+}
+
 }  // namespace
 
 int main() {
@@ -729,6 +792,8 @@ int main() {
     testR4();
     testSecondVersions();
     testPoseCorrections();
+    testR5();
+    testRejoinSwitch();
     std::printf("localisation tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
