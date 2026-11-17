@@ -113,13 +113,17 @@ struct SensorConditions {
     Span parked;                    // parked cars against the opposite kerb (unmapped objects for the scanner)
     double kerbClutter = 0.0;       // share of beams returning from spray or debris short of the true range
     Span kerbBlackout;              // no kerb scans (sensor fault or full occlusion)
+    Span kerbShift;                 // a map error: the kerb on the scanner's left lies further out than mapped
+    double kerbShiftDistance = 0.0; // m (a widened carriageway, a new lay-by)
 };
 // Named conditions. Development: nominal, gnss_outage, multipath, wheel_slip, imu_bias, delay_drop.
 // Held out on R2 (different placements and magnitudes, plus a combination): the same names with suffix
-// _h, and combined_h. Held out on R3 (new fault types): the names in conditionNamesR3().
+// _h, and combined_h. Held out on R3 (new fault types): the names in conditionNamesR3(). Held out on R4
+// for the second versions (new magnitudes and combinations, and a kerb map error): conditionNamesR4().
 SensorConditions sensorConditions(const std::string& name);
 std::vector<std::string> conditionNames(bool heldOut);
 std::vector<std::string> conditionNamesR3();
+std::vector<std::string> conditionNamesR4();
 
 struct Zone {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
@@ -130,7 +134,7 @@ struct Obstacle {
     double cx = 0.0, cy = 0.0, yaw = 0.0, length = 4.5, width = 1.8;
 };
 struct SensorZones {
-    std::vector<Zone> outage, multipath, slip, ramp, kerbBlackout;
+    std::vector<Zone> outage, multipath, slip, ramp, kerbBlackout, kerbShift;
     std::vector<Obstacle> obstacles;
 };
 
@@ -201,7 +205,8 @@ struct StateEstimate {
 struct EstimatorStats {
     int gnssUsed = 0, gnssRejected = 0, wheelUsed = 0, wheelRejected = 0, resets = 0, lateDropped = 0, zeroUpdates = 0;
     int stepAlarms = 0, faultExits = 0, gnssExcluded = 0, reanchors = 0;  // GNSS integrity
-    int kerbUsed = 0, kerbRejected = 0;                                   // kerb scans
+    int faultRecoveries = 0, headingReanchors = 0;                        // second version
+    int kerbUsed = 0, kerbRejected = 0, kerbRelocalisations = 0;          // kerb scans
     std::vector<double> nisGnss, nisWheel, nisKerb;  // normalised innovation squared of every candidate update
     std::vector<double> latencyUs;          // wall-clock processing time of each measurement (not deterministic)
 };
@@ -258,6 +263,21 @@ struct EstimatorConfig {
     int kerbMinReturns = 8;          // matched returns needed to use a scan
     double kerbGate = 16.3;          // chi-square, 3 dof (99.9%), scan against the filter
     double kerbRobust = 7.8;         // chi-square, 3 dof (95%): above it the scan's weight is reduced
+
+    // Second versions, after the R3 evaluation ("ekf_int2", "ekf_kerb2").
+    // Recovery out of FAULTED: a jump back by the onset jump, or a gap in the fixes, ends the fault and
+    // hands the decision to the re-anchoring test. There, the receiver's own track is evidence too: if over
+    // the window it runs at an angle to the filter's track, the filter's heading has drifted, and the
+    // offset bound for an overconfident filter no longer applies.
+    bool recover = false;
+    double headingEvidence = 0.07;   // rad between the two tracks (about 3 sigma of GNSS noise over 18 m)
+    double headingEvidenceTrack = 10.0;  // m both tracks must cover
+    // Kerb re-localisation: after relocAfter rejected scans, the scan is matched over a wider area around
+    // the filter. A unique match with many returns is adopted, and the receiver must then earn trust again.
+    bool relocalise = false;
+    int relocAfter = 3;              // consecutive rejected scans
+    double relocRadius = 6.0;        // m searched along and across the heading
+    double relocStep = 0.5;          // m
 };
 
 class Estimator {
@@ -273,12 +293,15 @@ public:
 //            with the 10 s rejection reset; it ignores kerb scans (the estimator evaluated on R2)
 // "ekf_int"  the same filter with GNSS integrity monitoring instead of the reset
 // "ekf_kerb" ekf_int plus scan-to-map kerb registration
+// "ekf_int2" ekf_int with a recovery path out of FAULTED and track-angle evidence for re-anchoring
+// "ekf_kerb2" ekf_kerb with the same, plus kerb re-localisation over a wider search
 // "dr"       wheel + gyro dead reckoning
 // "gnss_hold" the latest GNSS fix, held
 // "gnss_cv"  constant-velocity Kalman filter on GNSS fixes alone
 std::unique_ptr<Estimator> makeEstimator(const std::string& name, const EstimatorConfig& cfg, const LaneNetwork& map);
 std::vector<std::string> estimatorNames();          // the R1/R2 set: ekf, dr, gnss_cv, gnss_hold
 std::vector<std::string> estimatorNamesExtended();  // ekf, ekf_int, ekf_kerb, dr, gnss_cv, gnss_hold
+std::vector<std::string> estimatorNamesV2();        // ekf, ekf_int, ekf_int2, ekf_kerb, ekf_kerb2, dr, gnss_cv, gnss_hold
 // "key=value,key=value" overrides of EstimatorConfig fields (used only for development tuning runs).
 bool applyConfigOverrides(const std::string& text, EstimatorConfig& cfg, std::string& error);
 std::string configText(const EstimatorConfig& cfg);
