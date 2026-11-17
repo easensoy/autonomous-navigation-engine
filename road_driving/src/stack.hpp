@@ -30,7 +30,25 @@ struct Observation {
     double estimateAge = 0.0;   // s since the estimate's time of validity
     double sigmaAlong = 0.0;    // m, position 1-sigma along the estimated heading
     double sigmaAcross = 0.0;   // m, position 1-sigma across it
+    double sigmaHeading = 0.0;  // rad, heading 1-sigma (0 when the estimator reports none)
 };
+
+// Clearance feasibility. The body swept along the path ahead must keep from every kerb a margin of
+// kSigma times the footprint's lateral 1-sigma plus a tracking allowance. That sigma combines the
+// estimate's lateral sigma with its heading sigma acting at the front bumper; on simulator truth it is
+// zero. Where the path itself passes too close, the stack shifts it sideways: on turns within the
+// carriageway, on lanes only towards the centre line and short of it by the tracking allowance. Where no
+// shift is enough it stops before that point and waits until the margin returns.
+namespace clearpolicy {
+constexpr double kSigma = 2.0;          // lateral 1-sigmas of margin
+constexpr double kTrack = 0.10;         // m: tracking allowance (ground-truth driving stays within it)
+constexpr double kShiftMax = 0.5;       // m: largest sideways shift on a turn
+constexpr double kShiftSlope = 0.03;    // m of shift per m of path (then smoothed)
+constexpr double kStep = 0.5;           // m between checked path samples
+constexpr double kHorizon = 60.0;       // m checked ahead of the rear axle
+constexpr double kResume = 0.05;        // m of spare margin, held for 2 s, to resume after a stop
+constexpr double kShiftRate = 0.05;     // m: largest change of the shift at any point per planning tick
+}  // namespace clearpolicy
 
 // When the estimate is degraded the stack slows down; when it is unreliable (invalid, stale or too
 // uncertain across the lane) the stack stops in lane and waits for it to recover. It never switches to
@@ -48,10 +66,12 @@ constexpr double kStopDecel = 2.5;                      // m/s^2
 
 class Stack {
 public:
-    enum class Mode { Drive, StopForClosure, Fallback, Hold, HoldFallback, Done, NoRoute, LocalisationStop };
+    enum class Mode { Drive, StopForClosure, Fallback, Hold, HoldFallback, Done, NoRoute, LocalisationStop, ClearanceStop };
     int believedElement() const { return path_.empty() ? -1 : path_.elements()[idx_]; }
+    double pathShiftAt(double s) const;  // m, current sideways shift of the path (positive left)
+    double currentShift() const { return pathShiftAt(s_); }
 
-    Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS);
+    Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility = true);
     void initialise(const Observation& obs);  // first planning tick: closures known at departure, initial route
     void plan(const Observation& obs);        // every planning tick (10 Hz)
     Command control(const VehicleState& pose, double t);  // every control tick (50 Hz)
@@ -127,6 +147,18 @@ private:
     bool degraded_ = false;
     Mode beforeLocStop_ = Mode::Drive;
     double goodSince_ = -1.0;
+
+    // Clearance feasibility (clearpolicy).
+    void computeClearance();               // per-sample side clearances of the adopted path
+    void clearancePolicy(const Observation& obs);
+    bool feasibility_ = true;
+    std::vector<double> clrLeft_, clrRight_;  // body-to-kerb clearance of each side, rear axle on the path
+    std::vector<char> clrTurn_;               // sample lies on a turning movement
+    std::vector<double> shift_;               // sideways shift per sample (positive left)
+    double shiftS_ = -1.0;                    // path s at the previous clearance tick (-1: none since adoption)
+    Mode beforeClearStop_ = Mode::Drive;
+    double clearStopS_ = 0.0, clearSince_ = -1.0;
+    bool clearLatched_ = false;
 };
 
 // Speed caps of a path (20 mph limit and curvature), and the deceleration needed from (s, v) to meet
