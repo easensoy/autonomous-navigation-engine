@@ -41,6 +41,9 @@ RouteSpec route(const std::string& name) {
     for (const RouteSpec& r : benchmarkRoutesR3()) {
         if (r.name == name) return r;
     }
+    for (const RouteSpec& r : benchmarkRoutesR4()) {
+        if (r.name == name) return r;
+    }
     return {};
 }
 
@@ -280,7 +283,7 @@ void testHeldOutNetwork() {
 
 // ---- L13 kerb geometry ---------------------------------------------------------------------------------
 void testKerbGeometry() {
-    for (const char* name : {"R1", "R2", "R3"}) {
+    for (const char* name : {"R1", "R2", "R3", "R4"}) {
         const LaneNetwork net = buildNetwork(name);
         std::uint64_t st = 12345;
         auto uni = [&](double a, double b) {
@@ -551,6 +554,136 @@ void testR3() {
     }
 }
 
+// ---- L19 network R4 ------------------------------------------------------------------------------------
+// Static checks only: R4 is held out, so no estimator runs on it here.
+void testR4() {
+    const LaneNetwork r4 = buildR4();
+    const VehicleParams vp;
+    check(r4.validate().empty(), "L19 R4 passes every map invariant");
+    double worst = 1e9;
+    for (const Element& e : r4.elements) {
+        if (!e.isConnector()) continue;
+        for (const PathPoint& p : e.pts) {
+            worst = std::min(worst, footprintClearance(r4, p.x, p.y, p.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors));
+        }
+    }
+    check(worst >= 0.0, "L19 every R4 movement, driven exactly, keeps the footprint with mirrors on the carriageway (exact kerb)", f3(worst));
+    for (const RouteSpec& rs : benchmarkRoutesR4()) {
+        const int s = r4.segmentAt(r4.lane(rs.startLane), rs.startS), g = r4.segmentAt(r4.lane(rs.goalLane), rs.goalS);
+        const RefRoute rr = referenceRoute(r4, s, g);
+        check(rr.found && routeLegal(r4, rr.nodes), "L19 R4 benchmark route " + rs.name + " is legal and reachable", rr.found ? routeText(r4, rr.nodes) : "");
+    }
+    // The closure lane lies on R4-B's route.
+    const Scenario closure = closedLoopScenariosR4().back();
+    const RouteSpec rb = route("R4-B");
+    const RefRoute rr = referenceRoute(r4, r4.segmentAt(r4.lane(rb.startLane), rb.startS), r4.segmentAt(r4.lane(rb.goalLane), rb.goalS));
+    bool onRoute = false;
+    for (int n : rr.nodes) onRoute = onRoute || r4.elements[n].lane == r4.lane(closure.closureLane);
+    check(closure.closure && onRoute, "L19 the R4 closure lane " + closure.closureLane + " lies on R4-B's route");
+    for (const std::string& c : conditionNamesR4()) {
+        bool ok = true;
+        try {
+            sensorConditions(c);
+        } catch (const std::exception&) {
+            ok = false;
+        }
+        check(ok, "L19 R4 condition " + c + " is defined");
+    }
+    // The kerb map error's mechanics, on R1: the same drive and seed with and without it. Returns change
+    // only inside the zone, only on the scanner's left, and only outward by the shift over the incidence.
+    const EpisodeResult a = record("R1-A", "nominal", 1);
+    const EpisodeResult b = record("R1-A", "test_kerb_shift", 1);
+    int shifted = 0, wrongSide = 0, wrongSize = 0, scans = 0;
+    for (size_t i = 0, j = 0; i < a.sensors.size() && j < b.sensors.size(); ++i, ++j) {
+        const Measurement& ma = a.sensors[i];
+        const Measurement& mb = b.sensors[j];
+        if (ma.kind != Measurement::Kind::Kerb || mb.kind != Measurement::Kind::Kerb || ma.ranges.size() != mb.ranges.size()) continue;
+        ++scans;
+        for (size_t k = 0; k < ma.ranges.size(); ++k) {
+            if (ma.ranges[k] <= 0.0 || mb.ranges[k] <= 0.0) continue;
+            const double d = mb.ranges[k] - ma.ranges[k];
+            if (std::fabs(d) < 1e-9) continue;
+            ++shifted;
+            wrongSide += ma.a + static_cast<double>(k) * ma.b > 0.0 ? 0 : 1;
+            wrongSize += d >= 0.5 - 1e-9 ? 0 : 1;
+        }
+    }
+    check(a.sensors.size() == b.sensors.size() && scans > 100 && shifted > 100 && wrongSide == 0 && wrongSize == 0,
+          "L19 kerb map error: returns from the left kerb inside the zone, and only those, read at least 0.5 m longer",
+          std::to_string(shifted) + " shifted returns in " + std::to_string(scans) + " scans; wrong side " + std::to_string(wrongSide) +
+              ", too small " + std::to_string(wrongSize));
+}
+
+// ---- L20 second versions (ekf_int2, ekf_kerb2) ----------------------------------------------------------
+bool sameTrace(const std::vector<StateEstimate>& a, const std::vector<StateEstimate>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].valid != b[i].valid || a[i].x != b[i].x || a[i].y != b[i].y || a[i].yaw != b[i].yaw || a[i].pxx != b[i].pxx || a[i].pyy != b[i].pyy) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void testSecondVersions() {
+    const EstimatorConfig cfg;
+    // Where no fault ends and no scan is lost, each second version is its first version exactly.
+    {
+        const LaneNetwork r2 = buildR2();
+        const std::vector<std::string> names = {"ekf_int", "ekf_int2", "ekf_kerb", "ekf_kerb2"};
+        const EpisodeResult r = record("R2-B", "nominal_h", 1);
+        std::vector<std::vector<StateEstimate>> tr;
+        const auto ms = evaluateLocalisation(r.truth, r.sensors, r.outages, r2, cfg, &tr, &names);
+        check(tr.size() == 4 && sameTrace(tr[0], tr[1]), "L20 nominal: ekf_int2 reproduces ekf_int's trace exactly");
+        check(tr.size() == 4 && sameTrace(tr[2], tr[3]) && find(ms, "ekf_kerb2").kerbRelocalisations == 0,
+              "L20 nominal: ekf_kerb2 reproduces ekf_kerb's trace exactly and never re-localises");
+    }
+    // L15's two cases: a persistent clean offset is never trusted; clean fixes after drift are re-anchored.
+    {
+        const LaneNetwork r1 = buildR1();
+        const std::vector<std::string> names = {"ekf_int2"};
+        const EpisodeResult pb = record("R1-A", "test_persistent_bias", 1);
+        const LocMetrics p = evaluateLocalisation(pb.truth, pb.sensors, pb.outages, r1, cfg, nullptr, &names).front();
+        check(p.max < 1.5 && p.reanchors == 0, "L20 persistent bias: ekf_int2 never trusts the offset (it leaves the fault only when the offset ends)",
+              f3(p.max) + " m, re-anchors " + std::to_string(p.reanchors) + ", fault recoveries " + std::to_string(p.faultRecoveries));
+        const EpisodeResult dr = record("R1-A", "test_drift_recovery", 1);
+        const LocMetrics d = evaluateLocalisation(dr.truth, dr.sensors, dr.outages, r1, cfg, nullptr, &names).front();
+        check(d.reanchors >= 1 && d.recovery >= 0.0 && d.recovery < 5.0 && d.resets == 0, "L20 drift: ekf_int2 re-anchors without a timer and recovers within 5 s",
+              std::to_string(d.reanchors) + " re-anchors, recovery " + f3(d.recovery) + " s");
+    }
+    // R3's first failure (now development data): combined faults leave ekf_int faulted for the rest of the
+    // drive; ekf_int2 leaves the fault when the receiver jumps back and re-anchors from the track angle.
+    {
+        const LaneNetwork r3 = buildR3();
+        const std::vector<std::string> names = {"ekf_int", "ekf_int2"};
+        const EpisodeResult c = record("R3-A", "combined_r3", 1);
+        std::vector<std::vector<StateEstimate>> tr;
+        const auto ms = evaluateLocalisation(c.truth, c.sensors, c.outages, r3, cfg, &tr, &names);
+        const LocMetrics& a = find(ms, "ekf_int");
+        const LocMetrics& b = find(ms, "ekf_int2");
+        const TruthSample& end = c.truth.back();
+        const StateEstimate& eb = tr[1].back();
+        const double endErr = std::hypot(eb.x - end.x, eb.y - end.y);
+        check(a.max > 20.0, "L20 R3-A combined, seed 1: ekf_int never leaves the fault and ends far off", f3(a.max));
+        check(b.faultRecoveries >= 1 && b.headingReanchors >= 1 && endErr < 1.0,
+              "L20 the same drive: ekf_int2 leaves the fault, re-anchors on the track angle and ends within 1 m",
+              f3(b.max) + " m max, " + f3(endErr) + " m at the end");
+    }
+    // R3's second failure: a slow GNSS excursion drags ekf_kerb off its kerbs, after which every scan is
+    // rejected; ekf_kerb2 finds the pose the scans fit and returns to them.
+    {
+        const LaneNetwork r3 = buildR3();
+        const std::vector<std::string> names = {"ekf_kerb", "ekf_kerb2"};
+        const EpisodeResult rp = record("R3-B", "gnss_ramp_r3", 2);
+        const auto ms = evaluateLocalisation(rp.truth, rp.sensors, rp.outages, r3, cfg, nullptr, &names);
+        const LocMetrics& a = find(ms, "ekf_kerb");
+        const LocMetrics& b = find(ms, "ekf_kerb2");
+        check(a.lateralP95 > 1.0, "L20 R3-B ramp, seed 2: ekf_kerb follows the excursion off its kerbs", f3(a.lateralP95));
+        check(b.kerbRelocalisations >= 1 && b.lateralP95 < 0.2 && b.max < 2.0, "L20 the same drive: ekf_kerb2 re-localises on the kerbs and holds them",
+              std::to_string(b.kerbRelocalisations) + " re-localisations, lateral p95 " + f3(b.lateralP95) + ", max " + f3(b.max));
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -565,6 +698,8 @@ int main() {
     testKerbFilter();
     testClearance();
     testR3();
+    testR4();
+    testSecondVersions();
     std::printf("localisation tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
