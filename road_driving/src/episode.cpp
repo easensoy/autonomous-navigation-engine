@@ -279,6 +279,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
         spanZones(cond.slip, r.zones.slip);
         spanZones(cond.ramp, r.zones.ramp);
         spanZones(cond.kerbBlackout, r.zones.kerbBlackout);
+        spanZones(cond.kerbShift, r.zones.kerbShift);
         if (cond.parked.active()) {
             // Parked cars against the opposite kerb along the route's lanes (not in junctions): unmapped
             // objects for the kerb scanner, outside the car's own lane.
@@ -624,6 +625,7 @@ std::string manifestText(const EpisodeResult& r) {
     zones("zones_slip", r.zones.slip);
     zones("zones_ramp", r.zones.ramp);
     zones("zones_kerb_blackout", r.zones.kerbBlackout);
+    if (!r.zones.kerbShift.empty()) zones("zones_kerb_shift", r.zones.kerbShift);  // absent from older logs
     o << "\nobstacles=";
     for (size_t i = 0; i < r.zones.obstacles.size(); ++i) {
         const Obstacle& ob = r.zones.obstacles[i];
