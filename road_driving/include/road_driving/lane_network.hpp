@@ -157,6 +157,7 @@ struct GridSpec {
 GridSpec gridR1();
 GridSpec gridR2();
 GridSpec gridR3();
+GridSpec gridR4();
 LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& spec = NetworkSpec{});
 
 // Network R1 (development): a 3 by 3 grid at x = 0, 120, 240 m and y = 0, 80, 160 m. Two-way streets
@@ -174,7 +175,12 @@ LaneNetwork buildR2(const NetworkSpec& spec = NetworkSpec{});
 // turn J11>J21 -> J21>J20 or J02>J12 -> J12>J11; tight junctions J21 and J13; a 50 m cul-de-sac east of
 // J33. Junction design as R2's (16 m mouths, 14 m right-turn arcs, 4 m tight kerbs).
 LaneNetwork buildR3(const NetworkSpec& spec = NetworkSpec{});
-// "R1", "R2" or "R3"; throws for any other name.
+// Network R4 (held out for the evaluation of the second versions): a 5 by 3 grid at x = 0, 80, 170, 260,
+// 380 m and y = 0, 100, 180 m; one-way streets J21->J31 (eastbound) and J02->J01 (southbound); no left
+// turn J01>J11 -> J11>J12 and no right turn J22>J32 -> J32>J31; tight junctions J21 and J40; a 40 m
+// cul-de-sac north of J42. Junction design as R2's.
+LaneNetwork buildR4(const NetworkSpec& spec = NetworkSpec{});
+// "R1", "R2", "R3" or "R4"; throws for any other name.
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec = NetworkSpec{});
 // A right-hand-traffic copy (x mirrored). validate() must reject it.
 LaneNetwork mirrored(const LaneNetwork& net);
