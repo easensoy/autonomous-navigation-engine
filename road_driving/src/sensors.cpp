@@ -63,6 +63,44 @@ SensorConditions sensorConditions(const std::string& name) {
         c.outage = {0.30, 0.60};
         c.gyroBiasStepTime = 20.0;
         c.gyroBiasStep = 0.015;
+    } else if (name == "nominal_r4") {
+    } else if (name == "gnss_outage_r4") {
+        c.outage = {0.25, 0.70};
+    } else if (name == "multipath_r4") {
+        c.multipath = {0.35, 0.60};
+        c.multipathBias = 10.0;
+        c.multipathSigma = 2.0;
+    } else if (name == "gnss_ramp_r4") {
+        c.ramp = {0.25, 0.65};
+        c.rampRate = 0.4;
+        c.rampMax = 7.0;
+    } else if (name == "imu_fault_r4") {
+        c.gyroBiasStepTime = 25.0;
+        c.gyroBiasStep = 0.015;
+        c.multipath = {0.30, 0.55};
+        c.multipathBias = 6.0;
+        c.multipathSigma = 1.0;
+    } else if (name == "kerb_faults_r4") {
+        c.kerbShift = {0.20, 0.45};
+        c.kerbShiftDistance = 0.5;
+        c.kerbBlackout = {0.55, 0.80};
+        c.multipath = {0.60, 0.75};
+        c.multipathBias = 8.0;
+        c.multipathSigma = 0.5;
+    } else if (name == "test_kerb_shift") {
+        // Tests only: the kerb map error alone.
+        c.kerbShift = {0.20, 0.50};
+        c.kerbShiftDistance = 0.5;
+    } else if (name == "combined_r4") {
+        c.outage = {0.10, 0.25};
+        c.ramp = {0.40, 0.70};
+        c.rampRate = 0.3;
+        c.rampMax = 5.0;
+        c.slip = {0.50, 0.60};
+        c.slipRatio = 0.30;
+        c.kerbClutter = 0.10;
+        c.gyroBiasStepTime = 40.0;
+        c.gyroBiasStep = 0.008;
     } else if (name == "nominal_r3") {
     } else if (name == "gnss_outage_r3") {
         c.outage = {0.35, 0.75};
@@ -113,6 +151,10 @@ std::vector<std::string> conditionNames(bool heldOut) {
 
 std::vector<std::string> conditionNamesR3() {
     return {"nominal_r3", "gnss_outage_r3", "multipath_r3", "gnss_jumps_r3", "gnss_ramp_r3", "kerb_clutter_r3", "combined_r3"};
+}
+
+std::vector<std::string> conditionNamesR4() {
+    return {"nominal_r4", "gnss_outage_r4", "multipath_r4", "gnss_ramp_r4", "imu_fault_r4", "kerb_faults_r4", "combined_r4"};
 }
 
 std::uint64_t SensorSimulator::Rng::next() {
@@ -178,6 +220,15 @@ std::vector<double> SensorSimulator::scan(double sx, double sy, double syaw) {
             map_->kerbDistance(hx, hy, nx, ny);
             const double incidence = std::max(0.15, -(dx * nx + dy * ny));
             r += kerbDeviationAt(hx, hy) / incidence;
+            // A kerb the map has wrong: inside a shift zone the kerb on the scanner's left lies further out.
+            if (c_.kerbShiftDistance != 0.0 && std::cos(syaw) * (hy - sy) - std::sin(syaw) * (hx - sx) > 0.0) {
+                for (const Zone& z : zones_.kerbShift) {
+                    if (z.contains(hx, hy)) {
+                        r += c_.kerbShiftDistance / incidence;
+                        break;
+                    }
+                }
+            }
         }
         for (const Obstacle& o : zones_.obstacles) {
             // Slab test in the obstacle's frame.
