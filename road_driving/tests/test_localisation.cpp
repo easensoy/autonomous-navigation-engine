@@ -47,6 +47,9 @@ RouteSpec route(const std::string& name) {
     for (const RouteSpec& r : benchmarkRoutesR5()) {
         if (r.name == name) return r;
     }
+    for (const RouteSpec& r : benchmarkRoutesR6()) {
+        if (r.name == name) return r;
+    }
     return {};
 }
 
@@ -286,7 +289,7 @@ void testHeldOutNetwork() {
 
 // ---- L13 kerb geometry ---------------------------------------------------------------------------------
 void testKerbGeometry() {
-    for (const char* name : {"R1", "R2", "R3", "R4", "R5"}) {
+    for (const char* name : {"R1", "R2", "R3", "R4", "R5", "R6"}) {
         const LaneNetwork net = buildNetwork(name);
         std::uint64_t st = 12345;
         auto uni = [&](double a, double b) {
@@ -689,9 +692,11 @@ void testSecondVersions() {
 
 // ---- L21 pose corrections in the stack ------------------------------------------------------------------
 void testPoseCorrections() {
-    auto drive = [](const std::string& routeName, const std::string& condition, std::uint64_t seed, int& corrections, int& fallbacks) {
+    auto drive = [](const std::string& routeName, const std::string& condition, std::uint64_t seed, int& corrections, int& fallbacks,
+                    Rejoin rejoin = Rejoin::Verified) {
         Scenario s = benchmarkScenario(route(routeName), condition, seed, "estimated");
         s.estimator = "ekf_kerb2";
+        s.rejoin = rejoin;
         const EpisodeResult r = runEpisode(s);
         corrections = fallbacks = 0;
         for (const LogEvent& e : r.events) {
@@ -705,14 +710,19 @@ void testPoseCorrections() {
     // Chasing the old reference turned that into a steering oscillation and a fallback stop over the kerb.
     const EpisodeResult a = drive("R3-B", "gnss_ramp_r3", 9, corrections, fallbacks);
     check(corrections >= 1 && fallbacks == 0 && a.outcome == "COMPLETED" && a.metrics.clearanceViolations == 0,
-          "L21 R3-B slow excursion, seed 9: the stack re-joins the path after the mid-turn correction and completes on the road",
+          "L21 R3-B slow excursion, seed 9: the verified re-join follows the mid-turn kerb re-localisation and completes on the road",
           a.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
     // R4-C under kerb faults, seed 1: GNSS returns and corrects the estimate where the clearance layer has
-    // shifted the path; the monitor measures from that shifted path.
-    const EpisodeResult b = drive("R4-C", "kerb_faults_r4", 1, corrections, fallbacks);
+    // shifted the path. Re-joining every jump (the stack evaluated on R5) ends it without a fallback stop; the
+    // verified re-join leaves that unverified GNSS correction to the monitor, as the R3 and R4 stack did.
+    const EpisodeResult b = drive("R4-C", "kerb_faults_r4", 1, corrections, fallbacks, Rejoin::All);
     check(corrections >= 1 && fallbacks == 0 && b.outcome == "COMPLETED" && b.metrics.clearanceViolations == 0,
-          "L21 R4-C kerb faults, seed 1: GNSS corrections near a shifted path end in no fallback stop",
+          "L21 R4-C kerb faults, seed 1: re-joining every jump, GNSS corrections near a shifted path end in no fallback stop",
           b.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
+    const EpisodeResult c = drive("R4-C", "kerb_faults_r4", 1, corrections, fallbacks, Rejoin::Verified);
+    check(corrections == 0 && fallbacks == 1 && c.metrics.clearanceViolations == 0,
+          "L21 the same drive with the verified re-join: no re-join for an unverified GNSS correction, the monitor stops it",
+          c.outcome + ", corrections " + std::to_string(corrections) + ", fallbacks " + std::to_string(fallbacks));
 }
 
 // ---- L22 network R5 ------------------------------------------------------------------------------------
@@ -756,7 +766,7 @@ void testR5() {
 void testRejoinSwitch() {
     Scenario s = benchmarkScenario(route("R3-B"), "gnss_ramp_r3", 9, "estimated");
     s.estimator = "ekf_kerb2";
-    s.rejoin = false;
+    s.rejoin = Rejoin::Off;
     const EpisodeResult off = runEpisode(s);
     int corrections = 0, fallbacks = 0;
     for (const LogEvent& e : off.events) {
@@ -768,11 +778,58 @@ void testRejoinSwitch() {
           off.outcome + ", fallbacks " + std::to_string(fallbacks) + ", crossing samples " + std::to_string(off.metrics.clearanceViolations));
     // On simulator truth nothing jumps: the switch changes nothing.
     Scenario g = benchmarkScenario(route("R3-B"), "gnss_ramp_r3", 9, "ground_truth");
-    g.rejoin = false;
+    g.rejoin = Rejoin::Off;
     const EpisodeResult a = runEpisode(g);
-    g.rejoin = true;
+    g.rejoin = Rejoin::All;
     const EpisodeResult b = runEpisode(g);
-    check(a.traceHash == b.traceHash, "L23 on simulator truth the re-join switch leaves the trace unchanged");
+    g.rejoin = Rejoin::Verified;
+    const EpisodeResult c = runEpisode(g);
+    check(a.traceHash == b.traceHash && a.traceHash == c.traceHash, "L23 on simulator truth every re-join setting leaves the trace unchanged");
+    // A GNSS-only filter reports no map-verified correction, so the verified re-join drives it exactly as the
+    // R3 and R4 stack does, even where the estimate jumps (R3-B, slow excursion, seed 9).
+    Scenario q = benchmarkScenario(route("R3-B"), "gnss_ramp_r3", 9, "estimated");
+    q.estimator = "ekf_int2";
+    q.rejoin = Rejoin::Off;
+    const EpisodeResult qOff = runEpisode(q);
+    q.rejoin = Rejoin::Verified;
+    const EpisodeResult qVer = runEpisode(q);
+    check(qOff.traceHash == qVer.traceHash, "L23 a GNSS-only filter drives identically with the verified re-join and without any");
+}
+
+// ---- L24 network R6 ------------------------------------------------------------------------------------
+// Static checks only: R6 is held out, so nothing drives on it here.
+void testR6() {
+    const LaneNetwork r6 = buildR6();
+    const VehicleParams vp;
+    check(r6.validate().empty(), "L24 R6 passes every map invariant");
+    double worst = 1e9;
+    for (const Element& e : r6.elements) {
+        if (!e.isConnector()) continue;
+        for (const PathPoint& p : e.pts) {
+            worst = std::min(worst, footprintClearance(r6, p.x, p.y, p.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors));
+        }
+    }
+    check(worst >= 0.0, "L24 every R6 movement, driven exactly, keeps the footprint with mirrors on the carriageway (exact kerb)", f3(worst));
+    for (const RouteSpec& rs : benchmarkRoutesR6()) {
+        const int s = r6.segmentAt(r6.lane(rs.startLane), rs.startS), g = r6.segmentAt(r6.lane(rs.goalLane), rs.goalS);
+        const RefRoute rr = referenceRoute(r6, s, g);
+        check(rr.found && routeLegal(r6, rr.nodes), "L24 R6 benchmark route " + rs.name + " is legal and reachable", rr.found ? routeText(r6, rr.nodes) : "");
+    }
+    const Scenario closure = closedLoopScenariosR6().back();
+    const RouteSpec rb = route("R6-B");
+    const RefRoute rr = referenceRoute(r6, r6.segmentAt(r6.lane(rb.startLane), rb.startS), r6.segmentAt(r6.lane(rb.goalLane), rb.goalS));
+    bool onRoute = false;
+    for (int n : rr.nodes) onRoute = onRoute || r6.elements[n].lane == r6.lane(closure.closureLane);
+    check(closure.closure && onRoute, "L24 the R6 closure lane " + closure.closureLane + " lies on R6-B's route");
+    for (const std::string& c : conditionNamesR6()) {
+        bool ok = true;
+        try {
+            sensorConditions(c);
+        } catch (const std::exception&) {
+            ok = false;
+        }
+        check(ok, "L24 R6 condition " + c + " is defined");
+    }
 }
 
 }  // namespace
@@ -794,6 +851,7 @@ int main() {
     testPoseCorrections();
     testR5();
     testRejoinSwitch();
+    testR6();
     std::printf("localisation tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
