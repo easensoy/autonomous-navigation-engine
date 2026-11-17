@@ -67,6 +67,9 @@ struct Scenario {
     // The stack's clearance feasibility layer (sideways shift and explicit stop). Off reproduces the stack
     // evaluated on R2 in November 2026; manifests written before it existed replay with it off.
     bool feasibility = true;
+    // The stack's re-join after a pose correction (rejoinpolicy). Off reproduces the stack evaluated on R3
+    // and R4; manifests written before it existed replay with it off.
+    bool rejoin = true;
 };
 
 std::vector<Scenario> catalogue();
