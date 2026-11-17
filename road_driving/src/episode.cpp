@@ -306,7 +306,7 @@ EpisodeResult runEpisode(const Scenario& sc) {
     }
 
     Vehicle veh(vp, dt, init);
-    Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility);
+    Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility, sc.rejoin);
     bool present = sc.closure, revealed = false, lifted = false;
     double tRest = -1.0;
     std::vector<LogEvent> world;
@@ -608,7 +608,8 @@ std::string manifestText(const EpisodeResult& r) {
       << "\nclearance_violations=" << m.clearanceViolations << "\nassociation_errors=" << m.associationErrors
       << "\nassociation_samples=" << m.associationSamples << "\nlocalisation_stops=" << m.localisationStops
       << "\nlocalisation_degraded=" << m.localisationDegraded << "\nest_rmse=" << fixed(m.estRmse, 4) << "\nest_p95=" << fixed(m.estP95, 4)
-      << "\nest_max=" << fixed(m.estMax, 4) << "\nfeasibility=" << (s.feasibility ? "on" : "off") << "\nmax_crossing=" << fixed(m.maxCrossing, 3)
+      << "\nest_max=" << fixed(m.estMax, 4) << "\nfeasibility=" << (s.feasibility ? "on" : "off") << "\nrejoin=" << (s.rejoin ? "on" : "off")
+      << "\nmax_crossing=" << fixed(m.maxCrossing, 3)
       << "\nclearance_stops=" << m.clearanceStops << "\nunwarranted_stops=" << m.unwarrantedStops << "\ngnss_outages=" << r.outages.size()
       << "\noutage_windows=";
     for (size_t i = 0; i < r.outages.size(); ++i) {
@@ -734,6 +735,7 @@ bool scenarioFromManifest(const std::map<std::string, std::string>& kv, Scenario
         sc.estimator = optional("estimator", "ekf");
         sc.departDelay = std::stod(optional("depart_delay", "0"));
         sc.feasibility = optional("feasibility", "off") == "on";  // older manifests: the stack before the layer existed
+        sc.rejoin = optional("rejoin", "off") == "on";            // older manifests: the stack before the re-join existed
     } catch (const std::exception& ex) {
         error = ex.what();
         return false;
