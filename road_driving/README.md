@@ -5,7 +5,7 @@ A first road-driving loop on top of the engine. An approximately I-PACE-sized ki
 It can drive on simulator truth (the reference) or on its own state estimate. Simulated GNSS, IMU, wheel, steering and kerb-ranging sensors feed one of five EKF variants, and the stack drives on its output. It keeps a margin from the kerb that follows the estimate's uncertainty, and stops explicitly when no clear continuation exists. Every episode is logged and can be replayed from its manifest.
 
 Labels:
-- **SYNTHETIC_ROADS:** networks R1 to R5, no real street.
+- **SYNTHETIC_ROADS:** networks R1 to R6, no real street.
 - **ORACLE_CLOSURE:** the scenario tells the stack about the closure; nothing is sensed.
 - **Pose source:** either **GROUND_TRUTH_POSE**, the simulator's truth, or **ESTIMATED_POSE**, an estimator fed by **SIMULATED_SENSORS**.
 
@@ -18,13 +18,13 @@ There is no other traffic, and no perception or prediction.
 
 ## Localisation in brief
 
-Four predeclared evaluations, each run once on a network held out of all tuning:
+Five predeclared evaluations, each run once on a network held out of all tuning:
 
-| | First (held out: R2) | Second (held out: R3) | Third (held out: R4) | Fourth (held out: R5) |
-|---|---|---|---|---|
-| Tested | `ekf` against dead reckoning and two GNSS-only filters | `ekf`, `ekf_int` (GNSS integrity), `ekf_kerb` (integrity and kerb registration) | those, plus `ekf_int2` (a way out of GNSS faults) and `ekf_kerb2` (kerb re-localisation) | the stack's re-join after pose corrections, each filter driven with and without it |
-| Criteria passed | 6 of 8 | 8 of 10 | 10 of 11 | 4 of 6 |
-| Failed | multipath capture: a 6 m offset longer than the 10 s reset failed 8 of 210 runs | `ekf_int` under combined faults; a slow GNSS excursion dragging even `ekf_kerb` on one route | one `ekf_kerb2` episode of 280 over a kerb, after a correct re-localisation mid-turn | with GNSS-only filters, one more crossing episode in five cells and one completion fewer |
+| | First (held out: R2) | Second (held out: R3) | Third (held out: R4) | Fourth (held out: R5) | Fifth (held out: R6) |
+|---|---|---|---|---|---|
+| Tested | `ekf` against dead reckoning and two GNSS-only filters | `ekf`, `ekf_int` (GNSS integrity), `ekf_kerb` (integrity and kerb registration) | those, plus `ekf_int2` (a way out of GNSS faults) and `ekf_kerb2` (kerb re-localisation) | the stack's re-join after pose corrections, each filter driven with and without it | a re-join limited to map-verified corrections, each filter driven with and without it |
+| Criteria passed | 6 of 8 | 8 of 10 | 10 of 11 | 4 of 6 | 4 of 6 |
+| Failed | multipath capture: a 6 m offset longer than the 10 s reset failed 8 of 210 runs | `ekf_int` under combined faults; a slow GNSS excursion dragging even `ekf_kerb` on one route | one `ekf_kerb2` episode of 280 over a kerb, after a correct re-localisation mid-turn | with GNSS-only filters, one more crossing episode in five cells and one completion fewer | `ekf_kerb` followed two wrong kerb matches into deeper crossings; one `ekf_kerb2` closure incursion, identical without the re-join |
 
 On R4, every estimator processed the same recorded logs: 210 drives under seven conditions, with new fault magnitudes and combinations and a kerb map error. The stack then drove 1,440 closed-loop episodes:
 - **Recovery after drift:** under a gyro-bias step during multipath, `ekf_int` never left the fault (errors up to 70 m). `ekf_int2` left it in 29 of 30 runs, and its pooled 95th percentile was 4.80 m against 54.8 m.
@@ -39,6 +39,10 @@ What failed or remains:
   - *Held out on R5 (fourth evaluation, 4 of 6 criteria):* that failure did not occur there. The kerb filters never crossed or made a fallback stop, with or without the re-join.
   - With GNSS-only filters, already metres wrong, the re-join changed which episodes crossed, in both directions. The net was one more crossing episode in five cells and one completion fewer ([details](LOCALISATION.md#fourth-evaluation-the-re-join-held-out-on-r5)).
   - A stack cannot tell a correction from a corruption by the jump alone.
+  - *Held out on R6 (fifth evaluation, 4 of 6 criteria):* the stack re-joined only corrections the estimator verified against the map.
+    - GNSS-only filters drove every pair identically.
+    - Where kerbs returned to correct a dragged estimate, `ekf_kerb2` ended 26 of 40 episodes as the reference did instead of 16, with 12 fallback stops instead of 22.
+    - But after long dead reckoning a kerb registration can lock onto the wrong kerb: `ekf_kerb` followed two such matches into deeper crossings ([details](LOCALISATION.md#fifth-evaluation-the-verified-re-join-held-out-on-r6)).
 - **GNSS-only drift:** while GNSS is rightly excluded, nothing bounds dead reckoning. `ekf_int2` still exceeded 5 m in 20 of 30 gyro-fault runs, and in one the fault never ended.
 - **Losing kerbs and GNSS together** stopped the kerb filters for clearance in every such episode, 34 of the 40 stops unwarranted.
 
@@ -64,7 +68,8 @@ Details, the earlier evaluations and the next improvement: [LOCALISATION.md](LOC
 | Network R2 | `lane_network.*` | Held out for the first localisation evaluation, development data for the second. 4 by 3 grid at x = 0, 90, 240, 350 m and y = 0, 70, 170 m, from the same generator. Two one-way streets, two banned turns, 16 m junction mouths, 14 m right-turn arcs, and two tight junctions with 4 m kerbs and 5.5 m left-turn arcs taken at 2.5 m/s. Its geometry was fixed with the static footprint check alone (`road_drive map R2`) |
 | Network R3 | `lane_network.*` | Held out for the second evaluation, development data for the third. 4 by 4 grid at x = 0, 110, 200, 330 m and y = 0, 85, 190, 270 m, with R2's junction design: two one-way streets, two banned turns, two tight junctions and a 50 m cul-de-sac |
 | Network R4 | `lane_network.*` | Held out for the third evaluation, development data for the fourth. 5 by 3 grid at x = 0, 80, 170, 260, 380 m and y = 0, 100, 180 m, with R2's junction design: two one-way streets, two banned turns, two tight junctions and a 40 m cul-de-sac |
-| Network R5 (held out) | `lane_network.*` | 3 by 5 grid at x = 0, 105, 230 m and y = 0, 75, 160, 235, 330 m, with R2's junction design: two one-way streets, two banned turns, two tight junctions and a 45 m cul-de-sac |
+| Network R5 | `lane_network.*` | Held out for the fourth evaluation. 3 by 5 grid at x = 0, 105, 230 m and y = 0, 75, 160, 235, 330 m, with R2's junction design: two one-way streets, two banned turns, two tight junctions and a 45 m cul-de-sac |
+| Network R6 (held out) | `lane_network.*` | 4 by 4 grid at x = 0, 85, 205, 300 m and y = 0, 110, 190, 300 m, with R2's junction design: two one-way streets, two banned turns, two tight junctions and a 45 m cul-de-sac |
 | Kerbs | `lane_network.*` | Every kerb as a line or a corner arc. Clearance is the exact distance to them, and a ray is intersected with them |
 | Vehicle | `vehicle.*` | Kinematic bicycle about the rear axle. Wheelbase 2.99 m; steering up to 0.55 rad at 0.4 rad/s with a 0.2 s lag; 0.1 s command delay; 0.3 s longitudinal lag; braking up to 8 m/s²; no reverse |
 | Sensors | `sensors.cpp` | GNSS at 10 Hz, IMU at 100 Hz, wheel speed and steering angle at 50 Hz, and a kerb-height range scanner at 10 Hz, each with its own latency, noise, bias and mounting. Sensor conditions add outages, multipath (constant, intermittent or slowly growing), wheel slip, IMU bias steps, delayed and dropped fixes, parked cars, kerb clutter, and a kerb section that is not where the map has it. The same seed gives the same noise in every condition |
@@ -98,9 +103,9 @@ build/road-gcc/road_driving/road_drive suite --variant B0 --seeds 6
 ```
 
 Localisation:
-- `drive` drives on an estimator (`ekf`, `ekf_int`, `ekf_int2`, `ekf_kerb`, `ekf_kerb2`; `--feasibility off` gives the stack without the clearance layer, `--rejoin off` the stack without the re-join after pose corrections);
+- `drive` drives on an estimator (`ekf`, `ekf_int`, `ekf_int2`, `ekf_kerb`, `ekf_kerb2`; `--feasibility off` gives the stack without the clearance layer; `--rejoin` chooses the response to a pose correction: `verified`, the default, re-joins only map-verified corrections, `on` every jump as evaluated on R5, and `off` none);
 - `localise` replays the logged sensors through every estimator without the simulator;
-- `bench-loc` and `bench-closed` run the campaigns. The splits are `dev` (R1), `heldout` (the first evaluation, R2), `r2` (R2 as development data), `r3` (the second evaluation), `r3dev` (R3 as development data), `r4` (the third evaluation) and `r5` (the fourth). `bench-closed --scenario` runs some of a split's scenarios; `tools/merge_closed_loop.py` merges such parts into the files one process writes. Each split drives the stack it was evaluated with; `bench-closed --rejoin on|off` overrides the re-join.
+- `bench-loc` and `bench-closed` run the campaigns. The splits are `dev` (R1), `heldout` (the first evaluation, R2), `r2` (R2 as development data), `r3` (the second evaluation), `r3dev` (R3 as development data), `r4` (the third evaluation), `r5` (the fourth) and `r6` (the fifth). `bench-closed --scenario` runs some of a split's scenarios; `tools/merge_closed_loop.py` merges such parts into the files one process writes. Each split drives the stack it was evaluated with; `bench-closed --rejoin off|on|verified` overrides the re-join.
 
 ```bash
 build/road-gcc/road_driving/road_drive drive R3-B --condition gnss_ramp_r3 --estimator ekf_kerb2 --seed 5 --out out/demo
@@ -154,7 +159,7 @@ CTest runs four tests with the option on:
   - the commitment branch at J10, the closure lifecycle and determinism;
   - replay from a written episode;
   - an evaluator check on a hand-written truth log.
-- **`road_driving_localisation_tests`** (142 checks):
+- **`road_driving_localisation_tests`** (161 checks):
   - sensor rates, latencies, arrival order and noise spread; no fix inside an outage zone; no brake-hold reading at rest;
   - every estimator replayed from `sensors.csv` without the simulator, matching the live estimates to 1e-9 m;
   - late and out-of-order GNSS giving the same EKF as in-order processing;
@@ -171,9 +176,9 @@ CTest runs four tests with the option on:
   - R3's and R4's map invariants, exact footprint clearance, legal routes and defined conditions, and R4's closure lane on its route;
   - the kerb map error: only returns from the left kerb inside its zone change, and only outward;
   - the second versions: equal to the first on clean data, trace for trace; the persistent offset still never trusted; drift still recovered. On an R3 combined-fault drive `ekf_int2` leaves the fault and ends within 1 m, where `ekf_int` ends 28 m off. On an R3 slow-excursion drive `ekf_kerb2` re-localises and keeps its lateral 95th percentile below 0.2 m;
-  - pose corrections: a mid-turn re-localisation, and GNSS corrections next to a shifted path, end without a fallback stop and with the body on the road;
-  - the re-join switch: off reproduces the recorded fallback over the kerb, and on simulator truth it changes nothing;
-  - R5's map invariants, exact footprint clearance, legal routes, closure lane and defined conditions.
+  - pose corrections: the verified re-join follows a mid-turn kerb re-localisation and completes on the road; re-joining every jump (as on R5) also avoids a fallback after GNSS corrections, which the verified re-join leaves to the monitor;
+  - the re-join switch: off reproduces the recorded fallback over the kerb; on simulator truth no setting changes anything; a GNSS-only filter drives identically with the verified re-join and without any;
+  - R5's and R6's map invariants, exact footprint clearance, legal routes, closure lanes and defined conditions.
 - **`road_driving_regression_replay`** replays the stored failing episode.
 - **`road_driving_replay_detects_change`** swaps that episode's variant label and requires the replay to fail.
 
