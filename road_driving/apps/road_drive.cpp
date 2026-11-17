@@ -1,16 +1,25 @@
-// road_drive: run, list and replay closed-loop episodes on the synthetic network R1.
+// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 and R2, and the
+// localisation benchmark.
 //
 //   road_drive list
 //   road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]
 //   road_drive replay <episode dir>
 //   road_drive suite [--variant B0|B1] [--seeds N]
+//   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--seed N] [--out DIR]
+//   road_drive localise <episode dir>            (estimators on a stored sensor log; no world simulation)
+//   road_drive bench-loc --split dev|heldout [--seeds N] --out DIR
+//   road_drive bench-closed --split dev|heldout [--seeds N] --out DIR
+//   road_drive map R1|R2 [--json FILE]
 //
-// Every episode uses synthetic roads, ground-truth pose and an oracle closure report.
+// Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
+// mode is "estimated", when the stack drives on the estimator's output.
+#include "road_driving/benchmark.hpp"
 #include "road_driving/episode.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <map>
 #include <sstream>
 #include <string>
@@ -33,7 +42,10 @@ void printSummary(const EpisodeResult& r) {
 int usage() {
     std::fprintf(stderr,
                  "usage:\n  road_drive list\n  road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]\n"
-                 "  road_drive replay <episode dir>\n  road_drive suite [--variant B0|B1] [--seeds N]\n");
+                 "  road_drive replay <episode dir>\n  road_drive suite [--variant B0|B1] [--seeds N]\n"
+                 "  road_drive drive <scenario|route> [--condition C] [--mode ground_truth|estimated] [--seed N] [--out DIR]\n"
+                 "  road_drive localise <episode dir>\n  road_drive bench-loc --split dev|heldout [--seeds N] --out DIR\n"
+                 "  road_drive bench-closed --split dev|heldout [--seeds N] --out DIR\n  road_drive map R1|R2 [--json FILE]\n");
     return 2;
 }
 
@@ -103,6 +115,162 @@ int replay(const std::string& dir) {
     return (outcomeOk && routesOk) ? 0 : 1;
 }
 
+bool scenarioByName(const std::string& name, Scenario& sc) {
+    if (findScenario(name, sc)) return true;
+    for (bool held : {false, true}) {
+        for (const RouteSpec& r : benchmarkRoutes(held)) {
+            if (r.name == name) {
+                sc = benchmarkScenario(r, "", 0, "ground_truth");
+                return true;
+            }
+        }
+        for (const Scenario& s : closedLoopScenarios(held)) {
+            if (s.name == name) {
+                sc = s;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int drive(const std::string& name, std::map<std::string, std::string>& opt) {
+    Scenario sc;
+    if (!scenarioByName(name, sc)) {
+        std::fprintf(stderr, "unknown scenario or route '%s'\n", name.c_str());
+        return 2;
+    }
+    sc.condition = opt.count("--condition") ? opt["--condition"] : "nominal";
+    sc.mode = opt.count("--mode") ? opt["--mode"] : "estimated";
+    sc.seed = opt.count("--seed") ? std::stoull(opt["--seed"]) : 1;
+    sc.departDelay = opt.count("--delay") ? std::stod(opt["--delay"]) : 2.0;
+    if (opt.count("--variant") && !parseVariant(opt["--variant"], sc.variant)) return usage();
+    const EpisodeResult r = runEpisode(sc);
+    printSummary(r);
+    const Metrics& m = r.metrics;
+    std::printf("  mode=%s condition=%s: min clearance %.3f m, off-road samples %d, lane-association errors %d of %d, localisation stops %d, "
+                "estimate RMSE %.3f m (p95 %.3f, max %.3f), GNSS outages %zu\n",
+                sc.mode.c_str(), sc.condition.c_str(), m.minClearance, m.clearanceViolations, m.associationErrors, m.associationSamples,
+                m.localisationStops, m.estRmse, m.estP95, m.estMax, r.outages.size());
+    if (opt.count("--out")) {
+        std::string error;
+        if (!writeEpisode(r, opt["--out"], error)) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+        std::printf("wrote %s\n", opt["--out"].c_str());
+    }
+    return 0;
+}
+
+int localise(const std::string& dir) {
+    std::map<std::string, std::string> kv;
+    std::string error, truthText, sensorText;
+    if (!readKeyValues(dir + "/manifest.txt", kv, error) || !readText(dir + "/truth.csv", truthText) || !readText(dir + "/sensors.csv", sensorText)) {
+        std::fprintf(stderr, "localise: needs manifest.txt, truth.csv and sensors.csv in %s\n", dir.c_str());
+        return 2;
+    }
+    std::vector<TruthSample> truth;
+    std::vector<Measurement> sensors;
+    if (!parseTruthCsv(truthText, truth) || !parseSensorLog(sensorText, sensors, error)) {
+        std::fprintf(stderr, "localise: %s\n", error.empty() ? "bad truth.csv" : error.c_str());
+        return 2;
+    }
+    const LaneNetwork net = buildNetwork(kv.count("network_name") ? kv["network_name"] : "R1");
+    std::vector<std::vector<StateEstimate>> traces;
+    const auto ms = evaluateLocalisation(truth, sensors, parseWindows(kv["outage_windows"]), net, EstimatorConfig{}, &traces);
+    // Every estimator's trace, for plots and the demonstration (offline products, not inputs).
+    for (size_t k = 0; k < ms.size() && k < traces.size(); ++k) {
+        std::ofstream tr(dir + "/trace_" + ms[k].estimator + ".csv", std::ios::binary);
+        tr << "t,valid,x,y,yaw,v,pxx,pxy,pyy,sigma_pos,status\n";
+        char line[256];
+        for (const StateEstimate& e : traces[k]) {
+            std::snprintf(line, sizeof line, "%.2f,%d,%.4f,%.4f,%.5f,%.4f,%.6g,%.6g,%.6g,%.4f,%s\n", e.t, e.valid ? 1 : 0, e.x, e.y, e.yaw, e.v, e.pxx,
+                          e.pxy, e.pyy, e.hasCov ? e.sigmaPos() : -1.0, e.status);
+            tr << line;
+        }
+    }
+    std::printf("%s: %zu truth samples, %zu measurements (condition %s), replayed without the world simulator\n", dir.c_str(), truth.size(),
+                sensors.size(), kv["condition"].c_str());
+    std::printf("%-10s %6s %8s %8s %8s %8s %9s %10s %9s %8s %8s\n", "estimator", "failed", "rmse", "p95", "max", "head_deg", "rpe20", "outage_end",
+                "recovery", "nees", "rej_gnss");
+    std::ofstream out(dir + "/localisation.jsonl", std::ios::binary);
+    for (const LocMetrics& m : ms) {
+        std::printf("%-10s %6s %8.3f %8.3f %8.3f %8.2f %9.3f %10.3f %9.1f %8.2f %8d\n", m.estimator.c_str(), m.failed ? "yes" : "no", m.rmse, m.p95,
+                    m.max, m.headingRmseDeg, m.rpe20, m.outageEnd, m.recovery, m.neesMean, m.gnssRejected);
+        out << "{" << locMetricsJson(m) << "}\n";
+    }
+    return 0;
+}
+
+int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
+    const LaneNetwork net = buildNetwork(name);
+    const VehicleParams vp;
+    const auto errs = net.validate();
+    int segments = 0, connectors = 0;
+    double minClear = 1e9;
+    std::string worst;
+    std::map<std::string, std::pair<double, std::string>> byKind;  // worst clearance per kind of movement
+    for (const Element& e : net.elements) {
+        (e.isConnector() ? connectors : segments) += 1;
+        if (!e.isConnector()) continue;
+        const std::string kind = std::string(turnName(e.turn)) + (e.speedLimit < net.spec.speedLimit ? " (tight)" : "");
+        for (size_t i = 0; i < e.pts.size(); i += 5) {
+            const PathPoint& p = e.pts[i];
+            const double c = footprintClearance(net, p.x, p.y, p.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors);
+            if (c < minClear) {
+                minClear = c;
+                worst = e.name + " (" + turnName(e.turn) + ")";
+            }
+            const auto it = byKind.find(kind);
+            if (it == byKind.end() || c < it->second.first) byKind[kind] = {c, e.name};
+        }
+    }
+    std::printf("network %s: %zu junctions, %zu lanes, %d lane segments, %d turning movements, %zu banned turns; validation %s\n", name.c_str(),
+                net.junctions.size(), net.lanes.size(), segments, connectors, net.banned.size(), errs.empty() ? "passes" : errs.front().c_str());
+    std::printf("footprint with mirrors driven exactly along every movement: smallest clearance to a carriageway edge %.3f m at %s\n", minClear,
+                worst.c_str());
+    for (const auto& k : byKind) {
+        std::printf("  %-14s smallest clearance %7.3f m (%s)\n", k.first.c_str(), k.second.first, k.second.second.c_str());
+    }
+    if (opt.count("--json")) {
+        std::ofstream o(opt["--json"], std::ios::binary);
+        o << "{\"name\":\"" << name << "\",\"lane_width\":" << net.spec.laneWidth << ",\"junctions\":[";
+        for (size_t j = 0; j < net.junctions.size(); ++j) {
+            o << (j ? "," : "") << "{\"name\":\"" << net.junctions[j].name << "\",\"x\":" << net.junctions[j].x << ",\"y\":" << net.junctions[j].y
+              << ",\"kerb\":" << net.kerbRadius[j] << "}";
+        }
+        o << "],\"streets\":[";
+        for (size_t i = 0; i < net.streets.size(); ++i) {
+            const Street& s = net.streets[i];
+            o << (i ? "," : "") << "[" << s.a << "," << s.b << "," << s.ax << "," << s.ay << "," << s.bx << "," << s.by << "]";
+        }
+        o << "],\"lanes\":[";
+        for (size_t i = 0; i < net.lanes.size(); ++i) {
+            const Lane& l = net.lanes[i];
+            o << (i ? "," : "") << "{\"name\":\"" << l.name << "\",\"x0\":" << l.x0 << ",\"y0\":" << l.y0 << ",\"x1\":" << l.x1 << ",\"y1\":" << l.y1 << "}";
+        }
+        o << "],\"connectors\":[";
+        bool first = true;
+        for (const Element& e : net.elements) {
+            if (!e.isConnector()) continue;
+            o << (first ? "" : ",") << "{\"name\":\"" << e.name << "\",\"turn\":\"" << turnName(e.turn) << "\",\"pts\":[";
+            first = false;
+            for (size_t i = 0; i < e.pts.size(); i += 5) {
+                o << (i ? "," : "") << "[" << e.pts[i].x << "," << e.pts[i].y << "]";
+            }
+            o << ",[" << e.pts.back().x << "," << e.pts.back().y << "]]}";
+        }
+        o << "],\"banned\":[";
+        for (size_t i = 0; i < net.banned.size(); ++i) {
+            o << (i ? "," : "") << "[\"" << net.banned[i].junction << "\",\"" << net.banned[i].fromLane << "\",\"" << net.banned[i].toLane << "\"]";
+        }
+        o << "]}\n";
+        std::printf("wrote %s\n", opt["--json"].c_str());
+    }
+    return errs.empty() ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -157,6 +325,24 @@ int main(int argc, char** argv) {
                 return usage();
             }
             return replay(positional);
+        }
+        if (cmd == "drive" && !positional.empty()) {
+            return drive(positional, opt);
+        }
+        if (cmd == "localise" && !positional.empty()) {
+            return localise(positional);
+        }
+        if (cmd == "map" && !positional.empty()) {
+            return mapCmd(positional, opt);
+        }
+        if ((cmd == "bench-loc" || cmd == "bench-closed") && opt.count("--out")) {
+            CampaignOptions co;
+            co.heldOut = opt.count("--split") && opt["--split"] == "heldout";
+            co.seeds = opt.count("--seeds") ? std::stoi(opt["--seeds"]) : (co.heldOut ? 10 : 5);
+            co.outDir = opt["--out"];
+            co.config = opt.count("--config") ? opt["--config"] : "";
+            std::fputs((cmd == "bench-loc" ? runLocalisationCampaign(co) : runClosedLoopCampaign(co)).c_str(), stdout);
+            return 0;
         }
         if (cmd == "suite") {
             const int seeds = opt.count("--seeds") ? std::stoi(opt["--seeds"]) : 1;
