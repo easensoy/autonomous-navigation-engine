@@ -120,12 +120,14 @@ struct SensorConditions {
 // Held out on R2 (different placements and magnitudes, plus a combination): the same names with suffix
 // _h, and combined_h. Held out on R3 (new fault types): the names in conditionNamesR3(). Held out on R4
 // for the second versions (new magnitudes and combinations, and a kerb map error): conditionNamesR4(). Held
-// out on R5 for the stack's re-join after pose corrections: conditionNamesR5().
+// out on R5 for the stack's re-join after pose corrections: conditionNamesR5(). Held out on R6 for the
+// verified re-join: conditionNamesR6().
 SensorConditions sensorConditions(const std::string& name);
 std::vector<std::string> conditionNames(bool heldOut);
 std::vector<std::string> conditionNamesR3();
 std::vector<std::string> conditionNamesR4();
 std::vector<std::string> conditionNamesR5();
+std::vector<std::string> conditionNamesR6();
 
 struct Zone {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
@@ -199,6 +201,11 @@ struct StateEstimate {
     const char* gnss = "-";      // GNSS integrity: TRUSTED, FAULTED (a jump odometry cannot explain), INCONSISTENT, OUTAGE
     const char* kerb = "-";      // kerb ranging: MATCHED (last scan used), REJECTED, NONE (no recent scan)
     double lastGnssUsed = -1.0;  // time of validity of the last GNSS fix the estimator used
+    // Map-verified corrections: how many kerb registrations (re-localisations included) have moved the
+    // estimate by more than 0.1 m, and the position change of the latest. A stack may follow such a
+    // correction instead of steering at it; nothing else the estimator does is verified against the map.
+    int verifiedCorrections = 0;
+    double verifiedJumpX = 0.0, verifiedJumpY = 0.0;
     double sigmaPos() const;     // sqrt of the largest eigenvalue of the position covariance
     double sigmaAlong(double heading) const;  // position 1-sigma along / across a direction
     double sigmaAcross(double heading) const;
