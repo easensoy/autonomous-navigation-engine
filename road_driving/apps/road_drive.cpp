@@ -1,4 +1,4 @@
-// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 and R2, and the
+// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 to R4, and the
 // localisation benchmark.
 //
 //   road_drive list
@@ -6,10 +6,10 @@
 //   road_drive replay <episode dir>
 //   road_drive suite [--variant B0|B1] [--seeds N]
 //   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--estimator NAME] [--feasibility on|off] [--seed N] [--out DIR]
-//   road_drive localise <episode dir>            (estimators on a stored sensor log; no world simulation)
-//   road_drive bench-loc --split dev|heldout|r2|r3 [--seeds N] --out DIR
-//   road_drive bench-closed --split dev|heldout [--seeds N] --out DIR
-//   road_drive map R1|R2|R3 [--json FILE]
+//   road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]   (stored sensor log; no world simulation)
+//   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR
+//   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR
+//   road_drive map R1|R2|R3|R4 [--json FILE]
 //
 // Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
 // mode is "estimated", when the stack drives on the estimator's output.
@@ -45,8 +45,9 @@ int usage() {
                  "  road_drive replay <episode dir>\n  road_drive suite [--variant B0|B1] [--seeds N]\n"
                  "  road_drive drive <scenario|route> [--condition C] [--mode ground_truth|estimated] [--estimator NAME]\n"
                  "                   [--feasibility on|off] [--seed N] [--out DIR]\n"
-                 "  road_drive localise <episode dir>\n  road_drive bench-loc --split dev|heldout|r2|r3 [--seeds N] --out DIR\n"
-                 "  road_drive bench-closed --split dev|heldout|r2|r3 [--seeds N] --out DIR\n  road_drive map R1|R2|R3 [--json FILE]\n");
+                 "  road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]\n"
+                 "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR\n"
+                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4 [--seeds N] --out DIR\n  road_drive map R1|R2|R3|R4 [--json FILE]\n");
     return 2;
 }
 
@@ -132,16 +133,18 @@ bool scenarioByName(const std::string& name, Scenario& sc) {
             }
         }
     }
-    for (const RouteSpec& r : benchmarkRoutesR3()) {
-        if (r.name == name) {
-            sc = benchmarkScenario(r, "", 0, "ground_truth");
-            return true;
+    for (bool r4 : {false, true}) {
+        for (const RouteSpec& r : r4 ? benchmarkRoutesR4() : benchmarkRoutesR3()) {
+            if (r.name == name) {
+                sc = benchmarkScenario(r, "", 0, "ground_truth");
+                return true;
+            }
         }
-    }
-    for (const Scenario& s : closedLoopScenariosR3()) {
-        if (s.name == name) {
-            sc = s;
-            return true;
+        for (const Scenario& s : r4 ? closedLoopScenariosR4() : closedLoopScenariosR3()) {
+            if (s.name == name) {
+                sc = s;
+                return true;
+            }
         }
     }
     return false;
@@ -261,6 +264,21 @@ int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
                 worst.c_str());
     for (const auto& k : byKind) {
         std::printf("  %-14s smallest clearance %7.3f m (%s)\n", k.first.c_str(), k.second.first, k.second.second.c_str());
+    }
+    // The benchmark routes on this network as the independent reference planner finds them: movements only.
+    std::vector<RouteSpec> routes = benchmarkRoutes(false);
+    for (const auto& more : {benchmarkRoutes(true), benchmarkRoutesR3(), benchmarkRoutesR4()}) routes.insert(routes.end(), more.begin(), more.end());
+    for (const RouteSpec& rs : routes) {
+        if (rs.network != name) continue;
+        const RefRoute rr = referenceRoute(net, net.segmentAt(net.lane(rs.startLane), rs.startS), net.segmentAt(net.lane(rs.goalLane), rs.goalS));
+        std::string moves;
+        double length = 0.0;
+        for (int n : rr.nodes) {
+            const Element& e = net.elements[static_cast<size_t>(n)];
+            length += e.length;
+            if (e.isConnector()) moves += (moves.empty() ? "" : ", ") + e.name + " " + turnName(e.turn) + (e.speedLimit < net.spec.speedLimit ? " (tight)" : "");
+        }
+        std::printf("route %s: %s, %.0f m; %s\n", rs.name.c_str(), rr.found ? "reachable" : "UNREACHABLE", length, moves.c_str());
     }
     if (opt.count("--json")) {
         std::ofstream o(opt["--json"], std::ios::binary);
