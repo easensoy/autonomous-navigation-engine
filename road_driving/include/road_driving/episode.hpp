@@ -64,6 +64,9 @@ struct Scenario {
     std::string mode = "ground_truth";  // or "estimated"
     std::string estimator = "ekf";
     double departDelay = 0.0;           // s at rest before the mission starts (initial alignment)
+    // The stack's clearance feasibility layer (sideways shift and explicit stop). Off reproduces the stack
+    // evaluated on R2 in November 2026; manifests written before it existed replay with it off.
+    bool feasibility = true;
 };
 
 std::vector<Scenario> catalogue();
@@ -104,6 +107,7 @@ struct Metrics {
     std::vector<int> truthElement;   // the element associated from truth at every truth sample (-1: none)
     double minClearance = 0.0;       // m, smallest footprint (with mirrors) to road-edge distance; < 0 is off the road
     int clearanceViolations = 0;     // truth samples with part of the body (no mirrors) off the carriageway
+    double maxCrossing = 0.0;        // m, deepest the body went over the kerb (0: never)
     // Stack decisions, counted from its event log (never used for the outcome)
     int replans = 0, masks = 0, fallbacks = 0, monitorTriggers = 0;
     std::string stopClass;
@@ -112,7 +116,12 @@ struct Metrics {
     int associationSamples = 0, associationErrors = 0;
     int localisationStops = 0, localisationDegraded = 0;
     double estRmse = -1.0, estP95 = -1.0, estMax = -1.0;
+    // Stops the stack decided because of its estimate (localisation unreliable, or no clear continuation),
+    // judged afterwards against truth: unwarranted when the true position error at the decision was below
+    // kUnwarrantedError, i.e. the stop came from reported uncertainty rather than actual error.
+    int clearanceStops = 0, unwarrantedStops = 0;
 };
+constexpr double kUnwarrantedError = 0.3;  // m
 
 struct EpisodeResult {
     Scenario scenario;
