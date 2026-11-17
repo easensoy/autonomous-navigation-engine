@@ -4,14 +4,14 @@ The car can drive on its own state estimate instead of simulator truth. The worl
 
 Labels: **SIMULATED_SENSORS** and **ESTIMATED_POSE**. The kerb scanner is simulated: its ranges are cast from the scanner's true pose to the mapped kerbs, shifted by a modelled deviation of the real kerb from the map. Kerb registration matches those ranges to the map. Nothing here is processed lidar or camera data.
 
-Four evaluations, each predeclared and pushed before its held-out run:
+Five evaluations, each predeclared and pushed before its held-out run:
 
-| | First | Second | Third | Fourth |
-|---|---|---|---|---|
-| Question | does a GNSS + IMU + wheel EKF beat simple baselines? | do GNSS integrity, kerb registration and a clearance-aware stack fix the first one's failures? | do a confirmed way out of GNSS faults and kerb re-localisation fix the second one's failures? | does the stack's re-join after pose corrections help on unseen roads, at no cost? |
-| Estimators | `ekf` and three baselines | `ekf`, `ekf_int`, `ekf_kerb` and the baselines | those, plus `ekf_int2` and `ekf_kerb2` | the five filters, each driven with and without the re-join |
-| Development | R1 | R1 and R2 | R1 to R3 | R3 and R4 |
-| Held out | R2 ([protocol](benchmark/PROTOCOL.md), [results](benchmark/heldout)) | R3 ([protocol](benchmark/PROTOCOL_R3.md), [results](benchmark/heldout-r3)) | R4 ([protocol](benchmark/PROTOCOL_R4.md), [results](benchmark/heldout-r4)) | R5 ([protocol](benchmark/PROTOCOL_R5.md), [results](benchmark/heldout-r5)) |
+| | First | Second | Third | Fourth | Fifth |
+|---|---|---|---|---|---|
+| Question | does a GNSS + IMU + wheel EKF beat simple baselines? | do GNSS integrity, kerb registration and a clearance-aware stack fix the first one's failures? | do a confirmed way out of GNSS faults and kerb re-localisation fix the second one's failures? | does the stack's re-join after pose corrections help on unseen roads, at no cost? | does re-joining only map-verified corrections keep the gain and remove the cost? |
+| Estimators | `ekf` and three baselines | `ekf`, `ekf_int`, `ekf_kerb` and the baselines | those, plus `ekf_int2` and `ekf_kerb2` | the five filters, each driven with and without the re-join | the five filters, each driven with and without the verified re-join |
+| Development | R1 | R1 and R2 | R1 to R3 | R3 and R4 | R3 to R5 |
+| Held out | R2 ([protocol](benchmark/PROTOCOL.md), [results](benchmark/heldout)) | R3 ([protocol](benchmark/PROTOCOL_R3.md), [results](benchmark/heldout-r3)) | R4 ([protocol](benchmark/PROTOCOL_R4.md), [results](benchmark/heldout-r4)) | R5 ([protocol](benchmark/PROTOCOL_R5.md), [results](benchmark/heldout-r5)) | R6 ([protocol](benchmark/PROTOCOL_R6.md), [results](benchmark/heldout-r6)) |
 
 ## Frames, units and time
 
@@ -271,8 +271,9 @@ All measured on 17 November 2026 on one Windows 11 laptop, with seeds 1 to 10.
 | Third, held out | R4 | MSVC 19.51 at `87436de` | 210 drives, 1,680 runs | 1,440 episodes | [`benchmark/heldout-r4/`](benchmark/heldout-r4) |
 | Fourth, development | R3 and R4 | GCC 14.2 and MSVC 19.51 at `f674183` | — | 2,680 episodes | [`benchmark/rejoin-dev/`](benchmark/rejoin-dev) |
 | Fourth, held out | R5 | MSVC 19.51 at `2966c0a` | 210 drives, 1,680 runs | 2,840 episodes | [`benchmark/heldout-r5/`](benchmark/heldout-r5) |
+| Fifth, held out | R6 | MSVC 19.51 at `aa20e04` | 210 drives, 1,680 runs | 2,840 episodes | [`benchmark/heldout-r6/`](benchmark/heldout-r6) |
 
-Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`, [fourth](benchmark/PROTOCOL_R5.md) in `2966c0a`. No held-out network was used for tuning.
+Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`, [fourth](benchmark/PROTOCOL_R5.md) in `2966c0a`, [fifth](benchmark/PROTOCOL_R6.md) in `aa20e04`. No held-out network was used for tuning. The fifth evaluation's development reruns are described in [its protocol](benchmark/PROTOCOL_R6.md#what-development-did).
 
 ### First evaluation: held out on R2
 
@@ -494,6 +495,42 @@ Every filter drove every R5 episode twice on the same seeds, with and without th
 
 **What this means.** On development data the re-join removed crossings that followed correct kerb re-localisations. On unseen roads that situation did not arise, and for filters without an independent reference it was not an improvement: it changes which wrong estimates end in a crossing, at a small net cost. A stack cannot tell a correction from a corruption by the jump alone.
 
+### Fifth evaluation: the verified re-join, held out on R6
+
+**What changed.**
+- The estimator reports each kerb registration that moved its estimate by more than 0.1 m, and by how much (`StateEstimate::verifiedCorrections`).
+- The stack re-joins only those corrections, by the cross-track change each one made.
+- Every other jump meets the R3 and R4 stack, monitor included.
+
+R6's conditions were designed to produce large map-verified corrections. Each filter drove every episode with and without the verified re-join: 1,400 pairs.
+
+| # | Criterion | Held-out result | Verdict |
+|---|---|---|---|
+| W1 | Under `nominal_r6` every pair has identical traces | 200 of 200 | passed |
+| W2 | Every pair of the GNSS-only filters has identical traces, in every condition | 840 of 840 | passed |
+| W3 | With the verified re-join, the kerb filters cross no more often, no deeper, and fall back no more often, in every condition | `ekf_kerb` crossed deeper in two episodes: 3.64 → 8.94 m under combined faults, 6.24 → 11.21 m under the gyro fault | **failed** |
+| W4 | Over the pairs acted on, fewer episodes end over a kerb or in a fallback stop | 62 pairs: 56 without, 51 with | passed |
+| W5 | `ekf_kerb2` ends as the reference does at least as often in every condition | in every condition | passed |
+| W6 | No closure incursion by `ekf_kerb2` with the verified re-join | 1 (0.70 m), identical without the re-join | **failed** |
+
+**What R6 showed.**
+- **The gain, where the targeted situation arose.** Under `kerb_return_r6` the GNSS offset grows while the kerbs are blacked out, and the kerbs then correct the estimate. There `ekf_kerb2` ended 26 of 40 episodes as the reference did, against 16 without the re-join, with 12 fallback stops against 22.
+  - In no condition did `ekf_kerb2` cross more often or deeper with the re-join.
+  - Under the gyro fault its deepest crossing fell from 6.24 m to 3.72 m.
+- **No cost without a map reference.** The GNSS-only filters drove every pair identically, as designed.
+- **The flaw W3 found.** After long dead reckoning, with no kerbs and no GNSS, a registration that starts from a very uncertain estimate can lock onto the wrong kerb.
+  - In two such episodes the first kerb filter, `ekf_kerb`, reported a correction that was wrong. The re-join followed it smoothly, and the error grew to 11–14 m.
+  - Without the re-join the monitor had stopped the car sooner, though still after crossings of 3.6–6.2 m.
+  - On the same two drives, `ekf_kerb2` fared differently.
+    - In the gyro-fault episode it also made two verified corrections, and its crossing became shallower: 6.24 → 3.72 m.
+    - In the combined-fault episode it never drifted beyond 1.66 m and made none.
+- **W6 is not about the re-join.** The `ekf_kerb2` incursion (R6-B late closure, kerbs returning, seed 2) is the same 0.70 m without it, with no correction re-joined. The estimate had been dragged 2.9 m by the GNSS drift during the blackout when the closure stop was planned.
+- **Open loop** (reported without a criterion):
+  - Under combined faults `ekf_kerb2` failed no run (lateral 95th percentile 0.046 m), and `ekf_int2` failed 7 of 30 against `ekf_int`'s 14.
+  - Under the gyro fault with no kerbs and no GNSS, every filter failed 30 of 30; median-run RMSE was 2.57 m for `ekf_kerb2` and 10.42 m for `ekf_kerb`.
+
+**What this means.** Limiting the re-join to map-verified corrections kept the gain and removed the cost for filters without a map reference. But a kerb match is evidence only when it is unambiguous. A verification that counts any registration trusts a match the filter's own uncertainty could not distinguish from a neighbouring kerb.
+
 ### Failure cases and the next improvement
 
 #### After the second evaluation (R3)
@@ -534,7 +571,7 @@ The third increment answered T1 with a way out of FAULTED, and T8 with kerb re-l
 **What the evidence pointed to next, and what was done.** The stack should treat a pose correction as a correction. It now re-joins the path smoothly after a jump, and its monitor measures from the path including the clearance shift (development results above). The monitor deliberately still sees a jump of more than 1 m: a version that hid it from the monitor drove a corrupted estimate 9.3 m off the road. A steering damper was not needed.
 
 **What the evidence supports now:**
-- **Let the estimator say what kind of jump it made.** The R5 evaluation shows the re-join helps only when the correction is right. A kerb re-localisation is verified against the map; a GNSS-only filter's jump is not. The stack could re-join only corrections the estimator marks as verified, and leave every other jump to the monitor as before. That would keep the development gains and the old safety net. It needs a new held-out network, because R5 has now been used.
+- **Count only unambiguous kerb matches as verified.** The R6 evaluation showed that letting the estimator say what kind of jump it made works: the gain held where kerbs corrected a dragged estimate, and filters without a map reference were untouched. But a registration from a very uncertain prior can lock onto the wrong kerb. Count a correction as verified only when the match is unique, as the re-localisation search already requires, or when the prior was certain enough to rule out the neighbouring kerb. That needs a new held-out network, because R6 has now been used.
 - **Earlier re-localisation for `ekf_kerb2`.** The remaining development crossing (R3-B, seed 2) came from a match found only mid-turn, one return short of the uniqueness margin.
 - **A better fault offset for `ekf_int2`:** remember it from several fixes after the onset, not one.
 
