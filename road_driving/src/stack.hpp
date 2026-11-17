@@ -20,6 +20,13 @@ struct ClosureReport {
     bool active = true;       // false once the oracle reports the lift
 };
 
+// The estimator's map-verified corrections (StateEstimate::verifiedCorrections): a count, and the position
+// change of the latest. Zero for simulator truth and for estimators without a map reference.
+struct VerifiedCorrection {
+    int count = 0;
+    double dx = 0.0, dy = 0.0;
+};
+
 struct Observation {
     double t = 0.0;
     VehicleState pose;                    // GROUND_TRUTH, or the estimator's output when `estimated`
@@ -31,6 +38,7 @@ struct Observation {
     double sigmaAlong = 0.0;    // m, position 1-sigma along the estimated heading
     double sigmaAcross = 0.0;   // m, position 1-sigma across it
     double sigmaHeading = 0.0;  // rad, heading 1-sigma (0 when the estimator reports none)
+    VerifiedCorrection verified;
 };
 
 // Clearance feasibility. The body swept along the path ahead must keep from every kerb a margin of
@@ -85,13 +93,14 @@ public:
     double pathShiftAt(double s) const;  // m, current sideways shift of the path (positive left)
     double currentShift() const { return pathShiftAt(s_); }
     double rejoinAt(double s) const;     // m, sideways offset of the reference after a pose correction
+    double monitorOffset() const;        // m, sideways offset of the monitor's reference at the car
 
-    // rejoin off is the stack evaluated on R3 and R4: no re-join, and the monitor measures from the unshifted path.
+    // rejoin: the stack's response to a pose correction (Rejoin in episode.hpp).
     Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility = true,
-          bool rejoin = true);
+          Rejoin rejoin = Rejoin::Verified);
     void initialise(const Observation& obs);  // first planning tick: closures known at departure, initial route
     void plan(const Observation& obs);        // every planning tick (10 Hz)
-    Command control(const VehicleState& pose, double t);  // every control tick (50 Hz)
+    Command control(const VehicleState& pose, double t, const VerifiedCorrection& verified = {});  // every control tick (50 Hz)
 
     Mode mode() const { return mode_; }
     const char* modeName() const;
@@ -110,7 +119,7 @@ private:
     };
 
     void event(const std::string& type, const std::string& detail);
-    void track(const VehicleState& pose);
+    void track(const VehicleState& pose, const VerifiedCorrection& verified);
     void adopt(const DrivePath& path, double s, const std::string& reason);
     void replan(const std::string& reason, double v);
     void recover(const std::string& reason);
@@ -178,7 +187,8 @@ private:
     bool clearLatched_ = false;
 
     // Pose corrections (rejoinpolicy).
-    bool rejoin_ = true;
+    Rejoin rejoin_ = Rejoin::Verified;
+    int lastVerified_ = 0;  // the estimator's verified-correction count at the previous tick
     double rejoinS0_ = 0.0, rejoinD0_ = 0.0, rejoinLength_ = 0.0;
     double lastErr_ = 0.0;     // cross-track error from the reference at the previous tick
     bool haveLastErr_ = false;
