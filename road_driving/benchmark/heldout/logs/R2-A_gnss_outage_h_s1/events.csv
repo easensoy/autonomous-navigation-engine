@@ -1,0 +1,4 @@
+t,source,type,detail
+0.00,WORLD,EPISODE_START,network=R2;labels=SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE;start=J01>J11/0;goal=J31>J32/2;sensors=gnss_outage_h
+2.00,STACK,ROUTE_PLANNED,elements=19;engine=ACTIVE
+62.40,STACK,GOAL_REACHED,error=0.096
