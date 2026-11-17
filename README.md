@@ -262,8 +262,8 @@ the engine and the car stops before the barrier instead.
   with GCC 14.2 and MSVC 19.51. Cross-track error was at most 0.162 m, with no illegal move.
 - **Driving on its own estimate:** simulated GNSS, IMU, wheel-speed, steering and kerb-ranging sensors
   feed an EKF, and the stack drives on its output with no access to truth, keeping a margin from the kerb
-  that follows the estimate's uncertainty. Three predeclared evaluations, each on a network held out of
-  all tuning, compared estimators on identical recorded logs:
+  that follows the estimate's uncertainty. Four predeclared evaluations, each on a network held out of
+  all tuning, compared estimators and stacks on identical recorded logs:
   - First (R2): the GNSS + IMU + wheel EKF beat dead reckoning and two GNSS-only filters in at least 29
     of 30 paired runs in every condition. A 6 m multipath offset outlasting its 10 s reset failed 8 of
     210 runs.
@@ -278,9 +278,11 @@ the engine and the car stops before the barrier instead.
     never did; pooled 95th percentile 4.80 m against 54.8 m. Kerb re-localisation held the kerbs under
     the slow excursion: no failed run, and 40 of 40 episodes as the reference with no crossing. Ten of
     eleven criteria passed. The failure was one episode of 280: after a correct re-localisation mid-turn,
-    the stack's steering oscillated into a fallback stop, and the body went 0.91 m over the kerb. The
-    stack now re-joins its path after such a correction. On development reruns of R3 and R4 that removed
-    the crossing, and no pose source crossed more often or deeper
+    the stack's steering oscillated into a fallback stop, and the body went 0.91 m over the kerb.
+  - Fourth (R5): the stack's new re-join after pose corrections, each filter driven with and without it.
+    It had removed that crossing on development reruns. On R5 the failure never arose, and the kerb filters
+    were unaffected. With GNSS-only filters, already metres wrong, it changed which episodes crossed, at a
+    net cost of one crossing episode in five cells. Four of six criteria passed
     ([results](road_driving/LOCALISATION.md#results)).
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
@@ -350,9 +352,9 @@ caller reports; a step is one node.
 - **Tuning:** each evaluation was developed on earlier networks, then run once on a held-out network
   under a protocol pushed before the run.
 - **Known gaps:**
-  - After a large pose correction the stack's steering was lightly damped. The stack now re-joins its
-    path smoothly, which removed the held-out crossing on development reruns; a fresh held-out network has
-    not tested it yet.
+  - After a large pose correction the stack's steering is lightly damped. A smooth re-join removed that
+    crossing on development reruns, but on unseen roads it helped nothing and cost a little with GNSS-only
+    filters: the stack cannot tell a correction from a corruption by the jump alone.
   - With GNSS-only localisation, the clearance layer stops the car in every degraded-GNSS episode; so does
     losing kerbs and GNSS together with the kerb filter.
   - A slow GNSS excursion with no jump drags every GNSS-only filter.
@@ -430,7 +432,7 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - 2 benchmark smoke programs.
 - **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds four entries:
   - `test_road_driving` (288 checks);
-  - `test_localisation` (123 checks);
+  - `test_localisation` (142 checks);
   - a replay of the stored failing episode;
   - a replay of a changed copy, which must be rejected.
 
