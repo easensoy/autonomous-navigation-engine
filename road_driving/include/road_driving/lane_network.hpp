@@ -1,7 +1,9 @@
 #pragma once
-// Synthetic left-hand-traffic lane network. Lane segments and turning movements (connectors) are the
-// graph nodes, so one-way streets, banned turns and the absence of U-turns are expressed by which
-// nodes and directed edges exist. Geometry is in metres; nothing here comes from a real street.
+// Left-hand-traffic lane network. Lane segments and turning movements (connectors) are the graph nodes,
+// so one-way streets, banned turns and the absence of U-turns are expressed by which nodes and directed
+// edges exist. Geometry is in metres. The R1 to R7 grids are synthetic: nothing in them comes from a real
+// street. District networks (district.hpp) are built by the same rules from source-informed reconstructions
+// of real streets, and set `general`.
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -83,20 +85,35 @@ struct BannedTurn {
 struct Street {
     int a = -1, b = -1;
     double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
+    // District networks only (empty or zero on the grids): the real street's name, the centreline to kerb
+    // distance on the left and on the right of a -> b, the width of a central reservation and the modelled
+    // lane's offset from the centreline.
+    std::string name;
+    double halfWidth = 0.0, median = 0.0, laneOffset = 0.0, halfWidthRight = 0.0;
 };
 
 // The kerb, the edge of the carriageway, as straight lines and corner arcs (built with the network).
 struct KerbLine {
     double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
     double nx = 0.0, ny = 0.0;  // unit normal pointing into the carriageway
+    // District networks only. A patch edge closes the modelled carriageway where the street carries on
+    // beyond the modelled area: it bounds the road for clearance, but it is no kerb, so the scanner sees
+    // nothing there. The pseudo-normals at each end (the mean of the normals that meet there) give the
+    // side of a point whose nearest kerb point is that end.
+    bool boundary = false;
+    double nax = 0.0, nay = 0.0, nbx = 0.0, nby = 0.0;
 };
 struct KerbArc {
     double cx = 0.0, cy = 0.0, r = 0.0;  // the carriageway lies outside this circle
     double mid = 0.0, half = 0.0;        // the arc spans the directions mid +- half seen from the centre
+    double n0x = 0.0, n0y = 0.0, n1x = 0.0, n1y = 0.0;  // district networks: pseudo-normals at mid - half and mid + half
 };
 
 struct LaneNetwork {
     NetworkSpec spec;
+    // A district network (district.hpp): its kerb is exact, so roadClearance and kerbDistance take their
+    // sign from the kerb itself rather than from coarseClearance, and patch edges close its carriageway.
+    bool general = false;
     std::vector<Junction> junctions;
     std::vector<Lane> lanes;
     std::vector<Element> elements;
@@ -198,7 +215,7 @@ LaneNetwork buildR6(const NetworkSpec& spec = NetworkSpec{});
 // J12>J22 -> J22>J21 and no left turn J30>J31 -> J31>J21; tight junctions J23 and J41; a 40 m cul-de-sac
 // east of J42. Junction design as R2's.
 LaneNetwork buildR7(const NetworkSpec& spec = NetworkSpec{});
-// "R1" to "R7"; throws for any other name.
+// "R1" to "R7", or a district network ("KEN", "KNB": district.hpp); throws for any other name.
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec = NetworkSpec{});
 // A right-hand-traffic copy (x mirrored). validate() must reject it.
 LaneNetwork mirrored(const LaneNetwork& net);
