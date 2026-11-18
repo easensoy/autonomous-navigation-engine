@@ -25,7 +25,8 @@ QUALITY = {
 def parse_args(argv=None):
     p = argparse.ArgumentParser(prog="ane_viewer", description="Live 3D driving and localisation viewer for road_driving.")
     p.add_argument("--backend", help="path to road_drive (default: the build folders, or $ANE_BACKEND)")
-    p.add_argument("--demo", default="C", choices=["A", "B", "C", "S"], help="demonstration to start with (default C)")
+    p.add_argument("--demo", default="C", choices=["A", "B", "C", "S", "K", "N"],
+                   help="demonstration to start with (default C; K Kensington, N Knightsbridge)")
     p.add_argument("--scenario", help="start a custom configuration instead of a demonstration")
     p.add_argument("--condition", default="nominal_r7")
     p.add_argument("--estimator", default="ekf_kerb2")
@@ -44,6 +45,19 @@ def parse_args(argv=None):
     p.add_argument("--hide-panels", action="store_true")
     p.add_argument("--legend", action="store_true", help="show the legend at start")
     p.add_argument("--record-video", help="record the episode to this MP4 (lock-step, real time) and stop at its end")
+    p.add_argument("--record-fps", type=int, default=50, help="video frame rate; it must divide the 100 Hz tick rate (default 50: 2 ticks a frame)")
+    p.add_argument("--record-size", help="render the recording offscreen at this size, e.g. 1920x1080 (default: the window's)")
+    p.add_argument("--crf", type=int, default=18, help="x264 quality (default 18)")
+    p.add_argument("--preset", default="slow", help="x264 preset (default slow)")
+    p.add_argument("--frame-log", help="log every recorded frame (tick, camera, HUD clock) to this JSON-lines file")
+    p.add_argument("--hud", default="diagnostic", choices=["diagnostic", "present"], help="full diagnostic panels, or the compact presentation overlay")
+    p.add_argument("--director", default="", help="a camera sequence for recordings: a plan name (KEN-A, KNB-A, default) or 'auto'")
+    p.add_argument("--title", default="", help="a title card before the episode (recordings)")
+    p.add_argument("--subtitle", default="")
+    p.add_argument("--card-note", default="")
+    p.add_argument("--card-seconds", type=float, default=3.0)
+    p.add_argument("--end-seconds", type=float, default=2.5)
+    p.add_argument("--stop-at", type=float, default=0.0, help="end a recording at this simulated time (s), for trial runs")
     p.add_argument("--camera-at", default="", help="camera changes at simulated times, e.g. '0:chase,40:orbit@25,50:overhead@60'")
     p.add_argument("--inject-at", default="", help="operator commands at simulated times, e.g. '15:gnss_bias,30:close,45:reopen,50:save'")
     p.add_argument("--save-session", help="save the session to this file when the episode ends")
@@ -121,6 +135,11 @@ class Viewer(ShowBase):
         fog.setLinearRange(220.0, 900.0)
         self.render.setFog(fog)
 
+        self.font, self.bold = self._fonts()
+        if self.font:
+            from panda3d.core import TextNode
+            TextNode.setDefaultFont(self.font)
+        self.amb = amb
         self.state = SimState()
         self.overlays = Overlays(self.render)
         self.cameras = Cameras(self)
@@ -166,9 +185,21 @@ class Viewer(ShowBase):
             self.hud.toggle_visible()
         if args.legend:
             self.hud.legend.show()
+        from .presentation import PresentHud
+        self.present = PresentHud(self, self.font, self.bold)
+        self.hud_mode = None
+        self.set_hud_mode(args.hud)
+        self.kerb = None
+        self.director = None
+        self.target = None
+        self.frame_log = None
+        self.rec_phase = None
+        self.rec_cards = 0
+        self.k_ticks = 2
+        self.clock_text = ""
 
         backend_args = ["--speed", "%g" % args.speed]
-        if args.paused:
+        if args.paused or args.record_video:
             backend_args += ["--paused", "on"]
         if args.replay:
             backend_args += ["--replay", str(pathlib.Path(args.replay).resolve())]
@@ -213,6 +244,10 @@ class Viewer(ShowBase):
         k("z", self.toggle_zones)
         k("d", self.detach_orbit)
         k("tab", self.hud.toggle_visible)
+        k("m", self.toggle_hud_mode)
+        k("v", self.toggle_provenance)
+        for key, d in (("f5", "K"), ("f6", "N")):
+            k(key, self.start_demo, [d])
         k("f12", self.screenshot_now)
         k("f9", self.toggle_record)
         k("[", self.speed_step, [0.5])
@@ -358,6 +393,45 @@ class Viewer(ShowBase):
         if self.ghost:
             (self.ghost.root.show if on else self.ghost.root.hide)()
 
+    def _fonts(self):
+        """A clear sans-serif for the panels where one is installed (Segoe UI on Windows, DejaVu elsewhere)."""
+        for regular, bold in (("C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/segoeuib.ttf"),
+                              ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")):
+            if pathlib.Path(regular).is_file():
+                from panda3d.core import Filename
+                fonts = []
+                try:
+                    for path in (regular, bold if pathlib.Path(bold).is_file() else regular):
+                        f = self.loader.loadFont(Filename.fromOsSpecific(path).getFullpath())
+                        f.setPixelsPerUnit(72)
+                        fonts.append(f)
+                except (IOError, OSError, TypeError):
+                    return None, None
+                return fonts[0], fonts[1]
+        return None, None
+
+    def set_hud_mode(self, mode):
+        self.hud_mode = mode
+        present = mode == "present"
+        self.present.show(present)
+        for w in (self.hud.banner, self.hud.title, self.hud.disclaimer):
+            (w.hide if present else w.show)()
+        if present and self.hud.visible:
+            self.hud.toggle_visible()
+        elif not present and not self.hud.visible and not self.args.hide_panels:
+            self.hud.toggle_visible()
+        self.overlays.labels = not present
+        self.overlays.compact = present
+
+    def toggle_hud_mode(self):
+        self.set_hud_mode("diagnostic" if self.hud_mode == "present" else "present")
+
+    def toggle_provenance(self):
+        if self.world:
+            n = self.world.find("provenance")
+            if not n.isEmpty():
+                (n.hide if not n.isHidden() else n.show)()
+
     def toggle_zones(self):
         if self.world:
             z = self.world.find("zones")
@@ -382,46 +456,137 @@ class Viewer(ShowBase):
         return path
 
     def toggle_record(self, path=None):
-        from .capture import VideoWriter
+        from .capture import FrameLog, OffscreenTarget, VideoWriter, ticks_per_frame
         if self.video:
             self._stop_recording()
             return
         if not path:
             path = pathlib.Path(self.args.shot_dir) / ("video_%s.mp4" % datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
-        props = self.win.getProperties()
-        self.video = VideoWriter(path, props.getXSize(), props.getYSize(), fps=25)
+        fps = self.args.record_fps
+        self.k_ticks = ticks_per_frame(fps)
+        if self.args.record_size:
+            w, h = (int(v) for v in self.args.record_size.lower().split("x"))
+            self.target = OffscreenTarget(self, w, h, QUALITY[self.quality]["msaa"] or 8)
+            print("recording offscreen at %dx%d, %dx MSAA" % (w, h, self.target.samples), flush=True)
+        else:
+            props = self.win.getProperties()
+            w, h = props.getXSize(), props.getYSize()
+        self.video = VideoWriter(path, w, h, fps=fps, crf=self.args.crf, preset=self.args.preset)
+        if self.args.frame_log:
+            self.frame_log = FrameLog(self.args.frame_log)
         self.send_cmd(self.protocol.pause())
         self.paused = True
         self._lock_target = None
-        self._capture_next = False
+        self._last_run_tick = None
+        self.rec_phase = "title" if self.args.title else "run"
+        self.rec_cards = 0
         self.hud.set_toggle("record", True, "Stop video")
 
     def _stop_recording(self):
         out = self.video.close()
-        print("video: %s (%d frames at 25 fps)" % (out, self.video.frames), flush=True)
+        print("video: %s (%d frames at %d fps)" % (out, self.video.frames, self.video.fps), flush=True)
+        if self.frame_log:
+            self.frame_log.close()
+            self.frame_log = None
+        if self.target:
+            self.target.close(self)
+            self.target = None
         self.video = None
+        self.rec_phase = None
+        self.present.hide_card()
         self.hud.set_toggle("record", False, "Record video")
         if not self.state.end:
             self.paused = False
             self.send_cmd(self.protocol.resume())
 
+    def _view(self, dt):
+        """The camera (and the director's cut, the labels' scale, the sun) for the tick on screen."""
+        tk = self.state.tick
+        tr = tk["truth"]
+        while self.camera_plan and tk["t"] >= self.camera_plan[0][0]:
+            self.set_camera(self.camera_plan.pop(0)[1])
+        if self.director:
+            self.director.update(self.state, dt)
+        self.cameras.update(dt, tr)
+        self.overlays.scale_labels(self.camera.getPos(self.render))
+        self.sun.setPos(tr["x"] + 60.0, tr["y"] - 80.0, 120.0)
+        self.sun.lookAt(tr["x"], tr["y"], 0.0)
+
+    def _capture(self, phase):
+        """Draw this tick's frame (camera, HUD) and hand it to the encoder; log it. The camera advances by one
+        frame of simulated time (k ticks), so its path is the same however fast frames render."""
+        tk = self.state.tick
+        self._view(self.k_ticks * 0.01)
+        self._update_hud()
+        self.graphicsEngine.renderFrame()
+        ok = self.video.add_texture(self.target.tex) if self.target else self.video.add(self)
+        if self.frame_log:
+            info = self.cameras.info
+            self.frame_log.write(tick=tk["tick"] if tk else None, t=tk["t"] if tk else None, phase=phase,
+                                 shot=self.director.current if self.director else self.cameras.mode, camera=self.cameras.mode, pos=info.get("pos"),
+                                 inside=bool(info.get("inside")), share=round(info.get("share", 1.0), 3), clock=self.clock_text, ok=ok)
+
     def _lockstep(self):
-        """Video: capture the frame just shown (it drew the target tick), then advance exactly 4 ticks."""
+        """Video: the frame for each recorded tick, then advance exactly k ticks (2 at 50 fps)."""
         tk = self.state.tick
         if tk is None:
+            # A recording starts the backend paused, before its first tick: ask for that tick (t = 0.01 s).
+            if self.vehicle is not None and not getattr(self, "_first_step", False):
+                self._first_step = True
+                self.send_cmd(self.protocol.step(self.k_ticks))  # every frame then falls on a multiple of k ticks
             return
-        if self._capture_next:
-            self.video.add(self)
-            self._capture_next = False
-            self._lock_target = None
-        if self.state.end is not None:
-            self._stop_recording()
+        if self.frame_log and not getattr(self, "_config_noted", False):
+            self._config_noted = True
+            self.frame_log.note({"type": "config", "config": self.state.config, "labels": (self.state.session or {}).get("labels"),
+                                 "backend": (self.state.session or {}).get("backend"), "quality": self.quality,
+                                 "size": [self.video.width, self.video.height], "fps": self.video.fps, "ticks_per_frame": self.k_ticks,
+                                 "msaa": self.target.samples if self.target else None, "crf": self.args.crf, "preset": self.args.preset,
+                                 "renderer": self.win.getGsg().getDriverRenderer(), "director": self.args.director})
+        if self.vehicle is None:
+            return
+        fps = self.video.fps
+        self.mainWinMinimized = 0
+        if self.rec_phase == "title":
+            if self.rec_cards == 0:
+                self.present.show_card(self.args.title, self.args.subtitle, self.args.card_note)
+            self._capture("title")
+            self.rec_cards += 1
+            if self.rec_cards >= int(round(self.args.card_seconds * fps)):
+                self.present.hide_card()
+                self.rec_phase = "run"
+                self.rec_cards = 0
+            return
+        if self.rec_phase == "end":
+            self._capture("end")
+            self.rec_cards += 1
+            if self.rec_cards >= int(round(self.args.end_seconds * fps)):
+                self._stop_recording()
             return
         if self._lock_target is None:
-            self._lock_target = tk["tick"] + 4
-            self.send_cmd(self.protocol.step(4))
-        elif tk["tick"] >= self._lock_target:
-            self._capture_next = True
+            if tk["tick"] != self._last_run_tick:
+                self._capture("run")
+                self._last_run_tick = tk["tick"]
+            # else the episode ended on the tick just recorded, and its end message came in after that frame
+            if self.args.stop_at and tk["t"] >= self.args.stop_at:
+                self._stop_recording()
+                self.userExit()
+                return
+            if self.state.end is not None:
+                self.rec_phase = "end"
+                self.rec_cards = 0
+                e = self.state.end
+                if self.frame_log:
+                    self.frame_log.note(dict(e, director=self.director.log if self.director else []))
+                m = e.get("metrics", {})
+                self.present.show_card(e["outcome"].replace("_", " ").title() + " at %.1f s" % e["t"],
+                                       "position error RMSE %.2f m, largest %.2f m;  deepest kerb crossing %.2f m" % (
+                                           m.get("est_rmse", -1.0), m.get("est_max", -1.0), m.get("max_crossing", 0.0)),
+                                       "trace %s  |  the backend's own evaluation of this run, from simulator truth" % e.get("trace_hash", "-"))
+                return
+            self._lock_target = tk["tick"] + self.k_ticks
+            self.send_cmd(self.protocol.step(self.k_ticks))
+        elif tk["tick"] >= self._lock_target or self.state.end is not None:
+            self._lock_target = None
 
     # ---- Frame ------------------------------------------------------------------------------------
     def _rebuild_world(self):
@@ -432,6 +597,31 @@ class Viewer(ShowBase):
         scene = self.state.scene
         self.world = world.build(scene, self.quality)
         self.world.reparentTo(self.render)
+        self.cameras.set_occluders(self.world.getPythonTag("occluders"))
+        from .district_layout import Kerb
+        try:
+            self.kerb = Kerb(scene["map"])
+        except ValueError:
+            self.kerb = None
+        district = scene["map"].get("district")
+        report = self.world.getPythonTag("district_report")
+        if report:
+            print("district scene: " + json.dumps(report), flush=True)
+        # District scenes: a softer, warmer daylight with a cool fill from the opposite side, and a lighter
+        # tint on the sensor-condition zones, which would otherwise hide the road surface.
+        if district:
+            self.amb.setColor((0.46, 0.49, 0.55, 1))
+            self.sun.node().setColor((0.92, 0.88, 0.78, 1))
+            z = self.world.find("zones")
+            if not z.isEmpty():
+                z.setAlphaScale(0.55)
+                if self.hud_mode == "present":
+                    z.hide()  # the presentation overlay reports the conditions; the zone tint would hide the road (key Z shows it)
+        plan_name = self.args.director
+        if plan_name:
+            from .director import PLANS, Director
+            key = plan_name if plan_name in PLANS else (self.state.config.get("scenario") if plan_name == "auto" else "default")
+            self.director = Director(self, PLANS.get(key, PLANS["default"]))
         params = scene["vehicle"]
         if self.vehicle is None or self.vehicle.params != params:
             if self.vehicle:
@@ -476,15 +666,11 @@ class Viewer(ShowBase):
                 self.ghost.set_pose(est["x"], est["y"], est["yaw"])
             else:
                 self.ghost.root.hide()
-            self.overlays.update(self.state, self._frame)
+            self.overlays.update(self.state, self._frame if self.video is None else 0)
             self.overlays.footprints(self.state.scene["vehicle"], tr, est)
-            while self.camera_plan and tk["t"] >= self.camera_plan[0][0]:
-                self.set_camera(self.camera_plan.pop(0)[1])
             self.cameras.mouse(self.mouseWatcherNode.isButtonDown("mouse3"), self.mouseWatcherNode.isButtonDown("mouse2"))
-            self.cameras.update(dt, tr)
-            self.overlays.scale_labels(self.camera.getPos(self.render))
-            self.sun.setPos(tr["x"] + 60.0, tr["y"] - 80.0, 120.0)
-            self.sun.lookAt(tr["x"], tr["y"], 0.0)
+            if self.video is None:
+                self._view(dt)
             while self.inject_plan and tk["t"] >= self.inject_plan[0][0] and self.state.mode == "live":
                 self.inject(self.inject_plan.pop(0)[1])
             while self.shots and tk["t"] >= self.shots[0]:
@@ -495,7 +681,8 @@ class Viewer(ShowBase):
             self._update_hud()
         if dt > 0:
             self.fps_samples.append(dt)
-        if self.args.record_video and self.video is None and tk is not None and not getattr(self, "_recorded", False) and self.state.mode != "idle":
+        if (self.args.record_video and self.video is None and self.state.scene is not None and self.vehicle is not None
+                and not getattr(self, "_recorded", False) and self.state.mode != "idle"):
             self._recorded = True
             self.toggle_record(self.args.record_video)
         if self.video:
@@ -536,12 +723,14 @@ class Viewer(ShowBase):
         st = self.state
         h = self.hud
         mode = st.mode
+        if self.hud_mode == "present":
+            self.clock_text = self.present.update(st, "REPLAY" if mode == "replay" else "LIVE", recording=self.video is not None)
         run = (st.status.get("state") or "starting").upper()
         if mode == "replay":
             h.banner.setText("REPLAY  -  recorded session, %s" % run)
             h.banner["fg"] = (1.0, 0.62, 0.15, 1.0)
         elif self.video:
-            h.banner.setText("LIVE  -  recording in lock-step: 4 ticks per frame, 25 frames per second")
+            h.banner.setText("LIVE  -  recording in lock-step: %d ticks per frame, %d frames per second" % (self.k_ticks, self.video.fps))
             h.banner["fg"] = (0.30, 0.95, 0.40, 1.0)
         else:
             h.banner.setText("LIVE  -  simulation %s" % run)
@@ -581,6 +770,13 @@ class Viewer(ShowBase):
         for k in ("A", "B", "C", "S"):
             h.set_toggle("demo" + k, bool(self.demo) and self.demo.key == k and mode == "live")
         h.set_toggle("quality", False, self.quality.capitalize())
+
+    def windowEvent(self, win):
+        ShowBase.windowEvent(self, win)
+        if self.args.record_video or getattr(self, "video", None) is not None:
+            # ShowBase sleeps 100 ms a frame while the main window is minimized. A recording draws offscreen
+            # and never needs the preview window on screen, so it keeps going at full speed.
+            self.mainWinMinimized = 0
 
     def stop_backend(self):
         if self.video:
