@@ -1,5 +1,6 @@
 #include "road_driving/episode.hpp"
 
+#include "road_driving/district.hpp"
 #include "road_driving/drive_path.hpp"
 #include "live_hooks.hpp"
 #include "stack.hpp"
@@ -316,6 +317,9 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
         spanZones(cond.ramp, r.zones.ramp);
         spanZones(cond.kerbBlackout, r.zones.kerbBlackout);
         spanZones(cond.kerbShift, r.zones.kerbShift);
+        if (cond.parked.active() && net.general) {
+            throw std::runtime_error("parked cars are placed for the grid networks' widths only, not on district network " + sc.network);
+        }
         if (cond.parked.active()) {
             // Parked cars against the opposite kerb along the route's lanes (not in junctions): unmapped
             // objects for the kerb scanner, outside the car's own lane.
@@ -350,8 +354,9 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     present = sc.closure;
     double tRest = -1.0;
     std::vector<LogEvent> world;
+    const std::string roads = net.general ? "SOURCE_INFORMED_ROADS" : "SYNTHETIC_ROADS";  // a district network: district.hpp
     const std::string labels =
-        estimatedMode ? "SYNTHETIC_ROADS,ESTIMATED_POSE(" + sc.estimator + "),ORACLE_CLOSURE" : "SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE";
+        estimatedMode ? roads + ",ESTIMATED_POSE(" + sc.estimator + "),ORACLE_CLOSURE" : roads + ",GROUND_TRUTH_POSE,ORACLE_CLOSURE";
     world.push_back({0.0, "WORLD", "EPISODE_START",
                      "network=" + sc.network + ";labels=" + labels + ";start=" + net.elements[static_cast<size_t>(startElem)].name +
                          ";goal=" + net.elements[static_cast<size_t>(goalElem)].name +
@@ -698,13 +703,23 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     return r;
 }
 
+// The manifest's first labels: the grids' fixed lines (as every manifest written so far has them), or a
+// district network's own.
+static std::string districtManifestLines(const std::string& network) {
+    DistrictSpec d;
+    if (!findDistrict(network, d)) {
+        return "labels=SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE\nnetwork=R1 synthetic left-hand-traffic grid, 20 mph, no real geometry\n";
+    }
+    return "labels=SOURCE_INFORMED_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE\nnetwork=" + d.id + " " + d.title +
+           ": source-informed reconstruction with approximated details (" + d.source + "; " + d.licence + "), not a surveyed model\n";
+}
+
 std::string manifestText(const EpisodeResult& r) {
     const Scenario& s = r.scenario;
     const Metrics& m = r.metrics;
     std::ostringstream o;
     o << "format=road-driving-episode/1\n"
-      << "labels=SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE\n"
-      << "network=R1 synthetic left-hand-traffic grid, 20 mph, no real geometry\n"
+      << districtManifestLines(s.network)
       << "vehicle=ipace_proxy_v1 kinematic bicycle (approximate I-PACE dimensions)\n"
       << "scenario=" << s.name << "\nclass=" << s.scenarioClass << "\nvariant=" << variantName(s.variant) << "\nseed=" << s.seed
       << "\nmax_segment=" << exact(s.maxSegment) << "\nstart_lane=" << s.startLane << "\nstart_lane_s=" << exact(s.startLaneS)
