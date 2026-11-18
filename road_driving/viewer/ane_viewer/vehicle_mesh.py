@@ -60,6 +60,7 @@ class Mesh:
     def __init__(self, name):
         self.name = name
         self.v, self.c, self.t = [], [], []
+        self.n = None  # optional per-vertex normals; otherwise computed from the triangles
 
     def add(self, pts, color, tris):
         base = len(self.v)
@@ -146,85 +147,224 @@ def cylinder(mesh, cx, cy, cz, r, h, color, axis="z", seg=24, caps=True, top_col
             mesh.add(fan, top_color if (up and top_color) else color, ft)
 
 
+GAP = 0.004  # m: glass and lamps stand this far off the paint, along the surface normal
+
+
+def _section(params, u):
+    """The loft's cross-section at station u (0 rear bumper, 1 front bumper): x, bottom, top, beltline, half-width."""
+    x = -params["rear_overhang"] + u * params["length"]
+    zb, zt, wf, belt = _lerp_profile(u)
+    scale = HEIGHT / 1.565
+    zb, zt, belt = zb * scale, zt * scale, belt * scale
+    # Wheel arches: lift the underside over each wheel.
+    for xw in (0.0, params["wheelbase"]):
+        dx = x - xw
+        R = WHEEL_RADIUS + 0.06
+        if abs(dx) < R:
+            zb = max(zb, WHEEL_RADIUS + math.sqrt(R * R - dx * dx) * 0.98)
+    return x, zb, zt, belt, 0.5 * params["width"] * wf
+
+
+def _ring_point(sec, phi):
+    """The body surface at ring angle phi: 0 at the bottom centre, increasing towards +y (left), pi on top."""
+    x, zb, zt, belt, a = sec
+    b, zc = 0.5 * (zt - zb), 0.5 * (zt + zb)
+    s, c = math.sin(phi), -math.cos(phi)
+    p = 3.2
+    y = a * math.copysign(abs(s) ** (2.0 / p), s)
+    z = zc + b * math.copysign(abs(c) ** (2.0 / p), c)
+    if z > belt and zt > belt:
+        y *= 1.0 - 0.27 * _smooth((z - belt) / (zt - belt))
+    return (x, y, z)
+
+
+def _phi_where(sec, f, target):
+    """The ring angle on the upper left quarter (pi/2 to pi, where z rises and y falls) at which f(point)
+    equals target, or None if it does not get there."""
+    lo, hi = 0.5 * math.pi, math.pi
+    g_lo = f(_ring_point(sec, lo)) - target
+    if g_lo * (f(_ring_point(sec, hi)) - target) > 0.0:
+        return None
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if (f(_ring_point(sec, mid)) - target > 0.0) == (g_lo > 0.0):
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def _z_at(z):
+    return lambda sec: _phi_where(sec, lambda q: q[2], z)
+
+
+def _y_at(frac):
+    return lambda sec: _phi_where(sec, lambda q: q[1], frac * sec[4])
+
+
+def _first(*phis):
+    """The lowest of the ring angles that exist (None if none does)."""
+    phis = [f for f in phis if f is not None]
+    return min(phis) if phis else None
+
+
+def _normal(params, u, phi):
+    e = 1e-4
+    sec = _section(params, u)
+    pu0 = _ring_point(_section(params, max(0.0, u - e)), phi)
+    pu1 = _ring_point(_section(params, min(1.0, u + e)), phi)
+    pf0, pf1 = _ring_point(sec, phi - e), _ring_point(sec, phi + e)
+    du = [b - a for a, b in zip(pu0, pu1)]
+    df = [b - a for a, b in zip(pf0, pf1)]
+    n = (du[1] * df[2] - du[2] * df[1], du[2] * df[0] - du[0] * df[2], du[0] * df[1] - du[1] * df[0])
+    p = _ring_point(sec, phi)
+    out = (0.0, p[1], p[2] - 0.5 * (sec[1] + sec[2]))
+    if n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0.0:
+        n = (-n[0], -n[1], -n[2])
+    L = math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2) or 1.0
+    return (n[0] / L, n[1] / L, n[2] / L)
+
+
+def _add_quads(mesh, grid, colour, mirror=False):
+    """Quads between rows of (point, normal) of equal length, each wound to face along its normals."""
+    for r0, r1 in zip(grid, grid[1:]):
+        if r0 is None or r1 is None:
+            continue
+        for j in range(len(r0) - 1):
+            quad = [r0[j], r0[j + 1], r1[j + 1], r1[j]]
+            if mirror:
+                quad = [((x, -y, z), (nx, -ny, nz)) for (x, y, z), (nx, ny, nz) in quad]
+            pts = [q[0] for q in quad]
+            nrm = [sum(q[1][i] for q in quad) for i in range(3)]
+            (ax, ay, az), (bx, by, bz), (cx, cy, cz) = pts[0], pts[1], pts[2]
+            ux, uy, uz, wx, wy, wz = bx - ax, by - ay, bz - az, cx - ax, cy - ay, cz - az
+            face = (uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx)
+            tris = [(0, 1, 2), (0, 2, 3)] if sum(f * n for f, n in zip(face, nrm)) > 0.0 else [(0, 2, 1), (0, 3, 2)]
+            base = len(mesh.v)
+            for pt, n in quad:
+                mesh.v.append(pt)
+                mesh.c.append(colour)
+                mesh.n.append(n)
+            mesh.t += [(base + a, base + b, base + c) for a, b, c in tris]
+
+
+def _patch(mesh, params, u0, u1, lo, hi, colour, nu=24, nt=10, across=False):
+    """Glass or a lamp on the body surface, lifted GAP off the paint: from station u0(t) to u1(t), and at each
+    station from ring angle lo(sec) to hi(sec), t running from lo to hi. The left one and its mirror image on
+    the right; with `across`, one patch from lo on the left over the top to its mirror on the right (a screen)."""
+    rows = []
+    for i in range(nu + 1):
+        s = i / nu
+        row = []
+        for j in range(nt + 1):
+            t = j / nt
+            u = u0(t) + (u1(t) - u0(t)) * s
+            sec = _section(params, u)
+            a = lo(sec)
+            b = None if across else hi(sec)
+            if a is None or (not across and (b is None or b <= a)):
+                row = None
+                break
+            phi = a + (2.0 * math.pi - 2.0 * a) * t if across else a + (b - a) * t
+            pt = _ring_point(sec, phi)
+            n = _normal(params, u, phi)
+            row.append(((pt[0] + n[0] * GAP, pt[1] + n[1] * GAP, pt[2] + n[2] * GAP), n))
+        rows.append(row)
+    _add_quads(mesh, rows, colour)
+    if not across:
+        _add_quads(mesh, rows, colour, mirror=True)
+
+
+def _const(v):
+    return lambda t: v
+
+
 def body(params, stations=72, ring=40):
-    """The lofted body with windows, trim, lights and arches, as one mesh."""
-    L = params["length"]
-    W = params["width"]
-    xr = -params["rear_overhang"]
-    wb = params["wheelbase"]
+    """The lofted body with its trim and arches, and its glass and lamps laid on as smooth patches of its
+    surface, so their outlines follow the body's lines rather than the mesh's quads."""
     mesh = Mesh("body")
     rings = []
     colors = []
     for i in range(stations + 1):
         u = i / stations
-        x = xr + u * L
-        zb, zt, wf, belt = _lerp_profile(u)
-        scale = HEIGHT / 1.565
-        zb, zt, belt = zb * scale, zt * scale, belt * scale
-        # Wheel arches: lift the underside over each wheel.
-        for xw in (0.0, wb):
-            dx = x - xw
-            R = WHEEL_RADIUS + 0.06
-            if abs(dx) < R:
-                zb = max(zb, WHEEL_RADIUS + math.sqrt(R * R - dx * dx) * 0.98)
-        a = 0.5 * W * wf
-        b = 0.5 * (zt - zb)
-        zc = 0.5 * (zt + zb)
-        pts, cols = [], []
-        for k in range(ring):
-            phi = 2.0 * math.pi * k / ring  # 0 at the bottom centre, increasing towards +y (left)
-            s, c = math.sin(phi), -math.cos(phi)
-            p = 3.2
-            y = a * math.copysign(abs(s) ** (2.0 / p), s)
-            z = zc + b * math.copysign(abs(c) ** (2.0 / p), c)
-            if z > belt and zt > belt:
-                y *= 1.0 - 0.27 * _smooth((z - belt) / (zt - belt))
-            pts.append((x, y, z))
-            cols.append(_body_colour(u, x, y, z, zb, zt, belt, a, wb, xr, L))
+        sec = _section(params, u)
+        pts = [_ring_point(sec, 2.0 * math.pi * k / ring) for k in range(ring)]
         rings.append(pts)
-        colors.append(cols)
+        colors.append([_body_colour(u, q[1], q[2], sec[1], sec[4]) for q in pts])
+    # Smooth normals over the whole loft grid, so the shading runs on across stations.
+    acc = [[[0.0, 0.0, 0.0] for _ in range(ring)] for _ in range(stations + 1)]
     for i in range(stations):
-        base = len(mesh.v)
-        for k in range(ring):
-            mesh.v.append(rings[i][k])
-            mesh.c.append(colors[i][k])
-        for k in range(ring):
-            mesh.v.append(rings[i + 1][k])
-            mesh.c.append(colors[i + 1][k])
         for k in range(ring):
             j = (k + 1) % ring
-            mesh.t += [(base + k, base + ring + j, base + ring + k), (base + k, base + j, base + ring + j)]
+            for tri in (((i, k), (i + 1, j), (i + 1, k)), ((i, k), (i, j), (i + 1, j))):
+                (ax, ay, az), (bx, by, bz), (cx, cy, cz) = (rings[a][b] for a, b in tri)
+                ux, uy, uz = bx - ax, by - ay, bz - az
+                wx, wy, wz = cx - ax, cy - ay, cz - az
+                f = (uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx)
+                for a, b in tri:
+                    acc[a][b][0] += f[0]
+                    acc[a][b][1] += f[1]
+                    acc[a][b][2] += f[2]
+    grid_n = [[tuple(v / (math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2) or 1.0) for v in n) for n in row] for row in acc]
+    mesh.n = []
+    # One colour per quad (the most common of its corners'), so the sills and grille keep crisp edges.
+    for i in range(stations):
+        for k in range(ring):
+            j = (k + 1) % ring
+            corners = ((i, k), (i, j), (i + 1, j), (i + 1, k))
+            cols = [colors[a][b] for a, b in corners]
+            col = max(cols, key=cols.count)
+            base = len(mesh.v)
+            for a, b in corners:
+                mesh.v.append(rings[a][b])
+                mesh.c.append(col)
+                mesh.n.append(grid_n[a][b])
+            mesh.t += [(base, base + 2, base + 3), (base, base + 1, base + 2)]
     # End caps.
     for idx, front in ((0, False), (stations, True)):
         pts = rings[idx]
         cx = sum(p[0] for p in pts) / len(pts)
         cz = sum(p[2] for p in pts) / len(pts)
         fan = [(cx, 0.0, cz)] + pts
-        col = [TRIM if front else WHITE] + colors[idx]  # grille dark at the front; body colour behind the tail band
+        col = [TRIM if front else WHITE] + colors[idx]  # grille dark at the front
         tris = [(0, k + 1, (k + 1) % ring + 1) if front else (0, (k + 1) % ring + 1, k + 1) for k in range(ring)]
         mesh.add(fan, col, tris)
+    flat = mesh.normals()  # the end caps: their own (flat) normals
+    mesh.n += flat[len(mesh.n):]
+
+    # Glass: two side windows a side, with the B- and C-pillars in body colour, the windscreen and the rear
+    # screen. The side glass runs from just above the beltline to the roof rail.
+    sill = lambda sec: _phi_where(sec, lambda q: q[2], sec[3] + 0.03)
+    rail = lambda sec: (lambda a: None if a is None else a - 0.03)(_first(_y_at(0.62)(sec), _z_at(sec[2] - 0.05)(sec)))
+    _patch(mesh, params, _const(0.500), lambda t: 0.708 - 0.045 * t, sill, rail, GLASS)   # front door, A-pillar raked
+    _patch(mesh, params, lambda t: 0.172 + 0.05 * t, _const(0.456), sill, rail, GLASS)   # rear door and quarter
+    screen = lambda sec: (lambda a: None if a is None else a + 0.03)(_y_at(0.62)(sec))
+    _patch(mesh, params, _const(0.598), _const(0.706), screen, None, GLASS, nu=14, nt=24, across=True)
+    _patch(mesh, params, _const(0.042), _const(0.158), screen, None, GLASS, nu=14, nt=24, across=True)
+    # Lamps: slim headlights at the front corners, and the tail lamps round the rear corners.
+    _patch(mesh, params, _const(0.935), _const(0.99), _z_at(0.60), lambda sec: _first(_z_at(0.69)(sec), _y_at(0.48)(sec)),
+           LIGHT, nu=8, nt=4)
+    _patch(mesh, params, _const(0.0), _const(0.028), _z_at(0.87), _z_at(0.95), TAIL, nu=4, nt=4)
+    # The light bar across the tail (the rear end cap), between the corner lamps.
+    sec0 = _section(params, 0.0)
+    rows = []
+    for z in (0.87, 0.89, 0.91, 0.93, 0.95):
+        phi = _phi_where(sec0, lambda q: q[2], z)
+        if phi is None:
+            rows.append(None)
+            continue
+        w = abs(_ring_point(sec0, phi)[1]) - 0.01
+        rows.append([((sec0[0] - 0.5 * GAP, w * (2.0 * k / 10 - 1.0), z), (-1.0, 0.0, 0.0)) for k in range(11)])
+    _add_quads(mesh, rows, TAIL)
     return mesh
 
 
-def _body_colour(u, x, y, z, zb, zt, belt, a, wb, xr, L):
+def _body_colour(u, y, z, zb, a):
     ay = abs(y)
     if z < zb + 0.07:
         return TRIM  # sills and the edge of each wheel arch (the underside is lifted over the wheels)
     if u > 0.955 and 0.33 < z < 0.56 and ay < 0.55 * a:
         return TRIM  # grille
-    if u > 0.93 and 0.60 < z < 0.70 and ay > 0.48 * a:
-        return LIGHT
-    if u < 0.03 and 0.86 < z < 0.98:
-        return TAIL
-    roof_rim = zt - 0.045
-    if z > belt + 0.015 and z < roof_rim:
-        side = ay > 0.62 * a
-        if 0.165 < u < 0.715 and side and not (0.462 < u < 0.494):
-            return GLASS  # side windows, B-pillar left in body colour
-        if 0.585 < u < 0.715 and not side:
-            return GLASS  # windscreen
-        if 0.035 < u < 0.165 and not side:
-            return GLASS  # rear screen below the spoiler
     return WHITE
 
 
