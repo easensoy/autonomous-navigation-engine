@@ -50,6 +50,9 @@ RouteSpec route(const std::string& name) {
     for (const RouteSpec& r : benchmarkRoutesR6()) {
         if (r.name == name) return r;
     }
+    for (const RouteSpec& r : benchmarkRoutesR7()) {
+        if (r.name == name) return r;
+    }
     return {};
 }
 
@@ -289,7 +292,7 @@ void testHeldOutNetwork() {
 
 // ---- L13 kerb geometry ---------------------------------------------------------------------------------
 void testKerbGeometry() {
-    for (const char* name : {"R1", "R2", "R3", "R4", "R5", "R6"}) {
+    for (const char* name : {"R1", "R2", "R3", "R4", "R5", "R6", "R7"}) {
         const LaneNetwork net = buildNetwork(name);
         std::uint64_t st = 12345;
         auto uni = [&](double a, double b) {
@@ -797,7 +800,7 @@ void testRejoinSwitch() {
 }
 
 // ---- L24 network R6 ------------------------------------------------------------------------------------
-// Static checks only: R6 is held out, so nothing drives on it here.
+// Static checks, written while R6 was held out (L26 drives on it as development data).
 void testR6() {
     const LaneNetwork r6 = buildR6();
     const VehicleParams vp;
@@ -832,6 +835,105 @@ void testR6() {
     }
 }
 
+// ---- L25 network R7 ------------------------------------------------------------------------------------
+// Static checks only: R7 is held out, so nothing drives on it here.
+void testR7() {
+    const LaneNetwork r7 = buildR7();
+    const VehicleParams vp;
+    check(r7.validate().empty(), "L25 R7 passes every map invariant");
+    double worst = 1e9;
+    for (const Element& e : r7.elements) {
+        if (!e.isConnector()) continue;
+        for (const PathPoint& p : e.pts) {
+            worst = std::min(worst, footprintClearance(r7, p.x, p.y, p.yaw, vp.rearOverhang, vp.frontOffset(), vp.widthMirrors));
+        }
+    }
+    check(worst >= 0.0, "L25 every R7 movement, driven exactly, keeps the footprint with mirrors on the carriageway (exact kerb)", f3(worst));
+    for (const RouteSpec& rs : benchmarkRoutesR7()) {
+        const int s = r7.segmentAt(r7.lane(rs.startLane), rs.startS), g = r7.segmentAt(r7.lane(rs.goalLane), rs.goalS);
+        const RefRoute rr = referenceRoute(r7, s, g);
+        check(rr.found && routeLegal(r7, rr.nodes), "L25 R7 benchmark route " + rs.name + " is legal and reachable", rr.found ? routeText(r7, rr.nodes) : "");
+    }
+    const Scenario closure = closedLoopScenariosR7().back();
+    const RouteSpec rb = route("R7-B");
+    const RefRoute rr = referenceRoute(r7, r7.segmentAt(r7.lane(rb.startLane), rb.startS), r7.segmentAt(r7.lane(rb.goalLane), rb.goalS));
+    bool onRoute = false;
+    for (int n : rr.nodes) onRoute = onRoute || r7.elements[n].lane == r7.lane(closure.closureLane);
+    check(closure.closure && onRoute, "L25 the R7 closure lane " + closure.closureLane + " lies on R7-B's route");
+    for (const std::string& c : conditionNamesR7()) {
+        bool ok = true;
+        try {
+            sensorConditions(c);
+        } catch (const std::exception&) {
+            ok = false;
+        }
+        check(ok, "L25 R7 condition " + c + " is defined");
+    }
+    // The split drives each filter without the re-join and with the unique re-join, and the kerb filters also
+    // with the R6 version.
+    const SplitSpec sp = splitSpec("r7");
+    int off = 0, unique = 0, verified = 0;
+    for (const PoseSource& p : sp.sources) {
+        off += p.rejoin == Rejoin::Off ? 1 : 0;
+        unique += p.rejoin == Rejoin::Unique ? 1 : 0;
+        verified += p.rejoin == Rejoin::Verified && (p.estimator == "ekf_kerb" || p.estimator == "ekf_kerb2") ? 1 : 0;
+    }
+    check(off == 5 && unique == 5 && verified == 2 && sp.sources.size() == 12, "L25 the r7 split pairs every filter off and unique, and adds the R6 re-join for the kerb filters");
+}
+
+// ---- L26 the unique re-join -----------------------------------------------------------------------------
+// R6 is development data now. Its failures under the verified re-join followed wrong kerb matches after long
+// dead reckoning; the unique re-join follows a correction only when the scan fits the map uniquely.
+void testUniqueRejoin() {
+    auto drive = [](const std::string& routeName, const std::string& condition, std::uint64_t seed, const std::string& estimator, Rejoin rejoin,
+                    int& corrections) {
+        Scenario s = benchmarkScenario(route(routeName), condition, seed, "estimated");
+        s.estimator = estimator;
+        s.rejoin = rejoin;
+        const EpisodeResult r = runEpisode(s);
+        corrections = 0;
+        for (const LogEvent& e : r.events) corrections += e.type == "POSE_CORRECTION" ? 1 : 0;
+        return r;
+    };
+    // R6-A under the gyro fault, seed 9: after dead reckoning with neither kerbs nor GNSS, ekf_kerb is 3.7 m off,
+    // and the first kerb scan back pulls it 1.4 m the wrong way. Only 8 of the scan's scored returns end on a kerb,
+    // short of the 10 the uniqueness test requires.
+    int nOff = 0, nVer = 0, nUni = 0;
+    const EpisodeResult off = drive("R6-A", "imu_fault_r6", 9, "ekf_kerb", Rejoin::Off, nOff);
+    const EpisodeResult ver = drive("R6-A", "imu_fault_r6", 9, "ekf_kerb", Rejoin::Verified, nVer);
+    const EpisodeResult uni = drive("R6-A", "imu_fault_r6", 9, "ekf_kerb", Rejoin::Unique, nUni);
+    check(nVer >= 1 && ver.metrics.maxCrossing > off.metrics.maxCrossing + 1.0,
+          "L26 R6-A gyro fault, seed 9: the verified re-join follows a wrong kerb match and crosses deeper than without it",
+          std::to_string(nVer) + " followed; crossing " + f3(ver.metrics.maxCrossing) + " m against " + f3(off.metrics.maxCrossing) + " m");
+    check(nUni == 0 && uni.traceHash == off.traceHash,
+          "L26 the same drive with the unique re-join: the match is not unique, nothing is followed, and it drives as without a re-join",
+          std::to_string(nUni) + " followed");
+    // R3-B under the slow excursion, seed 9 (L21): the mid-turn re-localisation is unique and is followed.
+    int n = 0;
+    const EpisodeResult a = drive("R3-B", "gnss_ramp_r3", 9, "ekf_kerb2", Rejoin::Unique, n);
+    check(n >= 1 && a.outcome == "COMPLETED" && a.metrics.clearanceViolations == 0,
+          "L26 R3-B slow excursion, seed 9: the unique re-join follows the mid-turn kerb re-localisation and completes on the road",
+          a.outcome + ", " + std::to_string(n) + " followed");
+    // R6-B with the kerbs returning, seed 3: ekf_kerb2 re-localises by 1.4 m. Its search found the match unique;
+    // at the refined pose the margin is one return short, but a re-localisation counts as tested by its search.
+    const EpisodeResult b0 = drive("R6-B", "kerb_return_r6", 3, "ekf_kerb2", Rejoin::Off, n);
+    const EpisodeResult b1 = drive("R6-B", "kerb_return_r6", 3, "ekf_kerb2", Rejoin::Unique, n);
+    check(b0.outcome == "STOPPED_EN_ROUTE" && n >= 1 && b1.outcome == "COMPLETED",
+          "L26 R6-B kerbs returning, seed 3: the unique re-join follows ekf_kerb2's re-localisation, and the drive a fallback stop ended completes",
+          b0.outcome + " without, " + b1.outcome + " with, " + std::to_string(n) + " followed");
+    // Nothing changes without a map reference, or on simulator truth.
+    int m = 0;
+    const EpisodeResult q0 = drive("R3-B", "gnss_ramp_r3", 9, "ekf_int2", Rejoin::Off, m);
+    const EpisodeResult q1 = drive("R3-B", "gnss_ramp_r3", 9, "ekf_int2", Rejoin::Unique, m);
+    check(q0.traceHash == q1.traceHash, "L26 a GNSS-only filter drives identically with the unique re-join and without any");
+    Scenario g = benchmarkScenario(route("R3-B"), "gnss_ramp_r3", 9, "ground_truth");
+    g.rejoin = Rejoin::Off;
+    const EpisodeResult g0 = runEpisode(g);
+    g.rejoin = Rejoin::Unique;
+    const EpisodeResult g1 = runEpisode(g);
+    check(g0.traceHash == g1.traceHash, "L26 on simulator truth the unique re-join leaves the trace unchanged");
+}
+
 }  // namespace
 
 int main() {
@@ -852,6 +954,8 @@ int main() {
     testR5();
     testRejoinSwitch();
     testR6();
+    testR7();
+    testUniqueRejoin();
     std::printf("localisation tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
