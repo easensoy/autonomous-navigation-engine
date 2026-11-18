@@ -100,7 +100,11 @@ def check_log(path, ticks_per_frame):
     if any(not r["ok"] for r in rows):
         problems.append("%d frames were not encoded" % sum(1 for r in rows if not r["ok"]))
     end = next((n["note"] for n in notes if n["note"].get("type") == "end"), None)
-    cfg = next((n["note"]["config"] for n in notes if n["note"].get("type") == "config"), {})
+    note = next((n["note"] for n in notes if n["note"].get("type") == "config"), {})
+    cfg = note.get("config", {})
+    # Who rendered and simulated it: the backend's commit and toolchain stamp, the episode's labels, the renderer.
+    made = {k: note.get(k) for k in ("backend", "labels", "renderer", "quality", "size", "fps", "ticks_per_frame", "msaa", "crf", "preset",
+                                     "director") if k in note}
     if end is None:
         problems.append("the episode's end is not in the log")
     elif run and run[-1]["tick"] != end["tick"]:
@@ -114,7 +118,7 @@ def check_log(path, ticks_per_frame):
                "end_frames": sum(1 for r in rows if r["phase"] == "end"), "first_tick": run[0]["tick"] if run else None,
                "last_tick": run[-1]["tick"] if run else None, "ticks_per_frame": ticks_per_frame, "frames_inside_geometry": len(inside),
                "min_car_share": min((r["share"] for r in rows if r["camera"] not in ("overhead", "driver")), default=1.0),
-               "hud_clock_matches_tick": not clock, "shots": shots, "config": cfg, "end": end}
+               "hud_clock_matches_tick": not clock, "shots": shots, "config": cfg, "made": made, "end": end}
     return summary, problems
 
 
