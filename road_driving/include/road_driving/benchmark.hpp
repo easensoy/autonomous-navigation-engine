@@ -66,6 +66,8 @@ std::vector<Scenario> closedLoopScenariosR4();
 std::vector<Scenario> closedLoopScenariosR5();
 std::vector<Scenario> closedLoopScenariosR6();
 std::vector<Scenario> closedLoopScenariosR7();
+// A catalogue scenario, a benchmark route (R1 to R7) or a closed-loop scenario, by name.
+bool findNamedScenario(const std::string& name, Scenario& sc);
 
 // A benchmark split. "dev" (R1) and "heldout" (R2) are the November 2026 evaluation exactly as recorded:
 // estimator "ekf" against the baselines, and the stack without the clearance layer. "r2" reuses R2 as
