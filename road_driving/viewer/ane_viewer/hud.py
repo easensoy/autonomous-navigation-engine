@@ -13,6 +13,9 @@ LIVE = (0.30, 0.95, 0.40, 1.0)
 REPLAY = (1.00, 0.62, 0.15, 1.0)
 DISCLAIMER = ("Independent research simulation  |  synthetic streets (not surveyed London locations)  |  "
               "simulated I-PACE-sized proxy, not a Jaguar  |  not Waymo software or data")
+DISCLAIMER_DISTRICT = ("Independent research simulation  |  source-informed reconstruction, details approximated; map data © OpenStreetMap "
+                       "contributors (ODbL)  |  simulated I-PACE-sized proxy, not a Jaguar  |  not Waymo software or data")
+READOUT_SCALE = 0.029
 LEGEND = [
     ((0.96, 0.97, 0.98, 1), "solid car / white trail: simulated truth (drawing and diagnostics only)"),
     ((0.20, 0.85, 0.85, 1), "teal outline and trail: the estimate the stack drives on"),
@@ -48,10 +51,14 @@ class Hud:
         self.title = OnscreenText(parent=base.a2dTopLeft, pos=(0.04, -0.13), scale=0.034, align=TextNode.ALeft, fg=TEXT, shadow=(0, 0, 0, 1),
                                   mayChange=True, text="")
         self.disclaimer = OnscreenText(parent=base.a2dBottomRight, pos=(-0.03, 0.025), scale=0.026, align=TextNode.ARight, fg=MUTED,
-                                       shadow=(0, 0, 0, 1), text=DISCLAIMER)
+                                       shadow=(0, 0, 0, 1), mayChange=True, text=DISCLAIMER)
+        self._disclaimer = DISCLAIMER
+        self._panel_h = 0.40
         self.panel = DirectFrame(parent=base.a2dTopLeft, frameColor=PANEL, frameSize=(0.0, 1.22, -0.40, 0.0), pos=(0.02, 0, -0.16))
-        self.labels = OnscreenText(parent=self.panel, pos=(0.03, -0.045), scale=0.029, align=TextNode.ALeft, fg=MUTED, mayChange=True, text="")
-        self.values = OnscreenText(parent=self.panel, pos=(0.28, -0.045), scale=0.029, align=TextNode.ALeft, fg=TEXT, mayChange=True, text="")
+        self.labels = OnscreenText(parent=self.panel, pos=(0.03, -0.045), scale=READOUT_SCALE, align=TextNode.ALeft, fg=MUTED, mayChange=True,
+                                   text="")
+        self.values = OnscreenText(parent=self.panel, pos=(0.28, -0.045), scale=READOUT_SCALE, align=TextNode.ALeft, fg=TEXT, mayChange=True,
+                                   text="")
         self.events_frame = DirectFrame(parent=base.a2dBottomLeft, frameColor=PANEL, frameSize=(0.0, 1.22, 0.0, 0.36), pos=(0.02, 0, 0.06))
         self.events = OnscreenText(parent=self.events_frame, pos=(0.03, 0.32), scale=0.027, align=TextNode.ALeft, fg=TEXT, mayChange=True, text="")
         self.caption_frame = DirectFrame(parent=base.a2dBottomCenter, frameColor=PANEL, frameSize=(-0.55, 0.55, 0.0, 0.24), pos=(0.30, 0, 0.06))
@@ -91,6 +98,9 @@ class Hud:
         y -= 0.05
         for i, k in enumerate(("A", "B", "C", "S")):
             self._button("demo" + k, "Sandbox" if k == "S" else k, -0.64 + i * 0.165, y, 0.15, lambda k=k: a["demo"](k))
+        y -= 0.07
+        self._button("demoK", "Kensington", -0.545, y, 0.32, lambda: a["demo"]("K"))
+        self._button("demoN", "Knightsbridge", -0.195, y, 0.32, lambda: a["demo"]("N"))
         y -= 0.085
         OnscreenText(parent=self.controls, pos=(-0.71, y + 0.02), scale=0.03, align=TextNode.ALeft, fg=MUTED, text="Configuration")
         for field in ("scenario", "condition", "estimator", "seed", "mode", "rejoin"):
@@ -122,6 +132,20 @@ class Hud:
         y -= 0.07
         for i, (k, label) in enumerate((("legend", "Legend"), ("help", "Help"), ("quality", "Quality"), ("record", "Record video"))):
             self._button(k, label, -0.64 + i * 0.165, y, 0.15, a[k])
+
+    def set_disclaimer(self, district):
+        """The footer says what the streets are: synthetic, or a source-informed reconstruction of real ones."""
+        text = DISCLAIMER_DISTRICT if district else DISCLAIMER
+        if text != self._disclaimer:
+            self._disclaimer = text
+            self.disclaimer.setText(text)
+
+    def fit_panel(self, rows):
+        """Size the readout panel to its rows, from the font's own line height, so that no row falls outside it."""
+        h = round(0.045 + (rows - 1) * self.labels.textNode.getLineHeight() * READOUT_SCALE + 0.035, 3)
+        if h != self._panel_h:
+            self._panel_h = h
+            self.panel["frameSize"] = (0.0, 1.22, -h, 0.0)
 
     def set_toggle(self, key, on, text=None):
         b = self.buttons.get(key)
