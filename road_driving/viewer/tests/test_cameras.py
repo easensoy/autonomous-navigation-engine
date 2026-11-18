@@ -12,6 +12,7 @@ sys.path.insert(0, str(HERE.parent))
 from ane_viewer import cameras as cm  # noqa: E402
 from ane_viewer import district_layout as dl  # noqa: E402
 from ane_viewer.director import Director  # noqa: E402
+from ane_viewer.director import clear_foreground as dl_clear  # noqa: E402
 from ane_viewer.occlusion import Occluders, ViewSolver, synthetic_occluders, visible_share  # noqa: E402
 
 
@@ -152,6 +153,19 @@ class Obstruction(unittest.TestCase):
         self.assertFalse(plan["kerb"].on_road(pos[0], pos[1]))
         self.assertFalse(plan["occluders"].inside(pos, 0.7))
         self.assertGreaterEqual(visible_share(plan["occluders"], pos, row[1], row[2], row[3]), 0.75)
+        # A lamp column 6 m from that camera, in line with the car: the camera moves, and its new view of the
+        # car's approach has no lamp in the near foreground.
+        pts = path["pts"]
+        cx, cy = row[1] - pos[0], row[2] - pos[1]
+        d = math.hypot(cx, cy)
+        lamp = (pos[0] + 6.0 * cx / d, pos[1] + 6.0 * cy / d, "lamp")
+        plan["occluders"].furniture.append(lamp)
+        moved = Director(App(), []).street_position(st, plan["occluders"])
+        self.assertIsNotNone(moved)
+        self.assertNotEqual(tuple(moved), tuple(pos))
+        near = min(range(len(pts)), key=lambda i: math.hypot(pts[i][0] - moved[0], pts[i][1] - moved[1]))
+        self.assertTrue(dl_clear(moved, pts[:near + 1], [lamp]))
+        self.assertFalse(dl_clear(pos, pts[:near + 1], [lamp]))  # the first camera would have had it in view
 
 
 if __name__ == "__main__":
