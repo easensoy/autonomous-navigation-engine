@@ -1,6 +1,7 @@
 #include "road_driving/episode.hpp"
 
 #include "road_driving/drive_path.hpp"
+#include "live_hooks.hpp"
 #include "stack.hpp"
 
 #include <algorithm>
@@ -192,7 +193,9 @@ std::string engineCommit() { return ROAD_ENGINE_COMMIT; }
 
 bool engineSourcesModified() { return ROAD_ENGINE_SOURCES_MODIFIED == 1; }
 
-EpisodeResult runEpisode(const Scenario& sc) {
+EpisodeResult runEpisode(const Scenario& sc) { return runEpisodeHooked(sc, nullptr); }
+
+EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     EpisodeResult r;
     r.scenario = sc;
     NetworkSpec ns;
@@ -249,6 +252,14 @@ EpisodeResult runEpisode(const Scenario& sc) {
             }
         }
     }
+
+    // The world's closure: the scenario's X1, or one an operator places in a live episode (hooks).
+    LiveClosure cl;
+    cl.on = sc.closure;
+    cl.lane = closureLane;
+    cl.barrierLaneS = sc.barrierLaneS;
+    cl.worksLength = sc.worksLength;
+    cl.closed = closed;
 
     // The oracle measures notification distances along the route the car takes when nothing is closed,
     // from the world's own reference search (not the engine's route).
@@ -333,7 +344,10 @@ EpisodeResult runEpisode(const Scenario& sc) {
     Vehicle veh(vp, dt, init);
     Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility, sc.rejoin);
     VerifiedCorrection verified;  // the estimator's map-verified corrections, for the stack
-    bool present = sc.closure, revealed = false, lifted = false;
+    bool& present = cl.present;
+    bool& revealed = cl.revealed;
+    bool& lifted = cl.lifted;
+    present = sc.closure;
     double tRest = -1.0;
     std::vector<LogEvent> world;
     const std::string labels =
@@ -360,14 +374,77 @@ EpisodeResult runEpisode(const Scenario& sc) {
     double restTime = 0.0, outageStart = -1.0, doneSince = -1.0;
     bool stackStarted = false;
     const long maxTicks = std::lround(sc.timeBudget / dt);
+    LiveFaults liveFaults;
+    bool aborted = false;
     for (long k = 0;; ++k) {
         const double t = static_cast<double>(k) * dt;
         const VehicleState vs = veh.state();
+        StateEstimate estNow;
+        std::vector<Measurement> arrived;
+        auto view = [&](const Command* c, bool after) {
+            TickView v;
+            v.tick = k;
+            v.t = t;
+            v.dt = dt;
+            v.scenario = &sc;
+            v.net = &net;
+            v.vehicle = &vp;
+            v.truth = &vs;
+            v.command = c;
+            v.estimate = est && after ? &estNow : nullptr;
+            v.estimator = est.get();
+            v.sensors = sensors.get();
+            v.arrived = after ? &arrived : nullptr;
+            v.zones = &r.zones;
+            v.stack = &stack;
+            v.stackStarted = stackStarted;
+            v.worldEvents = &world;
+            v.closure = &cl;
+            return v;
+        };
+
+        // Operator: faults and closures injected at this tick (live episodes and recorded sessions only).
+        if (hooks) {
+            TickControl ctl;
+            ctl.faults = liveFaults;
+            if (!hooks->beforeTick(view(nullptr, false), ctl)) {
+                aborted = true;
+                r.simSeconds = t;
+                break;
+            }
+            liveFaults = ctl.faults;
+            if (sensors) {
+                sensors->setLiveFaults(liveFaults);
+            }
+            if (ctl.addClosure && !cl.on && ctl.closureLane >= 0) {
+                cl.on = true;
+                cl.lane = ctl.closureLane;
+                cl.barrierLaneS = ctl.barrierLaneS;
+                cl.worksLength = ctl.worksLength;
+                cl.closed.clear();
+                for (int id : net.lanes[static_cast<size_t>(cl.lane)].segments) {
+                    const Element& e = net.elements[static_cast<size_t>(id)];
+                    if (e.laneS0 < cl.barrierLaneS + cl.worksLength && e.laneS0 + e.length > cl.barrierLaneS) {
+                        cl.closed.push_back(id);
+                    }
+                }
+                present = true;
+                revealed = true;
+                r.tReveal = t;
+                world.push_back({t, "WORLD", "CLOSURE_NOTIFIED",
+                                 "id=X1;kind=ROADWORKS;source=OPERATOR;lane=" + net.lanes[static_cast<size_t>(cl.lane)].name +
+                                     ";barrier_lane_s=" + fixed(cl.barrierLaneS, 3)});
+            }
+            if (ctl.liftClosure && cl.on && present) {
+                present = false;
+                lifted = true;
+                r.tLift = t;
+                world.push_back({t, "WORLD", "CLOSURE_LIFTED", "id=X1;source=OPERATOR"});
+            }
+        }
 
         // World: sensors; in estimated mode the estimator consumes what has arrived.
-        StateEstimate estNow;
         if (sensors) {
-            std::vector<Measurement> arrived;
             sensors->step(t, dt, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel, arrived);
             if (est) {
                 for (const Measurement& m : arrived) {
@@ -447,14 +524,14 @@ EpisodeResult runEpisode(const Scenario& sc) {
                 obs.sigmaAcross = estNow.sigmaAcross(estNow.yaw);
                 obs.sigmaHeading = std::isfinite(estNow.pyawyaw) && estNow.pyawyaw > 0.0 ? std::sqrt(estNow.pyawyaw) : 0.0;
             }
-            if (sc.closure && revealed) {
+            if (cl.on && revealed) {
                 ClosureReport c;
                 c.id = "X1";
                 c.kind = "ROADWORKS";
-                c.lane = closureLane;
-                c.barrierLaneS = sc.barrierLaneS;
-                c.worksLength = sc.worksLength;
-                c.closed = closed;
+                c.lane = cl.lane;
+                c.barrierLaneS = cl.barrierLaneS;
+                c.worksLength = cl.worksLength;
+                c.closed = cl.closed;
                 c.active = present;
                 obs.closures.push_back(c);
             }
@@ -478,12 +555,15 @@ EpisodeResult runEpisode(const Scenario& sc) {
                               estNow.status, estNow.gnss, estNow.kerb, stackStarted ? stack.currentShift() : 0.0);
                 estimates += eline;
             }
-            const int code = !sc.closure ? 0 : (lifted ? 3 : (revealed ? 2 : 1));
+            const int code = !cl.on ? 0 : (lifted ? 3 : (revealed ? 2 : 1));
             r.truth.push_back({t, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel, cmd.steer, cmd.accel, code});
             char line[256];
             std::snprintf(line, sizeof line, "%.2f,%.6f,%.6f,%.7f,%.6f,%.7f,%.6f,%.7f,%.6f,%d\n", t, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel,
                           cmd.steer, cmd.accel, code);
             truth += line;
+        }
+        if (hooks) {
+            hooks->afterTick(view(&cmd, true));
         }
 
         restTime = vs.v < 0.01 ? restTime + dt : 0.0;
@@ -499,6 +579,12 @@ EpisodeResult runEpisode(const Scenario& sc) {
         veh.step(cmd);
     }
 
+    if (aborted) {
+        r.outcome = "ABORTED";
+        r.truthCsv = truth;
+        r.traceHash = fnv1a(truth);
+        return r;
+    }
     if (outageStart >= 0.0) {
         r.outages.push_back({outageStart, r.simSeconds});
     }
@@ -535,7 +621,15 @@ EpisodeResult runEpisode(const Scenario& sc) {
     r.routeHash = fnv1a(decisions);
 
     // Independent evaluation from truth, then the stack's own decision counts kept apart.
-    r.metrics = evaluate(net, vp, sc, r.truth, r.tLift, r.outcome);
+    // A closure an operator placed is evaluated like the scenario's own.
+    Scenario evalSc = sc;
+    if (cl.on && !sc.closure) {
+        evalSc.closure = true;
+        evalSc.closureLane = net.lanes[static_cast<size_t>(cl.lane)].name;
+        evalSc.barrierLaneS = cl.barrierLaneS;
+        evalSc.worksLength = cl.worksLength;
+    }
+    r.metrics = evaluate(net, vp, evalSc, r.truth, r.tLift, r.outcome);
     for (const LogEvent& e : stack.events) {
         if (e.type == "REPLAN") {
             ++r.metrics.replans;
