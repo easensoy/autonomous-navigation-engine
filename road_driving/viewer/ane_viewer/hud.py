@@ -27,7 +27,8 @@ LEGEND = [
 ]
 HELP = """Keys
   Space  pause / resume          N  step 0.1 s (Shift+N: one 10 ms tick)      R  restart this configuration
-  F1 F2 F3 F4  demonstrations A, B, C, sandbox        [ ]  speed down / up
+  F1 F2 F3 F4  demonstrations A, B, C, sandbox        F5 F6  London scenes: Kensington, Knightsbridge        [ ]  speed down / up
+  M  presentation overlay / diagnostic panels         V  London scenes: OpenStreetMap centrelines (cyan) over the modelled lanes (amber)
   1 2 3 4  cameras: chase, overhead, driver, orbit (right-drag rotate, wheel zoom, middle-drag pan, D detach)
   G  GNSS outage on/off     B  GNSS offset 5 m on/off     K  kerb-scanner blackout on/off
   C  close the road ahead   O  reopen it                  S  save the session    P  replay the last saved session
