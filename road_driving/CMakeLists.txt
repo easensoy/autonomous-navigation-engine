@@ -30,6 +30,7 @@ endif()
 
 add_library(road_driving STATIC
     src/lane_network.cpp
+    src/district.cpp
     src/drive_path.cpp
     src/vehicle.cpp
     src/engine_router.cpp
@@ -62,7 +63,10 @@ target_link_libraries(test_localisation PRIVATE road_driving)
 add_executable(test_live tests/test_live.cpp)
 target_link_libraries(test_live PRIVATE road_driving)
 
-foreach(_road_target road_driving road_drive test_road_driving test_localisation test_live)
+add_executable(test_district tests/test_district.cpp)
+target_link_libraries(test_district PRIVATE road_driving)
+
+foreach(_road_target road_driving road_drive test_road_driving test_localisation test_live test_district)
   if(MSVC)
     target_compile_options(${_road_target} PRIVATE /W4)
   else()
@@ -75,6 +79,8 @@ add_test(NAME road_driving_tests COMMAND test_road_driving)
 add_test(NAME road_driving_localisation_tests COMMAND test_localisation)
 # The live server behind the 3D viewer, and its recorded sessions (no graphics needed).
 add_test(NAME road_driving_live_tests COMMAND test_live)
+# The Kensington and Knightsbridge district networks: geometry, lane graph, feasible turning paths, routes.
+add_test(NAME road_driving_district_tests COMMAND test_district)
 # A session recorded through the 3D viewer (operator commands at recorded ticks) must replay headlessly:
 # bit for bit on the recording toolchain, to the same outcome on another.
 add_test(NAME road_driving_session_replay
