@@ -317,7 +317,8 @@ int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
     }
     // The benchmark routes on this network as the independent reference planner finds them: movements only.
     std::vector<RouteSpec> routes = benchmarkRoutes(false);
-    for (const auto& more : {benchmarkRoutes(true), benchmarkRoutesR3(), benchmarkRoutesR4(), benchmarkRoutesR5(), benchmarkRoutesR6(), benchmarkRoutesR7()}) {
+    for (const auto& more : {benchmarkRoutes(true), benchmarkRoutesR3(), benchmarkRoutesR4(), benchmarkRoutesR5(), benchmarkRoutesR6(), benchmarkRoutesR7(),
+                             districtRoutes()}) {
         routes.insert(routes.end(), more.begin(), more.end());
     }
     for (const RouteSpec& rs : routes) {
