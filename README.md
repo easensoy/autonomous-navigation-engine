@@ -262,7 +262,7 @@ the engine and the car stops before the barrier instead.
   with GCC 14.2 and MSVC 19.51. Cross-track error was at most 0.162 m, with no illegal move.
 - **Driving on its own estimate:** simulated GNSS, IMU, wheel-speed, steering and kerb-ranging sensors
   feed an EKF, and the stack drives on its output with no access to truth, keeping a margin from the kerb
-  that follows the estimate's uncertainty. Five predeclared evaluations, each on a network held out of
+  that follows the estimate's uncertainty. Six predeclared evaluations, each on a network held out of
   all tuning, compared estimators and stacks on identical recorded logs:
   - First (R2): the GNSS + IMU + wheel EKF beat dead reckoning and two GNSS-only filters in at least 29
     of 30 paired runs in every condition. A 6 m multipath offset outlasting its 10 s reset failed 8 of
@@ -287,7 +287,12 @@ the engine and the car stops before the barrier instead.
     filters drove every pair identically. Where kerbs returned to correct a dragged estimate, the kerb
     filter ended 26 of 40 episodes as the reference did instead of 16. But after long dead reckoning a
     kerb registration can lock onto the wrong kerb, and the first kerb filter followed two such matches
-    into deeper crossings. Four of six criteria passed
+    into deeper crossings. Four of six criteria passed.
+  - Sixth (R7): the re-join limited to kerb matches that fit the map uniquely. Where kerbs returned
+    after GNSS drift, the kerb filter ended 24 of 40 episodes as the reference did instead of 18.
+    Under a gyro fault the re-join followed no correction, where the R6 version followed wrong matches
+    into deeper crossings. The one failure: a correct correction let a car drive on with an along-road error
+    that the next turn made a 0.88 m crossing. Five of six criteria passed
     ([results](road_driving/LOCALISATION.md#results)).
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
@@ -358,8 +363,8 @@ caller reports; a step is one node.
   under a protocol pushed before the run.
 - **Known gaps:**
   - After a large pose correction the stack's steering is lightly damped. The stack re-joins its path only
-    after corrections the estimator verified against the map; a kerb match after long dead reckoning can
-    still be wrong.
+    after kerb corrections that fit the map uniquely. A correct sideways correction can still leave an
+    along-road error that the filter does not report.
   - With GNSS-only localisation, the clearance layer stops the car in every degraded-GNSS episode; so does
     losing kerbs and GNSS together with the kerb filter.
   - A slow GNSS excursion with no jump drags every GNSS-only filter.
@@ -437,7 +442,7 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - 2 benchmark smoke programs.
 - **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds four entries:
   - `test_road_driving` (288 checks);
-  - `test_localisation` (161 checks);
+  - `test_localisation` (185 checks);
   - a replay of the stored failing episode;
   - a replay of a changed copy, which must be rejected.
 
