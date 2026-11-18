@@ -61,7 +61,7 @@ Two compact, bounded scenes of real London streets, each with its own network in
 
 No trademark, lettering, emblem or relief from a real building is reproduced.
 
-The simulation uses only the backend's network: its kerb lines and arcs, which bound the carriageway and are what the kerb scanner sees, and its lanes. The viewer draws that same kerb from the backend's map message. No building, tree or piece of furniture stands on the carriageway or within 0.5 m of a kerb (the viewer's tests check every outline). Buildings stand 2.6 m or more from Kensington's modelled kerbs, and 1.66 m or more from Knightsbridge's.
+The simulation uses only the backend's network: its kerb lines and arcs, which bound the carriageway and are what the kerb scanner sees, and its lanes. The viewer draws that same kerb from the backend's map message. No building or tree stands on the carriageway or within 0.5 m of a kerb: the viewer's tests check every building outline and every tree. Lamp columns and bollards are placed 0.5 m or more back from the kerb. Buildings stand 2.6 m or more from Kensington's modelled kerbs, and 1.66 m or more from Knightsbridge's.
 
 ## How far the model departs from the map
 
