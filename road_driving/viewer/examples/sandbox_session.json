@@ -1,0 +1,8 @@
+{"format":"ane-session","version":1,"backend":{"commit":"de23b27d30ac62494df85b1bd817f46144e3c434","toolchain":"MSVC 195136260"},"config":{"scenario":"R7-A","network":"R7","condition":"nominal_r7","mode":"estimated","estimator":"ekf_kerb2","seed":1,"rejoin":"unique","variant":"B1","delay":2,"feasibility":true},"commands":[
+  {"tick":1204,"cmd":"gnss_bias","dx":-0.0013121928765019528,"dy":4.9999998278149826},
+  {"tick":2014,"cmd":"gnss_bias","dx":0,"dy":0},
+  {"tick":2403,"cmd":"kerb_blackout","on":true},
+  {"tick":3004,"cmd":"kerb_blackout","on":false},
+  {"tick":3305,"cmd":"closure_add","lane":"J21>J22","barrier_s":5.6384662701119623,"works":15},
+  {"tick":5208,"cmd":"closure_lift"}
+],"result":{"t":108.93,"outcome":"COMPLETED","stack_mode":"DONE","trace_hash":"0xeaa75f7426e71a53","toolchain":"MSVC 195136260","max_crossing":0.000,"min_clearance":0.069}}
