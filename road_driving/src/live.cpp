@@ -2,6 +2,8 @@
 // Protocol: viewer/PROTOCOL.md. Every message is one JSON object on one line, with "v" and "type".
 #include "road_driving/live.hpp"
 
+#include "road_driving/district.hpp"
+
 #include "road_driving/benchmark.hpp"
 #include "road_driving/localisation.hpp"
 #include "live_hooks.hpp"
@@ -853,8 +855,9 @@ void Server::sendScene(const TickView& v) {
     }
     obstacles += "]";
     emit(headTick("session", v.tick, v.t) + ",\"mode\":" + jstr(mode_) + ",\"config\":" + config_ + ",\"labels\":" +
-         jstr(v.scenario->mode == "estimated" ? "SYNTHETIC_ROADS,ESTIMATED_POSE(" + v.scenario->estimator + "),SIMULATED_SENSORS,ORACLE_CLOSURE"
-                                               : "SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE") +
+         jstr(std::string(v.net->general ? "SOURCE_INFORMED_ROADS" : "SYNTHETIC_ROADS") +
+              (v.scenario->mode == "estimated" ? ",ESTIMATED_POSE(" + v.scenario->estimator + "),SIMULATED_SENSORS,ORACLE_CLOSURE"
+                                               : ",GROUND_TRUTH_POSE,ORACLE_CLOSURE")) +
          ",\"dt\":" + jnum(v.dt, 3) + ",\"time_budget\":" + jnum(v.scenario->timeBudget, 1) + ",\"backend\":{\"commit\":" + jstr(engineCommit()) +
          ",\"toolchain\":" + jstr(toolchain()) + "}}");
     emit(head("scene") + ",\"tick\":" + std::to_string(v.tick) + ",\"map\":" + sceneJson(*v.net) + ",\"vehicle\":{\"id\":" + jstr(vp.id) +
@@ -1258,7 +1261,30 @@ std::string sceneJson(const LaneNetwork& net) {
     for (size_t i = 0; i < net.banned.size(); ++i) {
         s += (i ? "," : "") + std::string("[") + jstr(net.banned[i].junction) + "," + jstr(net.banned[i].fromLane) + "," + jstr(net.banned[i].toLane) + "]";
     }
-    return s + "]}";
+    s += "]";
+    DistrictSpec d;
+    if (net.general && findDistrict(net.spec.name, d)) {
+        // A district network: its provenance; per street its name, widths and lane offset; and which kerb lines
+        // are patch edges (not kerbs). The grids' scene messages are unchanged.
+        s += ",\"district\":{\"id\":" + jstr(d.id) + ",\"district\":" + jstr(d.district) + ",\"title\":" + jstr(d.title) + ",\"origin\":[" +
+             jnum(d.lat0, 6) + "," + jnum(d.lon0, 6) + "],\"source\":" + jstr(d.source) + ",\"licence\":" + jstr(d.licence) + "}";
+        s += ",\"street_info\":[";
+        for (size_t i = 0; i < net.streets.size(); ++i) {
+            const Street& st = net.streets[i];
+            s += (i ? "," : "") + std::string("{\"name\":") + jstr(st.name) + ",\"half_width\":" + fixed3(st.halfWidth) +
+                 ",\"half_width_right\":" + fixed3(st.halfWidthRight) + ",\"median\":" + fixed3(st.median) + ",\"lane_offset\":" +
+                 fixed3(st.laneOffset) + "}";
+        }
+        s += "],\"kerb_boundary\":[";
+        bool first = true;
+        for (size_t i = 0; i < net.kerbLines.size(); ++i) {
+            if (!net.kerbLines[i].boundary) continue;
+            s += (first ? "" : ",") + std::to_string(i);
+            first = false;
+        }
+        s += "]";
+    }
+    return s + "}";
 }
 
 }  // namespace road
