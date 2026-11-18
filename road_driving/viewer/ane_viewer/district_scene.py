@@ -116,7 +116,7 @@ def build(scene_msg, quality="medium"):
     for bar in data["barriers"]:
         if _barrier(mats, bar, kerb):
             report["barriers"] += 1
-    _furniture(mats, m, kerb, footprints, rng, info["id"])
+    _furniture(mats, m, kerb, footprints, rng, info["id"], occ)
     mats.attach(decor)
 
     # ---- Markings ----------------------------------------------------------------------------------------
@@ -487,8 +487,10 @@ def _clear_spot(x, y, kerb, footprints, gap=0.7):
     return True
 
 
-def _furniture(mats, m, kerb, footprints, rng, district):
-    """Victorian-pattern lamp columns along the kerbs, bollards at corners, a K6 kiosk and a pillar box."""
+def _furniture(mats, m, kerb, footprints, rng, district, occ=None):
+    """Victorian-pattern lamp columns along the kerbs, bollards at corners, a K6 kiosk and a pillar box. Each one
+    is listed in occ.furniture, so that a street-level camera keeps clear of it."""
+    spots = occ.furniture if occ is not None else []
     for i, (ax, ay, bx, by, nx, ny) in enumerate(m["kerb_lines"]):
         if i in kerb.boundary:
             continue
@@ -501,6 +503,7 @@ def _furniture(mats, m, kerb, footprints, rng, district):
             y = ay + (by - ay) * s / L - ny * 0.65
             if _clear_spot(x, y, kerb, footprints):
                 _lamp(mats, x, y, math.atan2(ny, nx))
+                spots.append((x, y, "lamp"))
             s += 30.0
     for cx, cy, r, mid, half in m["kerb_arcs"]:
         if r > 8.0 or r < 1.5:
@@ -509,6 +512,7 @@ def _furniture(mats, m, kerb, footprints, rng, district):
             x, y = cx + (r - 0.5) * math.cos(a), cy + (r - 0.5) * math.sin(a)
             if _clear_spot(x, y, kerb, footprints):
                 mats["dark"].box(x, y, H, 0.2, 0.2, 0.95, 0.0, LAMP)
+                spots.append((x, y, "bollard"))
     # One telephone kiosk and one pillar box, on the first roomy pavement corner near the first junction.
     placed = 0
     for cx, cy, r, mid, half in m["kerb_arcs"]:
@@ -522,6 +526,7 @@ def _furniture(mats, m, kerb, footprints, rng, district):
             mats["glass"].box(x, y, H + 1.0, 1.07, 1.07, 1.2, mid, (0.8, 0.8, 0.8, 1.0))
             _drum(mats, "trim", x2, y2, H, H + 1.35, 0.3, RED, sides=12)
             mats["trim"].hpoly([(x2 + 0.3 * math.cos(2 * math.pi * k / 12), y2 + 0.3 * math.sin(2 * math.pi * k / 12)) for k in range(12)], H + 1.35, RED)
+            spots += [(x, y, "kiosk"), (x2, y2, "pillar_box")]
             placed = 1
 
 
