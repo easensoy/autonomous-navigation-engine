@@ -4,6 +4,14 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: a re-join for unique kerb matches only, network R7 (`road_driving/`)
+
+- **`Rejoin::Unique`**, written `unique`, the new default. It re-joins only corrections whose kerb scan fits the map uniquely, and is otherwise `Verified`, which is unchanged.
+- **`StateEstimate::uniqueCorrections`, `uniqueJumpX`, `uniqueJumpY`:** the subset of the verified corrections whose scan fits the map uniquely. The registered pose must place at least 10 returns, and half of those scored, within 0.3 m of a mapped kerb, and beat every pose 1.5 m or more across by 4. A re-localisation counts as tested by its own search. Estimates are unchanged.
+- **`SplitSpec::referenceRejoin`** records the reference's setting in `closed_loop.jsonl`. Every earlier split still reproduces its recorded closed loop value for value: R4 with the re-join off, R5 off and on, R6 off and verified.
+- **Network R7** (`buildR7`), its routes, closure scenario and seven conditions (`conditionNamesR7`), and the split `r7`. It drives every filter with no re-join and with the unique re-join, and the two kerb filters also with the verified re-join. `tools/check_r7_criteria.py` computes the R7 criteria.
+- **Tests:** `road_driving_localisation_tests` grows from 161 to 185 checks.
+
 ### Road-driving: a re-join for map-verified corrections only, network R6 (`road_driving/`)
 
 - **`Rejoin`** replaces the boolean `Scenario::rejoin`:
