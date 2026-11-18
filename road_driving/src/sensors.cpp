@@ -237,11 +237,21 @@ SensorConditions sensorConditions(const std::string& name) {
         c.kerbClutter = 0.10;
         c.gyroBiasStepTime = 35.0;
         c.gyroBiasStep = 0.010;
+    } else if (name == "nominal_ldn") {
+        // The district networks (KEN, KNB): conditions for the 3D viewer's London scenes, not an evaluation.
+    } else if (name == "gnss_outage_ldn") {
+        c.outage = {0.40, 0.70};
+    } else if (name == "multipath_ldn") {
+        c.multipath = {0.15, 0.45};
+        c.multipathBias = 6.0;
+        c.multipathSigma = 1.0;
     } else {
         throw std::invalid_argument("unknown sensor condition " + name);
     }
     return c;
 }
+
+std::vector<std::string> conditionNamesDistrict() { return {"nominal_ldn", "gnss_outage_ldn", "multipath_ldn"}; }
 
 std::vector<std::string> conditionNames(bool heldOut) {
     std::vector<std::string> base = {"nominal", "gnss_outage", "multipath", "wheel_slip", "imu_bias", "delay_drop"};
