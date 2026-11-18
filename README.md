@@ -8,8 +8,9 @@ robot in Gazebo through ROS 2, then runs on its own on a warehouse graph. Both a
 regenerated from recorded runs, and CI recomputes the routes and checks the headline numbers against the
 data in [`docs/data`](docs/data) and [`ros2/evidence`](ros2/evidence/README.md). An opt-in extension,
 [`road_driving/`](road_driving/README.md), uses the same routing and replanning for a car-sized
-kinematic vehicle on synthetic left-hand-traffic road networks. It drives either on ground truth or on
-its own EKF estimate from simulated sensors ([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
+kinematic vehicle on synthetic left-hand-traffic road networks and on two source-informed reconstructions
+of London streets. It drives either on ground truth or on its own EKF estimate from simulated sensors, and
+a live 3D viewer shows it running ([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
 
 <img src="ros2/evidence/media/simulation-mission-preview.gif" width="100%" alt="Recording of one simulated trial in four parts. Top: Gazebo Harmonic, a camera following an orange differential-drive robot along a warehouse aisle between blue-and-orange pallet racks; a red pallet appears in the aisle ahead; the view widens over the middle and south aisles while the robot turns back, then follows it through the south aisle to the delivery station. Bottom left: RViz2, a top-down view of the roadmap with the engine's route in green, the ground-truth trajectory in blue and the lidar-blocked nodes in red; the green route switches from the middle aisle to the south aisle. Bottom right: the navigator's recorded telemetry: simulation time, mission and engine state, waypoint, remaining route cost, tracking error, velocity command, last blockage and last engine call. A caption and a timeline name each recorded event, and a label states the playback speed.">
 
@@ -17,6 +18,15 @@ its own EKF estimate from simulated sensors ([summary](#road-driving-a-synthetic
 node blockages, A\* replanning and differential-drive route execution.<br>
 [Full recording](ros2/evidence/media/simulation-mission.mp4) · [Failure scenario](#failure-scenario-no-route-left) ·
 [Experimental methodology](ros2/README.md#experimental-methodology)</sub>
+
+[<img src="road_driving/docs/media/london-showcase-poster.jpg" width="100%" alt="Knightsbridge at street level in the live 3D viewer: the simulated car comes down Brompton Road past stone-fronted shops with coloured fascias, its kerb scan in green and the faulted GNSS fixes in violet. The compact overlay names the street, says the fixes are excluded, and gives the estimate's error against truth.">](https://github.com/easensoy/autonomous-navigation-engine/releases/tag/viewer-london-v1)
+
+<sub><b>The live 3D viewer in London, 1920×1080 at 50 fps:</b> the road-driving stack drives on its own
+estimate through source-informed reconstructions of Kensington and Knightsbridge, through a GNSS outage
+and a multipath fault. Each chapter is one uninterrupted run, recorded in lock-step. Map data ©
+OpenStreetMap contributors.<br>
+[Watch (MP4, 1080p50, 298 MB)](https://github.com/easensoy/autonomous-navigation-engine/releases/download/viewer-london-v1/ane-london-showcase-1080p50.mp4) · [Release](https://github.com/easensoy/autonomous-navigation-engine/releases/tag/viewer-london-v1) ·
+[Viewer](road_driving/viewer/README.md) · [Provenance](road_driving/viewer/districts/PROVENANCE.md)</sub>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.gif">
@@ -298,6 +308,11 @@ the engine and the car stops before the barrier instead.
   native Panda3D application. It draws what the backend computes at each 10 ms tick: the true car, the
   estimate it drives on, kerb returns, GNSS fixes and corrections. Faults and closures can be injected
   while it drives, and a recorded session replays headlessly. It reproduces that 0.88 m crossing exactly.
+- **London scenes:** two district networks follow real streets, Kensington Gore and Queen's Gate, and
+  Brompton Road around Harrods. Junctions, names, one-way rules and a turn restriction come from
+  OpenStreetMap; widths, kerbs and turning paths are inferred. The viewer draws them on OpenStreetMap's
+  building outlines with modular facades ([London district scenes](road_driving/README.md#london-district-scenes),
+  [1080p50 showcase](https://github.com/easensoy/autonomous-navigation-engine/releases/tag/viewer-london-v1)).
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
 
@@ -357,7 +372,8 @@ caller reports; a step is one node.
 
 **Road-driving extension.**
 
-- **Inputs:** synthetic roads and an oracle-reported closure, with no other road user.
+- **Inputs:** synthetic roads, two source-informed reconstructions of London streets with approximated
+  details, and an oracle-reported closure, with no other road user.
 - **Pose:** ground truth, or an EKF fed by simulated GNSS, IMU, wheel-speed, steering and kerb-ranging
   sensors with simple error models. The kerb scanner is simulated against the same map the filter uses,
   up to a modelled 0.03 m deviation and one tested map error. There is no real lidar or camera data.
