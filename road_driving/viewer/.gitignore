@@ -1,0 +1,8 @@
+# The viewer's environment, its captures and the operator's saved sessions stay local.
+.venv/
+captures/
+sessions/
+__pycache__/
+models/*.glb
+models/*.gltf
+models/*.bin
