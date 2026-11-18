@@ -397,7 +397,7 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
         }
         return false;
     };
-    gnssAvailable_ = !inside(zones_.outage);
+    gnssAvailable_ = !inside(zones_.outage) && !live_.gnssOutage;
     inMultipath_ = inside(zones_.multipath);
     inSlip_ = inside(zones_.slip);
     if (inMultipath_ && mpSince_ < 0.0) {
@@ -419,6 +419,10 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
     }
     const double rampBias = rampBias_;
     gnssFault_ = (mpOn ? c_.multipathBias : 0.0) + rampBias;
+    const bool liveBias = live_.gnssBiasX != 0.0 || live_.gnssBiasY != 0.0;  // an operator's injected offset
+    if (liveBias) {
+        gnssFault_ += std::hypot(live_.gnssBiasX, live_.gnssBiasY);
+    }
 
     // Slowly varying errors: bias random walks, a scheduled gyro-bias step, correlated GNSS error.
     if (stepped_) {
@@ -490,12 +494,16 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
             }
             m.a += rampBias * rampX_;
             m.b += rampBias * rampY_;
+            if (liveBias) {
+                m.a += live_.gnssBiasX;
+                m.b += live_.gnssBiasY;
+            }
             m.c = c_.gnss.reportedSigma;
             pending_.push_back(m);
         }
     }
     const long kerbEvery = std::max(1L, std::lround(1.0 / (c_.kerb.rate * dt)));
-    if (map_ && k % kerbEvery == 0 && !inside(zones_.kerbBlackout)) {
+    if (map_ && k % kerbEvery == 0 && !inside(zones_.kerbBlackout) && !live_.kerbBlackout) {
         Measurement m;
         m.kind = Measurement::Kerb;
         m.tMeas = t;
