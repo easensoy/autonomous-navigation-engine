@@ -45,10 +45,17 @@ def merged_kerb_lines(m):
 
 
 def kerb_primitives(m):
-    """Each kerb line and arc as a polyline traversed with the carriageway on its left."""
+    """Each kerb line and arc as a polyline traversed with the carriageway on its left. A district network's
+    kerb pieces meet end to end at any angle and never overlap, so they are used as they are (merging relies
+    on the grids' exactly axis-aligned normals); a district's patch edges are included, as they close it."""
     prims = []
-    for ax, ay, bx, by, nx, ny in merged_kerb_lines(m):
-        prims.append([(ax, ay), (bx, by)])  # merged lines already run with the carriageway on the left
+    if m.get("district"):
+        for ax, ay, bx, by, nx, ny in m["kerb_lines"]:
+            dx, dy = ny, -nx  # the direction with the carriageway on the left
+            prims.append([(ax, ay), (bx, by)] if (bx - ax) * dx + (by - ay) * dy >= 0 else [(bx, by), (ax, ay)])
+    else:
+        for ax, ay, bx, by, nx, ny in merged_kerb_lines(m):
+            prims.append([(ax, ay), (bx, by)])  # merged lines already run with the carriageway on the left
     for cx, cy, r, mid, half in m["kerb_arcs"]:
         # The carriageway lies outside the circle: clockwise around the centre keeps it on the left.
         n = max(2, int(math.ceil(2.0 * half / ARC_STEP)))
