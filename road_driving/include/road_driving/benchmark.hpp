@@ -57,6 +57,7 @@ std::vector<RouteSpec> benchmarkRoutesR4();             // three routes on R4
 std::vector<RouteSpec> benchmarkRoutesR5();             // three routes on R5
 std::vector<RouteSpec> benchmarkRoutesR6();             // three routes on R6
 std::vector<RouteSpec> benchmarkRoutesR7();             // three routes on R7
+std::vector<RouteSpec> districtRoutes();                // KEN-A (Kensington) and KNB-A (Knightsbridge): district.hpp
 Scenario benchmarkScenario(const RouteSpec& route, const std::string& condition, std::uint64_t seed, const std::string& mode);
 // Closed-loop scenarios: development uses R1's closure scenarios; held out uses the R2 routes and one
 // R2 closure scenario; R3 and R4 their three routes and one closure scenario each.
@@ -66,7 +67,7 @@ std::vector<Scenario> closedLoopScenariosR4();
 std::vector<Scenario> closedLoopScenariosR5();
 std::vector<Scenario> closedLoopScenariosR6();
 std::vector<Scenario> closedLoopScenariosR7();
-// A catalogue scenario, a benchmark route (R1 to R7) or a closed-loop scenario, by name.
+// A catalogue scenario, a benchmark route (R1 to R7), a district route or a closed-loop scenario, by name.
 bool findNamedScenario(const std::string& name, Scenario& sc);
 
 // A benchmark split. "dev" (R1) and "heldout" (R2) are the November 2026 evaluation exactly as recorded:
