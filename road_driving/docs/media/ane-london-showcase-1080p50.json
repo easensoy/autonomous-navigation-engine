@@ -1,0 +1,451 @@
+{
+  "file": "ane-london-showcase-1080p50.mp4",
+  "bytes": 297879102,
+  "sha256": "b09b4ba212bbe67b4c7ce2c10830733fe03fb37945f5d7490fef2ef5dfced671",
+  "video": {
+    "codec": "h264",
+    "profile": "High",
+    "pix_fmt": "yuv420p",
+    "colour": "tv, bt709/unknown/unknown, progressive",
+    "width": 1920,
+    "height": 1080,
+    "bitrate_kbps": 12157,
+    "fps": 50.0,
+    "frames": 9797,
+    "duration_s": 195.94,
+    "chapters": [
+      {
+        "start": 0.0,
+        "end": 98.86,
+        "title": "Chapter 1 - Kensington"
+      },
+      {
+        "start": 98.86,
+        "end": 195.94,
+        "title": "Chapter 2 - Knightsbridge"
+      }
+    ],
+    "faststart": true,
+    "top_level_boxes": [
+      "ftyp",
+      "moov",
+      "free",
+      "mdat"
+    ]
+  },
+  "chapters": [
+    {
+      "frames": 4943,
+      "title_frames": 150,
+      "run_frames": 4643,
+      "tick_steps": [
+        1,
+        2
+      ],
+      "final_step": 1,
+      "end_frames": 150,
+      "first_tick": 1,
+      "last_tick": 9284,
+      "ticks_per_frame": 2,
+      "frames_inside_geometry": 0,
+      "min_car_share": 1.0,
+      "hud_clock_matches_tick": true,
+      "shots": [
+        {
+          "frame": 0,
+          "t": 0.01,
+          "shot": "chase"
+        },
+        {
+          "frame": 600,
+          "t": 9.01,
+          "shot": "street"
+        },
+        {
+          "frame": 1000,
+          "t": 17.01,
+          "shot": "chase_low"
+        },
+        {
+          "frame": 1350,
+          "t": 24.01,
+          "shot": "orbit"
+        },
+        {
+          "frame": 1800,
+          "t": 33.01,
+          "shot": "chase"
+        },
+        {
+          "frame": 2150,
+          "t": 40.01,
+          "shot": "overhead"
+        },
+        {
+          "frame": 2600,
+          "t": 49.01,
+          "shot": "chase_low"
+        },
+        {
+          "frame": 2950,
+          "t": 56.01,
+          "shot": "street"
+        },
+        {
+          "frame": 3099,
+          "t": 58.99,
+          "shot": "chase_low"
+        },
+        {
+          "frame": 3350,
+          "t": 64.01,
+          "shot": "orbit"
+        },
+        {
+          "frame": 3800,
+          "t": 73.01,
+          "shot": "chase"
+        },
+        {
+          "frame": 4150,
+          "t": 80.01,
+          "shot": "overhead"
+        },
+        {
+          "frame": 4450,
+          "t": 86.01,
+          "shot": "chase"
+        }
+      ],
+      "config": {
+        "scenario": "KEN-A",
+        "network": "KEN",
+        "condition": "gnss_outage_ldn",
+        "mode": "estimated",
+        "estimator": "ekf_kerb2",
+        "seed": 1,
+        "rejoin": "unique",
+        "variant": "B1",
+        "delay": 2,
+        "feasibility": true
+      },
+      "made": {
+        "backend": {
+          "commit": "2158277b851e9bc412da4aeaef48ecb44bb0fa0b",
+          "toolchain": "MSVC 195136260"
+        },
+        "labels": "SOURCE_INFORMED_ROADS,ESTIMATED_POSE(ekf_kerb2),SIMULATED_SENSORS,ORACLE_CLOSURE",
+        "renderer": "Intel(R) Arc(TM) Pro Graphics",
+        "quality": "high",
+        "size": [
+          1920,
+          1080
+        ],
+        "fps": 50,
+        "ticks_per_frame": 2,
+        "msaa": 8,
+        "crf": 18,
+        "preset": "slow",
+        "director": "KEN-A"
+      },
+      "end": {
+        "v": 1,
+        "type": "end",
+        "tick": 9284,
+        "t": 92.84,
+        "mode": "live",
+        "outcome": "COMPLETED",
+        "stack_mode": "DONE",
+        "trace_hash": "0x544daeb799add284",
+        "toolchain": "MSVC 195136260",
+        "replay_check": null,
+        "metrics": {
+          "completed": true,
+          "time_to_goal": 92.84,
+          "max_crossing": 0.0,
+          "min_clearance": 0.357,
+          "clearance_violations": 0,
+          "incursion_depth": 0.0,
+          "est_rmse": 0.068,
+          "est_max": 0.518,
+          "fallbacks": 0
+        },
+        "commands": 0,
+        "director": [
+          [
+            0.01,
+            "chase",
+            ""
+          ],
+          [
+            9.01,
+            "street",
+            ""
+          ],
+          [
+            17.01,
+            "chase_low",
+            ""
+          ],
+          [
+            24.01,
+            "orbit",
+            "orbit on the car's right"
+          ],
+          [
+            33.01,
+            "chase",
+            ""
+          ],
+          [
+            40.01,
+            "overhead",
+            ""
+          ],
+          [
+            49.01,
+            "chase_low",
+            ""
+          ],
+          [
+            56.01,
+            "street",
+            ""
+          ],
+          [
+            58.99,
+            "chase_low",
+            "the car reached the street camera"
+          ],
+          [
+            64.01,
+            "orbit",
+            "orbit on the car's left"
+          ],
+          [
+            73.01,
+            "chase",
+            ""
+          ],
+          [
+            80.01,
+            "overhead",
+            ""
+          ],
+          [
+            86.01,
+            "chase",
+            ""
+          ]
+        ]
+      },
+      "title": "Chapter 1 - Kensington",
+      "start_s": 0.0,
+      "end_s": 98.86
+    },
+    {
+      "frames": 4854,
+      "title_frames": 150,
+      "run_frames": 4554,
+      "tick_steps": [
+        2
+      ],
+      "final_step": 2,
+      "end_frames": 150,
+      "first_tick": 1,
+      "last_tick": 9107,
+      "ticks_per_frame": 2,
+      "frames_inside_geometry": 0,
+      "min_car_share": 1.0,
+      "hud_clock_matches_tick": true,
+      "shots": [
+        {
+          "frame": 0,
+          "t": 0.01,
+          "shot": "chase"
+        },
+        {
+          "frame": 550,
+          "t": 8.01,
+          "shot": "orbit"
+        },
+        {
+          "frame": 1000,
+          "t": 17.01,
+          "shot": "street"
+        },
+        {
+          "frame": 1194,
+          "t": 20.89,
+          "shot": "chase_low"
+        },
+        {
+          "frame": 1975,
+          "t": 36.51,
+          "shot": "street"
+        },
+        {
+          "frame": 2602,
+          "t": 49.05,
+          "shot": "chase"
+        },
+        {
+          "frame": 3050,
+          "t": 58.01,
+          "shot": "orbit"
+        },
+        {
+          "frame": 3500,
+          "t": 67.01,
+          "shot": "chase_low"
+        },
+        {
+          "frame": 3850,
+          "t": 74.01,
+          "shot": "overhead"
+        },
+        {
+          "frame": 4250,
+          "t": 82.01,
+          "shot": "chase"
+        }
+      ],
+      "config": {
+        "scenario": "KNB-A",
+        "network": "KNB",
+        "condition": "multipath_ldn",
+        "mode": "estimated",
+        "estimator": "ekf_kerb2",
+        "seed": 1,
+        "rejoin": "unique",
+        "variant": "B1",
+        "delay": 2,
+        "feasibility": true
+      },
+      "made": {
+        "backend": {
+          "commit": "2158277b851e9bc412da4aeaef48ecb44bb0fa0b",
+          "toolchain": "MSVC 195136260"
+        },
+        "labels": "SOURCE_INFORMED_ROADS,ESTIMATED_POSE(ekf_kerb2),SIMULATED_SENSORS,ORACLE_CLOSURE",
+        "renderer": "Intel(R) Arc(TM) Pro Graphics",
+        "quality": "high",
+        "size": [
+          1920,
+          1080
+        ],
+        "fps": 50,
+        "ticks_per_frame": 2,
+        "msaa": 8,
+        "crf": 18,
+        "preset": "slow",
+        "director": "KNB-A"
+      },
+      "end": {
+        "v": 1,
+        "type": "end",
+        "tick": 9107,
+        "t": 91.07,
+        "mode": "live",
+        "outcome": "COMPLETED",
+        "stack_mode": "DONE",
+        "trace_hash": "0x5a5bdc3ebeb4991a",
+        "toolchain": "MSVC 195136260",
+        "replay_check": null,
+        "metrics": {
+          "completed": true,
+          "time_to_goal": 91.06,
+          "max_crossing": 0.0,
+          "min_clearance": 0.578,
+          "clearance_violations": 0,
+          "incursion_depth": 0.0,
+          "est_rmse": 0.101,
+          "est_max": 0.582,
+          "fallbacks": 0
+        },
+        "commands": 0,
+        "director": [
+          [
+            0.01,
+            "chase",
+            ""
+          ],
+          [
+            8.01,
+            "orbit",
+            "orbit on the car's right"
+          ],
+          [
+            17.01,
+            "street",
+            ""
+          ],
+          [
+            20.89,
+            "chase_low",
+            "the car reached the street camera"
+          ],
+          [
+            25.01,
+            "chase_low",
+            ""
+          ],
+          [
+            36.51,
+            "street",
+            ""
+          ],
+          [
+            49.05,
+            "chase",
+            "car passed the street camera"
+          ],
+          [
+            58.01,
+            "orbit",
+            "orbit on the car's left"
+          ],
+          [
+            67.01,
+            "chase_low",
+            ""
+          ],
+          [
+            74.01,
+            "overhead",
+            ""
+          ],
+          [
+            82.01,
+            "chase",
+            ""
+          ]
+        ]
+      },
+      "title": "Chapter 2 - Knightsbridge",
+      "start_s": 98.86,
+      "end_s": 195.94
+    }
+  ],
+  "checks": {
+    "passed": true,
+    "problems": []
+  },
+  "source": {
+    "repository": "easensoy/autonomous-navigation-engine",
+    "commit": "2158277b851e9bc412da4aeaef48ecb44bb0fa0b",
+    "road_driving_modified": false
+  },
+  "recording": {
+    "render": "offscreen 1920x1080, rendered at that size (no scaling), multisampled",
+    "fps": 50,
+    "ticks_per_frame": 2,
+    "lockstep": "the backend is paused and stepped exactly 2 ticks of 10 ms per captured frame",
+    "encoder": "libx264 slow CRF 18, High profile, yuv420p, 1 s GOP, fast start",
+    "quality": "high",
+    "hud": "presentation overlay",
+    "cameras": "director plans KEN-A, KNB-A (road_driving/viewer/ane_viewer/director.py)"
+  },
+  "created": "2026-11-18T21:29:37Z",
+  "provenance": "Source-informed research reconstructions of Kensington and Knightsbridge with approximated details, not surveyed digital twins. Street geometry, names, one-way rules and turn restrictions from OpenStreetMap (ODbL, (c) OpenStreetMap contributors); widths, kerbs and turning paths inferred; facades decorative. Independent research simulation: an I-PACE-sized proxy, not a Jaguar; not Waymo software or data. See road_driving/viewer/districts/PROVENANCE.md."
+}
