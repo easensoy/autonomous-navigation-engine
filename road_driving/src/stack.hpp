@@ -20,8 +20,9 @@ struct ClosureReport {
     bool active = true;       // false once the oracle reports the lift
 };
 
-// The estimator's map-verified corrections (StateEstimate::verifiedCorrections): a count, and the position
-// change of the latest. Zero for simulator truth and for estimators without a map reference.
+// The estimator's map-verified corrections (StateEstimate::verifiedCorrections, or uniqueCorrections for the
+// unique re-join): a count, and the position change of the latest. Zero for simulator truth and for estimators
+// without a map reference.
 struct VerifiedCorrection {
     int count = 0;
     double dx = 0.0, dy = 0.0;
@@ -97,7 +98,7 @@ public:
 
     // rejoin: the stack's response to a pose correction (Rejoin in episode.hpp).
     Stack(const LaneNetwork& net, const VehicleParams& vp, Variant variant, int goalElement, double goalLaneS, bool feasibility = true,
-          Rejoin rejoin = Rejoin::Verified);
+          Rejoin rejoin = Rejoin::Unique);
     void initialise(const Observation& obs);  // first planning tick: closures known at departure, initial route
     void plan(const Observation& obs);        // every planning tick (10 Hz)
     Command control(const VehicleState& pose, double t, const VerifiedCorrection& verified = {});  // every control tick (50 Hz)
@@ -187,7 +188,7 @@ private:
     bool clearLatched_ = false;
 
     // Pose corrections (rejoinpolicy).
-    Rejoin rejoin_ = Rejoin::Verified;
+    Rejoin rejoin_ = Rejoin::Unique;
     int lastVerified_ = 0;  // the estimator's verified-correction count at the previous tick
     double rejoinS0_ = 0.0, rejoinD0_ = 0.0, rejoinLength_ = 0.0;
     double lastErr_ = 0.0;     // cross-track error from the reference at the previous tick
