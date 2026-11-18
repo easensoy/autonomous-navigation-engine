@@ -4,6 +4,15 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: a live 3D viewer and a stepping interface (`road_driving/`)
+
+- **`runEpisodeHooked(scenario, hooks)`** (`src/live_hooks.hpp`): the episode loop with two hooks per 10 ms tick. The first runs before the sensors step and applies operator commands (`TickControl`); the second runs after the control step and reports (`TickView`). `runEpisode` passes no hooks, so headless runs are unchanged: the 192-episode suite is byte-identical with GCC and MSVC, and 850 R7-A held-out closed loops reproduce value for value.
+- **`LiveFaults`**, set with `SensorSimulator::setLiveFaults`: an injected GNSS outage, a GNSS offset and a kerb-scanner blackout. The outage still draws the fixes' noise and the offset draws nothing, so the other sensors' streams stay aligned.
+- **`road_drive live`:** the episode loop as a server on standard input and output, in a versioned line protocol (`viewer/PROTOCOL.md`). It runs in real time or faster, with pause, step, reset, the faults, and an operator-notified closure and its lifting, each applied at a recorded tick. **`road_drive session-replay FILE`** replays a recorded session headlessly; on the toolchain that recorded it, the trace hash must match.
+- **`findNamedScenario`** (`benchmark.hpp`): any catalogue, route or closed-loop scenario of R1 to R7, by name.
+- **`road_driving/viewer/`:** the Panda3D application and its Windows launcher, an original I-PACE-sized proxy, the street built from the map, the overlays and three demonstrations. It is optional: the C++ builds do not need Python.
+- **Tests:** CTest gains `road_driving_live_tests` (23 checks) and `road_driving_session_replay`. CI's Linux jobs run the viewer's Python tests, without a display, against the backend they built.
+
 ### Road-driving: a re-join for unique kerb matches only, network R7 (`road_driving/`)
 
 - **`Rejoin::Unique`**, written `unique`, the new default. It re-joins only corrections whose kerb scan fits the map uniquely, and is otherwise `Verified`, which is unchanged.
