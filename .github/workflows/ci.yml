@@ -104,6 +104,11 @@ jobs:
       - name: Replay a stored sensor log through every estimator, without the simulator
         run: ./build/road_driving/road_drive localise road_driving/benchmark/dev/logs/R1-A_gnss_outage_s1
 
+      # No display and no Panda3D here: the scene, vehicle and protocol tests are pure Python, the
+      # backend tests drive the road_drive just built, and the three Panda3D tests are skipped.
+      - name: Test the 3D viewer without graphics, against the built backend
+        run: python3 -m unittest discover -s road_driving/viewer/tests -v
+
   # Correctness of the committed evidence (docs/data, docs/assets, README). No timing runs here: CI
   # runners are shared machines, and their timings are never used as benchmark results.
   evidence:
