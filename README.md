@@ -294,6 +294,10 @@ the engine and the car stops before the barrier instead.
     into deeper crossings. The one failure: a correct correction let a car drive on with an along-road error
     that the next turn made a 0.88 m crossing. Five of six criteria passed
     ([results](road_driving/LOCALISATION.md#results)).
+- **Live 3D viewer:** [`road_driving/viewer/`](road_driving/viewer/README.md) runs the simulation in a
+  native Panda3D application. It draws what the backend computes at each 10 ms tick: the true car, the
+  estimate it drives on, kerb returns, GNSS fixes and corrections. Faults and closures can be injected
+  while it drives, and a recorded session replays headlessly. It reproduces that 0.88 m crossing exactly.
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
 
