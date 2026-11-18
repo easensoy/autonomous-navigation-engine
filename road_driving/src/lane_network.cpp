@@ -1,5 +1,7 @@
 #include "road_driving/lane_network.hpp"
 
+#include "road_driving/district.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -296,6 +298,10 @@ LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
     if (name == "R3") {
         return buildR3(spec);
     }
+    DistrictSpec district;
+    if (findDistrict(name, district)) {
+        return buildDistrict(district, spec);
+    }
     throw std::invalid_argument("unknown network " + name);
 }
 
@@ -340,7 +346,7 @@ LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& baseSpec) {
             }
         }
         streets.push_back(st);
-        net.streets.push_back({a.junction, b.junction, a.x, a.y, b.x, b.y});
+        net.streets.push_back({a.junction, b.junction, a.x, a.y, b.x, b.y, std::string(), 0.0, 0.0, 0.0, 0.0});  // a grid street: no district fields
     };
     for (int r = 0; r < ny; ++r) {
         for (int c = 0; c + 1 < nx; ++c) {
@@ -514,6 +520,10 @@ LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& baseSpec) {
 }
 
 double LaneNetwork::coarseClearance(double x, double y) const {
+    if (general) {  // a district's kerb is exact: no conservative stand-in
+        double nx = 0.0, ny = 0.0;
+        return districtKerbDistance(*this, x, y, nx, ny);
+    }
     const double hw = spec.laneWidth;  // half the carriageway: one lane each side of the centreline
     double best = -std::numeric_limits<double>::infinity();
     for (const Street& st : streets) {
@@ -667,6 +677,9 @@ double lineDistance(const KerbLine& k, double x, double y) {
 }  // namespace
 
 double LaneNetwork::kerbDistance(double x, double y, double& nx, double& ny) const {
+    if (general) {
+        return districtKerbDistance(*this, x, y, nx, ny);
+    }
     double best = std::numeric_limits<double>::infinity();
     nx = 0.0;
     ny = 0.0;
@@ -698,6 +711,7 @@ double LaneNetwork::roadClearance(double x, double y) const {
 double LaneNetwork::rayToKerb(double x, double y, double dx, double dy, double maxRange) const {
     double best = std::numeric_limits<double>::infinity();
     for (const KerbLine& k : kerbLines) {
+        if (k.boundary) continue;  // a district's patch edge: not a kerb, nothing to see
         // x + t d = a + s (b - a), 0 <= s <= 1, t > 0
         const double ex = k.bx - k.ax, ey = k.by - k.ay;
         const double den = dx * ey - dy * ex;
@@ -805,7 +819,8 @@ std::vector<std::string> LaneNetwork::validate(double unitsPerMetre) const {
         }
         if (e.isConnector()) {
             const double turned = wrapAngle(e.pts.back().yaw - e.pts.front().yaw);
-            if (std::fabs(turned) > 0.5 * kPi + 1e-6) {
+            // The grids' junctions are square; a real junction's turn may be a little sharper than a right angle.
+            if (std::fabs(turned) > (general ? 0.75 : 0.5) * kPi + 1e-6) {
                 err.push_back("connector " + e.name + " reverses direction");
             }
             double kArc = 0.0;
@@ -830,6 +845,10 @@ std::vector<std::string> LaneNetwork::validate(double unitsPerMetre) const {
         if (a >= 0 && b >= 0 && connector(a, b) >= 0) {
             err.push_back("banned turn " + bt.fromLane + " -> " + bt.toLane + " has a connector");
         }
+    }
+    if (general) {
+        const std::vector<std::string> more = validateDistrict(*this);
+        err.insert(err.end(), more.begin(), more.end());
     }
     return err;
 }
