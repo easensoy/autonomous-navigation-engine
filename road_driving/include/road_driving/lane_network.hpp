@@ -160,6 +160,7 @@ GridSpec gridR3();
 GridSpec gridR4();
 GridSpec gridR5();
 GridSpec gridR6();
+GridSpec gridR7();
 LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& spec = NetworkSpec{});
 
 // Network R1 (development): a 3 by 3 grid at x = 0, 120, 240 m and y = 0, 80, 160 m. Two-way streets
@@ -192,7 +193,12 @@ LaneNetwork buildR5(const NetworkSpec& spec = NetworkSpec{});
 // J11>J21 -> J21>J22 and no right turn J22>J12 -> J12>J13; tight junctions J22 and J01; a 45 m cul-de-sac
 // east of J30. Junction design as R2's.
 LaneNetwork buildR6(const NetworkSpec& spec = NetworkSpec{});
-// "R1" to "R6"; throws for any other name.
+// Network R7 (held out for the evaluation of the unique re-join): a 5 by 4 grid at x = 0, 90, 185, 270, 365 m
+// and y = 0, 100, 195, 290 m; one-way streets J11->J21 (eastbound) and J33->J32 (southbound); no right turn
+// J12>J22 -> J22>J21 and no left turn J30>J31 -> J31>J21; tight junctions J23 and J41; a 40 m cul-de-sac
+// east of J42. Junction design as R2's.
+LaneNetwork buildR7(const NetworkSpec& spec = NetworkSpec{});
+// "R1" to "R7"; throws for any other name.
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec = NetworkSpec{});
 // A right-hand-traffic copy (x mirrored). validate() must reject it.
 LaneNetwork mirrored(const LaneNetwork& net);
