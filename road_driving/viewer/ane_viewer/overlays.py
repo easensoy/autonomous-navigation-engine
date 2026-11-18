@@ -49,6 +49,8 @@ class Overlays:
         for name in ("truth_trail", "est_trail", "path", "route", "gnss", "scan", "placed", "ellipse", "markers", "closure", "footprints"):
             self.layers[name] = self.root.attachNewNode(name)
         self.show = {name: True for name in self.layers}
+        self.labels = True  # the presentation overlay shows marker poles without their text
+        self.compact = False  # the presentation overlay: the last 20 GNSS fixes, drawn smaller
         self.show["placed"] = False
         self.layers["placed"].hide()
         self._nodes = {}
@@ -93,10 +95,10 @@ class Overlays:
         if state.gnss and self._last.get("gnss") is not state.gnss[-1]:
             self._last["gnss"] = state.gnss[-1]
             b = Builder("gnss")
-            fixes = list(state.gnss)[-60:]
+            fixes = list(state.gnss)[-(20 if self.compact else 60):]
             for i, fx in enumerate(fixes):
                 newest = i == len(fixes) - 1
-                r = 0.24 if newest else 0.11
+                r = (0.18 if newest else 0.07) if self.compact else (0.24 if newest else 0.11)
                 a = 0.30 + 0.70 * (i + 1) / len(fixes)
                 b.box(fx["x"], fx["y"], 0.08, 2 * r, 2 * r, 0.04, 0.785, (GNSS[0], GNSS[1], GNSS[2], a))
             n = self._replace("gnss", b.node())
@@ -202,6 +204,7 @@ class Overlays:
                 continue
             node.show()
             if not label.isEmpty():
+                (label.show if self.labels else label.hide)()
                 s = max(0.12, min(3.5, 0.018 * d))
                 label.setScale(s)
                 label.setZ(3.6 + s * node.getPythonTag("stack"))
