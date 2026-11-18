@@ -284,12 +284,12 @@ void Stack::track(const VehicleState& pose, const VerifiedCorrection& verified) 
         s_ = pr.s;
         lateral_ = pr.lateral;
         // All: a cross-track change no motion explains is a pose correction; move the reference with it.
-        // Verified: only a correction the estimator verified against the map, by its cross-track part.
+        // Verified and Unique: only a correction the estimator verified against the map, by its cross-track part.
         const double err = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
         double jump = 0.0;
         if (rejoin_ == Rejoin::All && haveLastErr_ && std::fabs(err - lastErr_) > rejoinpolicy::kJump) {
             jump = err - lastErr_;
-        } else if (rejoin_ == Rejoin::Verified && newVerified) {
+        } else if ((rejoin_ == Rejoin::Verified || rejoin_ == Rejoin::Unique) && newVerified) {
             // The cross-track change the verified correction alone made: the pose without it, projected the same
             // way (in a turn a correction along the road changes the cross-track error too).
             const double reach = 2.0 + std::hypot(verified.dx, verified.dy);
@@ -305,8 +305,8 @@ void Stack::track(const VehicleState& pose, const VerifiedCorrection& verified) 
                 rejoinS0_ = s_;
                 rejoinD0_ = d0;
                 rejoinLength_ = std::max(rejoinpolicy::kMinLength, std::fabs(d0) / rejoinpolicy::kSlope);
-                event("POSE_CORRECTION", std::string(rejoin_ == Rejoin::Verified ? "verified;" : "") + "jump=" + fmt(jump, 3) + ";rejoin=" + fmt(d0, 3) +
-                                             ";over=" + fmt(rejoinLength_, 1));
+                const char* kind = rejoin_ == Rejoin::Verified ? "verified;" : (rejoin_ == Rejoin::Unique ? "unique;" : "");
+                event("POSE_CORRECTION", std::string(kind) + "jump=" + fmt(jump, 3) + ";rejoin=" + fmt(d0, 3) + ";over=" + fmt(rejoinLength_, 1));
             }
         }
         lastErr_ = lateral_ - pathShiftAt(s_) - rejoinAt(s_);
@@ -711,14 +711,15 @@ double Stack::envelopeAt(double s) const {
 }
 
 // The monitor's reference, sideways from the path. Off: the path itself (the R3 and R4 stack). All: the path
-// with its clearance shift, but not the re-join, which may follow a corrupted estimate. Verified: the path with
-// the re-join, which only ever follows a map-verified correction; the clearance shift is not included, so
-// every unverified jump meets the R3 and R4 monitor.
+// with its clearance shift, but not the re-join, which may follow a corrupted estimate. Verified and Unique: the
+// path with the re-join, which only ever follows a map-verified correction; the clearance shift is not included,
+// so every unverified jump meets the R3 and R4 monitor.
 double Stack::monitorOffset() const {
     switch (rejoin_) {
         case Rejoin::Off: return 0.0;
         case Rejoin::All: return pathShiftAt(s_);
-        case Rejoin::Verified: return rejoinAt(s_);
+        case Rejoin::Verified:
+        case Rejoin::Unique: return rejoinAt(s_);
     }
     return 0.0;
 }
