@@ -11,19 +11,29 @@
 //   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] --out DIR
 //   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] [--scenario A,B] [--rejoin off|on|verified|unique] --out DIR
 //   road_drive map R1|R2|R3|R4|R5|R6|R7 [--json FILE]
+//   road_drive live [--scenario NAME --condition C --estimator E --seed N --mode M --rejoin R] [--speed X]
+//                   [--observe-every N] [--paused on] [--replay SESSION] [--script FILE] [--session-out FILE]
+//   road_drive session-replay SESSION
 //
 // Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
 // mode is "estimated", when the stack drives on the estimator's output.
 #include "road_driving/benchmark.hpp"
 #include "road_driving/episode.hpp"
+#include "road_driving/live.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <sstream>
 #include <string>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 using namespace road;
 
@@ -49,7 +59,10 @@ int usage() {
                  "  road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]\n"
                  "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] --out DIR\n"
                  "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] [--scenario A,B] [--rejoin off|on|verified|unique] --out DIR\n"
-                 "  road_drive map R1|R2|R3|R4|R5|R6|R7 [--json FILE]\n");
+                 "  road_drive map R1|R2|R3|R4|R5|R6|R7 [--json FILE]\n"
+                 "  road_drive live [--scenario NAME --condition C --estimator E --seed N --mode M --rejoin R] [--speed X]\n"
+                 "                  [--observe-every N] [--paused on] [--replay SESSION] [--script FILE] [--session-out FILE]\n"
+                 "  road_drive session-replay SESSION\n");
     return 2;
 }
 
@@ -119,46 +132,7 @@ int replay(const std::string& dir) {
     return (outcomeOk && routesOk) ? 0 : 1;
 }
 
-bool scenarioByName(const std::string& name, Scenario& sc) {
-    if (findScenario(name, sc)) return true;
-    for (bool held : {false, true}) {
-        for (const RouteSpec& r : benchmarkRoutes(held)) {
-            if (r.name == name) {
-                sc = benchmarkScenario(r, "", 0, "ground_truth");
-                return true;
-            }
-        }
-        for (const Scenario& s : closedLoopScenarios(held)) {
-            if (s.name == name) {
-                sc = s;
-                return true;
-            }
-        }
-    }
-    for (int n : {3, 4, 5, 6, 7}) {
-        for (const RouteSpec& r : n == 3   ? benchmarkRoutesR3()
-                                  : n == 4 ? benchmarkRoutesR4()
-                                  : n == 5 ? benchmarkRoutesR5()
-                                  : n == 6 ? benchmarkRoutesR6()
-                                           : benchmarkRoutesR7()) {
-            if (r.name == name) {
-                sc = benchmarkScenario(r, "", 0, "ground_truth");
-                return true;
-            }
-        }
-        for (const Scenario& s : n == 3   ? closedLoopScenariosR3()
-                                 : n == 4 ? closedLoopScenariosR4()
-                                 : n == 5 ? closedLoopScenariosR5()
-                                 : n == 6 ? closedLoopScenariosR6()
-                                          : closedLoopScenariosR7()) {
-            if (s.name == name) {
-                sc = s;
-                return true;
-            }
-        }
-    }
-    return false;
-}
+bool scenarioByName(const std::string& name, Scenario& sc) { return findNamedScenario(name, sc); }
 
 int drive(const std::string& name, std::map<std::string, std::string>& opt) {
     Scenario sc;
@@ -193,6 +167,70 @@ int drive(const std::string& name, std::map<std::string, std::string>& opt) {
         std::printf("wrote %s\n", opt["--out"].c_str());
     }
     return 0;
+}
+
+// The live server for the 3D viewer: line protocol on stdin and stdout (viewer/PROTOCOL.md), diagnostics on stderr.
+int live(std::map<std::string, std::string>& opt) {
+    LiveOptions lo;
+    lo.speed = opt.count("--speed") ? std::stod(opt["--speed"]) : 1.0;
+    lo.observeEvery = opt.count("--observe-every") ? std::stoi(opt["--observe-every"]) : 1;
+    lo.startPaused = opt.count("--paused") && opt["--paused"] != "off";
+    lo.replayPath = opt.count("--replay") ? opt["--replay"] : "";
+    lo.sessionOut = opt.count("--session-out") ? opt["--session-out"] : "";
+    if (opt.count("--scenario")) {
+        auto field = [&](const char* key, const char* flag, const char* fallback) {
+            return std::string(",\"") + key + "\":\"" + (opt.count(flag) ? opt[flag] : std::string(fallback)) + "\"";
+        };
+        lo.initialConfig = "{\"scenario\":\"" + opt["--scenario"] + "\"" + field("condition", "--condition", "nominal") +
+                           field("estimator", "--estimator", "ekf") + field("mode", "--mode", "estimated") + field("rejoin", "--rejoin", "unique") +
+                           ",\"seed\":" + (opt.count("--seed") ? opt["--seed"] : std::string("1")) + "}";
+    }
+#ifdef _WIN32
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stdin), _O_BINARY);
+#endif
+    std::ios::sync_with_stdio(false);
+    if (opt.count("--script")) {
+        std::ifstream script(opt["--script"], std::ios::binary);
+        if (!script) {
+            std::fprintf(stderr, "cannot read %s\n", opt["--script"].c_str());
+            return 2;
+        }
+        lo.script = true;
+        return runLiveServer(script, std::cout, std::cerr, lo);
+    }
+    return runLiveServer(std::cin, std::cout, std::cerr, lo);
+}
+
+// Replays a recorded session headlessly. On the recording toolchain the trace must be bit-identical; on
+// another one the outcome must match and the trace hash is reported.
+int sessionReplay(const std::string& path) {
+    std::string text, error;
+    if (!readText(path, text)) {
+        std::fprintf(stderr, "cannot read %s\n", path.c_str());
+        return 2;
+    }
+    SessionReplay rep;
+    if (!replaySession(text, rep, error)) {
+        std::fprintf(stderr, "%s: %s\n", path.c_str(), error.c_str());
+        return 2;
+    }
+    printSummary(rep.result);
+    const std::string recorded = rep.recordedHash.empty() ? "no recorded result" : "recorded " + rep.recordedOutcome + " with " + rep.recordedToolchain;
+    std::printf("  session: %d world commands; %s\n", rep.commands, recorded.c_str());
+    if (rep.recordedHash.empty()) {
+        return 0;
+    }
+    const bool sameToolchain = rep.recordedToolchain == toolchain();
+    const bool hashOk = hex64(rep.result.traceHash) == rep.recordedHash;
+    const bool outcomeOk = rep.result.outcome == rep.recordedOutcome;
+    std::printf("  outcome %s (recorded %s): %s\n", rep.result.outcome.c_str(), rep.recordedOutcome.c_str(), outcomeOk ? "match" : "DIFFERENT");
+    std::printf("  trace %s (recorded %s): %s\n", hex64(rep.result.traceHash).c_str(), rep.recordedHash.c_str(), hashOk ? "match" : "different");
+    if (sameToolchain) {
+        return hashOk && outcomeOk ? 0 : 1;
+    }
+    std::printf("  different toolchain: the trace hash is reported, not required; the outcome must match\n");
+    return outcomeOk ? 0 : 1;
 }
 
 int localise(const std::string& dir, std::map<std::string, std::string>& opt) {
@@ -386,6 +424,12 @@ int main(int argc, char** argv) {
                 return usage();
             }
             return replay(positional);
+        }
+        if (cmd == "live") {
+            return live(opt);
+        }
+        if (cmd == "session-replay" && !positional.empty()) {
+            return sessionReplay(positional);
         }
         if (cmd == "drive" && !positional.empty()) {
             return drive(positional, opt);
