@@ -22,6 +22,7 @@ Compatibility notes for code that uses the library. Dates are when the change re
   - A presentation overlay (`M`) and a camera director.
   - Recording offscreen at its own size, at 50 frames per second (2 ticks a frame), with a frame log and `tools/check_recording.py`.
 - **Tests:** CTest gains `road_driving_district_tests` (31 checks). The viewer's Python tests grow from 30 to 51; the 21 new ones run without Panda3D.
+- **The London showcase:** a 1920×1080, 50 fps recording of both scenes, one uninterrupted run per chapter, published as the GitHub release `viewer-london-v1` with its metadata and the OpenStreetMap extracts. The video is not in the repository; its poster and four frames are in `road_driving/docs/media`.
 
 ### Road-driving: a live 3D viewer and a stepping interface (`road_driving/`)
 
