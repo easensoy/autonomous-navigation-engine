@@ -126,7 +126,8 @@ DEMOS = [
     Demo("N", "Knightsbridge: Brompton Road, Hans Road and Basil Street",
          {"scenario": "KNB-A", "condition": "multipath_ldn", "mode": "estimated", "estimator": "ekf_kerb2", "seed": 1, "rejoin": "unique"},
          "Brompton Road south-westbound past Harrods, left into Hans Road, left into Basil Street: a source-informed reconstruction "
-         "from OpenStreetMap. Between the tall frontages the GNSS fixes are pulled 6 m off.",
+         "from OpenStreetMap. On Brompton Road a multipath condition offsets the GNSS fixes by 6 m; it is placed there, not computed "
+         "from the buildings.",
          [Stage(lambda s: ((s.tick or {}).get("est") or {}).get("gnss") == "FAULTED",
                 lambda s: "Multipath: the fixes are 6 m off. The integrity monitor excludes GNSS; the estimate holds on the IMU, wheels and "
                           "kerb scans: %s m from truth." % _fmt(_diag(s, "position")), live=True),
