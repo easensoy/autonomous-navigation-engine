@@ -409,8 +409,21 @@ std::vector<Scenario> closedLoopScenariosR7() {
     return out;
 }
 
+// Kensington: Kensington Gore westbound past the Royal Albert Hall, left into Queen's Gate, the length of
+// Queen's Gate southbound, right into Elvaston Place. Knightsbridge: Brompton Road south-westbound past
+// Harrods, left into Hans Road, left into Basil Street, right into Hans Crescent.
+std::vector<RouteSpec> districtRoutes() {
+    return {{"KEN-A", "KEN", "KGE>KGW", 40.0, "QEP>EGS", 40.0}, {"KNB-A", "KNB", "BRE>BRG", 8.0, "HCB>HCE", 18.0}};
+}
+
 bool findNamedScenario(const std::string& name, Scenario& sc) {
     if (findScenario(name, sc)) return true;
+    for (const RouteSpec& r : districtRoutes()) {
+        if (r.name == name) {
+            sc = benchmarkScenario(r, "", 0, "ground_truth");
+            return true;
+        }
+    }
     for (bool held : {false, true}) {
         for (const RouteSpec& r : benchmarkRoutes(held)) {
             if (r.name == name) {
