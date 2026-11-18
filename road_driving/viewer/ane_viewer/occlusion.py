@@ -103,6 +103,9 @@ class Occluders:
         self.cell = cell
         self.prisms = []
         self.grid = {}
+        # Street furniture, (x, y, kind): too slender to hide the car, so not prisms the chase and orbit cameras
+        # steer round, but a street-level camera keeps clear of it (director.py).
+        self.furniture = []
 
     def __len__(self):
         return len(self.prisms)
@@ -250,6 +253,8 @@ def synthetic_occluders(m, quality="medium"):
         occ.add_box(p["x"] - c * 0.5 * d, p["y"] - s * 0.5 * d, p["heading"], d, w, 0.0, top)
     if quality != "low":
         for kind, x, y, _ in g.furniture(m):
+            if kind in ("lamp", "bollard"):
+                occ.furniture.append((x, y, kind))
             if kind == "tree":
                 occ.add_disc(x, y, 2.0, g.KERB_HEIGHT + 2.3, g.KERB_HEIGHT + 5.7)
     return occ
