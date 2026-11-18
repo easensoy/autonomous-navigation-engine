@@ -4,6 +4,25 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: district networks for Kensington and Knightsbridge, and the viewer's London scenes (`road_driving/`)
+
+- **`district.hpp`: `DistrictSpec`, `buildDistrict`, `findDistrict`.** These build a lane network from a street description: junctions at any angle, a kerb width for each side of a street, an optional central reservation, gentle bends, and patch edges where a street carries on beyond the modelled area. `buildNetwork` knows two districts, `KEN` and `KNB`. They are source-informed reconstructions of real streets from OpenStreetMap (`viewer/districts/PROVENANCE.md`), with approximated details, not surveyed models.
+- **`LaneNetwork::general`**, set by district networks:
+  - `kerbDistance` and `roadClearance` take their sign from the nearest kerb point, using pseudo-normals where kerb pieces meet; on the grids `coarseClearance` still decides it.
+  - `rayToKerb` ignores patch edges (`KerbLine::boundary`).
+  - `validate` adds the district checks.
+
+  The grids are unchanged, and so is everything run on them: the 192-episode suite is byte-identical, and demonstration C still reproduces trace `0x58876d2b4ce5fe2c`.
+- **`Street`** gains `name`, `halfWidth`, `halfWidthRight`, `median` and `laneOffset`; on the grids they are empty or zero. `KerbLine` gains `boundary` and end pseudo-normals, and `KerbArc` gains its end pseudo-normals.
+- **Routes and conditions.** `districtRoutes()` adds `KEN-A` and `KNB-A`, and `findNamedScenario` finds them. `conditionNamesDistrict()` adds `nominal_ldn`, `gnss_outage_ldn` and `multipath_ldn`. District episodes are labelled `SOURCE_INFORMED_ROADS`. A parked-car condition is refused on a district network, because its placement assumes the grids' widths.
+- **`road_drive live`:** a district network's scene message adds `district`, `street_info` and `kerb_boundary`, still protocol version 1.
+- **The viewer:**
+  - Kensington and Knightsbridge scenes built from the backend's kerb and the OpenStreetMap building outlines, with modular facades, procedural materials and landmarks (`F5`, `F6`).
+  - Obstruction-aware chase, orbit and street-level cameras.
+  - A presentation overlay (`M`) and a camera director.
+  - Recording offscreen at its own size, at 50 frames per second (2 ticks a frame), with a frame log and `tools/check_recording.py`.
+- **Tests:** CTest gains `road_driving_district_tests` (31 checks). The viewer's Python tests grow from 30 to 51; the 21 new ones run without Panda3D.
+
 ### Road-driving: a live 3D viewer and a stepping interface (`road_driving/`)
 
 - **`runEpisodeHooked(scenario, hooks)`** (`src/live_hooks.hpp`): the episode loop with two hooks per 10 ms tick. The first runs before the sensors step and applies operator commands (`TickControl`); the second runs after the control step and reports (`TickView`). `runEpisode` passes no hooks, so headless runs are unchanged: the 192-episode suite is byte-identical with GCC and MSVC, and 850 R7-A held-out closed loops reproduce value for value.
