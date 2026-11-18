@@ -129,6 +129,9 @@ std::vector<std::string> conditionNamesR4();
 std::vector<std::string> conditionNamesR5();
 std::vector<std::string> conditionNamesR6();
 std::vector<std::string> conditionNamesR7();
+// The district networks' conditions (KEN, KNB), for the viewer's London scenes: nominal_ldn, gnss_outage_ldn
+// (no fixes over 40 to 70% of the route) and multipath_ldn (fixes 6 m off over 15 to 45%). Not an evaluation.
+std::vector<std::string> conditionNamesDistrict();
 
 struct Zone {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
