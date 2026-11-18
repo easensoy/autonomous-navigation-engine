@@ -86,6 +86,7 @@ const char* rejoinName(Rejoin r) {
         case Rejoin::Off: return "off";
         case Rejoin::All: return "on";
         case Rejoin::Verified: return "verified";
+        case Rejoin::Unique: return "unique";
     }
     return "off";
 }
@@ -97,6 +98,8 @@ bool parseRejoin(const std::string& s, Rejoin& out) {
         out = Rejoin::All;
     } else if (s == "verified") {
         out = Rejoin::Verified;
+    } else if (s == "unique") {
+        out = Rejoin::Unique;
     } else {
         return false;
     }
@@ -382,9 +385,10 @@ EpisodeResult runEpisode(const Scenario& sc) {
         // What the stack is given as its pose: simulator truth, or the estimate (never both).
         VehicleState stackPose = vs;
         if (est) {
-            verified.count = estNow.verifiedCorrections;
-            verified.dx = estNow.verifiedJumpX;
-            verified.dy = estNow.verifiedJumpY;
+            const bool unique = sc.rejoin == Rejoin::Unique;
+            verified.count = unique ? estNow.uniqueCorrections : estNow.verifiedCorrections;
+            verified.dx = unique ? estNow.uniqueJumpX : estNow.verifiedJumpX;
+            verified.dy = unique ? estNow.uniqueJumpY : estNow.verifiedJumpY;
             stackPose.x = estNow.x;
             stackPose.y = estNow.y;
             stackPose.yaw = estNow.yaw;
