@@ -386,9 +386,50 @@ std::vector<Scenario> closedLoopScenariosR6() {
     return out;
 }
 
+std::vector<RouteSpec> benchmarkRoutesR7() {
+    return {{"R7-A", "R7", "J00>J10", 10.0, "J33>J43", 30.0}, {"R7-B", "R7", "J43>J33", 10.0, "J01>J00", 30.0},
+            {"R7-C", "R7", "J03>J13", 10.0, "J40>J30", 30.0}};
+}
+
+std::vector<Scenario> closedLoopScenariosR7() {
+    std::vector<Scenario> out;
+    for (const RouteSpec& r : benchmarkRoutesR7()) {
+        out.push_back(benchmarkScenario(r, "", 0, "ground_truth"));
+    }
+    Scenario c = benchmarkScenario(benchmarkRoutesR7()[1], "", 0, "ground_truth");
+    c.name = "R7-B_late_closure";
+    c.scenarioClass = "C3";
+    c.closure = true;
+    c.closureLane = "J23>J13";
+    c.barrierLaneS = 35.0;
+    c.worksLength = 15.0;
+    c.reveal = Reveal::BeforeBarrier;
+    c.revealDistance = 30.0;
+    out.push_back(c);
+    return out;
+}
+
 SplitSpec splitSpec(const std::string& name) {
     SplitSpec s;
     s.name = name;
+    if (name == "r7") {
+        s.title = "held-out evaluation of the unique re-join after pose corrections (network R7)";
+        s.routes = benchmarkRoutesR7();
+        s.conditions = conditionNamesR7();
+        s.estimators = estimatorNamesV2();
+        s.scenarios = closedLoopScenariosR7();
+        s.closedConditions = conditionNamesR7();
+        for (const char* e : {"ekf", "ekf_int", "ekf_int2", "ekf_kerb", "ekf_kerb2"}) {
+            s.sources.push_back({std::string(e) + ", no re-join", "estimated", e, true, Rejoin::Off});
+            s.sources.push_back({e, "estimated", e, true, Rejoin::Unique});
+        }
+        for (const char* e : {"ekf_kerb", "ekf_kerb2"}) {  // the R6 subject, for comparison
+            s.sources.push_back({std::string(e) + ", R6 re-join", "estimated", e, true, Rejoin::Verified});
+        }
+        s.referenceFeasibility = true;
+        s.referenceRejoin = Rejoin::Unique;
+        return s;
+    }
     if (name == "r6") {
         s.title = "held-out evaluation of the verified re-join after pose corrections (network R6)";
         s.routes = benchmarkRoutesR6();
@@ -538,7 +579,9 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
                 // Raw logs for replay without the simulator: the first route, seed 1, a few conditions (every
                 // other run is reproducible from its route, condition and seed).
                 bool keepLog = false;  // development splits (r2, r3dev) keep none
-                if (sp.name == "r6") {
+                if (sp.name == "r7") {
+                    keepLog = cond == "kerb_return_r7" || cond == "imu_fault_r7" || cond == "kerb_faults_r7";
+                } else if (sp.name == "r6") {
                     keepLog = cond == "gnss_ramp_r6" || cond == "kerb_return_r6" || cond == "imu_fault_r6";
                 } else if (sp.name == "r5") {
                     keepLog = cond == "gnss_ramp_r5" || cond == "kerb_faults_r5" || cond == "combined_r5";
@@ -680,7 +723,7 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
         gt.condition = sp.closedConditions.front();
         gt.feasibility = sp.referenceFeasibility;
         if (opt.rejoin.empty() || !parseRejoin(opt.rejoin, gt.rejoin)) {  // nothing jumps on simulator truth
-            gt.rejoin = Rejoin::Verified;
+            gt.rejoin = sp.referenceRejoin;
         }
         variants.push_back({"ground truth (reference)", gt});
         for (const std::string& c : sp.closedConditions) {
@@ -759,7 +802,11 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
               "reference, use the clearance layer.";
     }
     auto anyRejoin = [&](Rejoin r) { return std::any_of(sp.sources.begin(), sp.sources.end(), [&](const PoseSource& p) { return p.rejoin == r; }); };
-    if (anyRejoin(Rejoin::Off) && anyRejoin(Rejoin::Verified) && opt.rejoin.empty()) {
+    if (anyRejoin(Rejoin::Off) && anyRejoin(Rejoin::Unique) && opt.rejoin.empty()) {
+        md << " \"no re-join\" is the stack evaluated on R3 and R4. \"R6 re-join\" re-joins every correction the estimator verified "
+              "against the map (kerb registration), as evaluated on R6. Every other row re-joins only those whose kerb scan fits the map "
+              "uniquely, as tested at the registered pose or by the re-localisation search; nothing jumps on simulator truth.";
+    } else if (anyRejoin(Rejoin::Off) && anyRejoin(Rejoin::Verified) && opt.rejoin.empty()) {
         md << " \"no re-join\" is the stack evaluated on R3 and R4. Every other row re-joins only corrections the estimator verified "
               "against the map (kerb registration), by the amount the map moved it; nothing jumps on simulator truth.";
     }
