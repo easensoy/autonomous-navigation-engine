@@ -40,9 +40,15 @@ def _ccw(loop):
 
 def build(scene_msg, quality="medium"):
     """The scene as a NodePath with children: measured (road, kerbs), decor (pavements, buildings, furniture,
-    markings) and zones (sensor-condition zones, toggled)."""
+    markings) and zones (sensor-condition zones, toggled). Its Python tag "occluders" holds the prisms of the
+    buildings and tree canopies it draws, for the cameras. A district network's map gets its own scenery."""
     m = scene_msg["map"]
+    if m.get("district"):
+        from . import district_scene
+        return district_scene.build(scene_msg, quality)
     root = NodePath("world")
+    from .occlusion import synthetic_occluders
+    root.setPythonTag("occluders", synthetic_occluders(m, quality))
     outer, holes = g.kerb_loops(m)
     x0, y0, x1, y1 = g.bounds(m, margin=70.0)
 
