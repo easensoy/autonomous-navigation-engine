@@ -741,6 +741,8 @@ class Viewer(ShowBase):
         rows = st.readout()
         h.labels.setText("\n".join(r[0] for r in rows))
         h.values.setText("\n".join(r[1] for r in rows))
+        h.fit_panel(len(rows))
+        h.set_disclaimer(bool(((st.scene or {}).get("map") or {}).get("district")))
         evs = list(st.events)[-9:]
         lines = ["%7.2f  %-9s %-22s %s" % (e["t"], e["source"], e["event"], e["detail"][:46]) for e in evs]
         errs = list(st.errors)[-2:]
@@ -767,7 +769,7 @@ class Viewer(ShowBase):
         h.set_toggle("kerb_blackout", inj.get("kerb_blackout", False))
         for k in ("chase", "overhead", "driver", "orbit"):
             h.set_toggle("cam_" + k, self.cameras.mode == k)
-        for k in ("A", "B", "C", "S"):
+        for k in ("A", "B", "C", "S", "K", "N"):
             h.set_toggle("demo" + k, bool(self.demo) and self.demo.key == k and mode == "live")
         h.set_toggle("quality", False, self.quality.capitalize())
 
