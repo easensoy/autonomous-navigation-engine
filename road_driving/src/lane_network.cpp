@@ -257,6 +257,23 @@ GridSpec gridR6() {
 
 LaneNetwork buildR6(const NetworkSpec& spec) { return buildGrid(gridR6(), spec); }
 
+GridSpec gridR7() {
+    GridSpec g;
+    g.name = "R7";
+    g.xs = {0.0, 90.0, 185.0, 270.0, 365.0};
+    g.ys = {0.0, 100.0, 195.0, 290.0};
+    g.oneWay = {{"J11", "J21"}, {"J33", "J32"}};
+    g.banned = {{"J22", "J12>J22", "J22>J21"}, {"J31", "J30>J31", "J31>J21"}};
+    g.deadEnds = {{"J42", "D42", 40.0, 0.0}};
+    g.tight = {"J23", "J41"};
+    g.mouth = 16.0;
+    g.rightRadius = 14.0;
+    g.tightKerbRadius = 4.0;
+    return g;
+}
+
+LaneNetwork buildR7(const NetworkSpec& spec) { return buildGrid(gridR7(), spec); }
+
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
     if (name == "R4") {
         return buildR4(spec);
@@ -266,6 +283,9 @@ LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
     }
     if (name == "R6") {
         return buildR6(spec);
+    }
+    if (name == "R7") {
+        return buildR7(spec);
     }
     if (name == "R1") {
         return buildR1(spec);
