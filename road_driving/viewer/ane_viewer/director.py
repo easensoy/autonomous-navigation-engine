@@ -25,6 +25,29 @@ PLANS = {
 }
 
 
+def _wrap(a):
+    return (a + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def clear_foreground(cam, pts, furniture, near=12.0, half=0.5, keep=11.0):
+    """True if no lamp column, kiosk or pillar box stands within `near` metres inside the arc a street camera at
+    `cam` sweeps while it follows the car along `pts` (until the car comes within `keep` metres, when the director
+    cuts away), widened by `half` radians, about half the lens's width; and no furniture at all within 2.5 m."""
+    seen = [p for p in pts if math.hypot(p[0] - cam[0], p[1] - cam[1]) >= keep]
+    if not seen:
+        return True
+    ref = math.atan2(seen[0][1] - cam[1], seen[0][0] - cam[0])
+    rel = [_wrap(math.atan2(p[1] - cam[1], p[0] - cam[0]) - ref) for p in seen]
+    lo, hi = min(rel) - half, max(rel) + half
+    for fx, fy, kind in furniture:
+        d = math.hypot(fx - cam[0], fy - cam[1])
+        if d < 2.5:
+            return False
+        if kind in ("lamp", "kiosk", "pillar_box") and d < near and lo <= _wrap(math.atan2(fy - cam[1], fx - cam[0]) - ref) <= hi:
+            return False
+    return True
+
+
 class Director:
     def __init__(self, app, plan):
         self.app = app
@@ -150,10 +173,10 @@ class Director:
                         break
                 if cam is None or occ.inside(cam, 0.7) or kerb.on_road(cam[0], cam[1]):
                     continue
-                # Not just behind a lamp column, a bollard or the kiosk: it would stand big in the foreground.
-                if any(math.hypot(fx - cam[0], fy - cam[1]) < (5.0 if kind in ("lamp", "kiosk") else 2.5) for fx, fy, kind in furniture):
-                    continue
                 pts = path[i0:min(len(path), k + 10):3]
+                # No lamp column or kiosk standing big in the foreground of any view the camera turns to.
+                if not clear_foreground(cam, path[i0:min(len(path), k + 10)], furniture):
+                    continue
                 vis = sum(1 for p in pts if occ.visible(cam, (p[0], p[1], 1.0))) / float(len(pts))
                 share = visible_share(occ, cam, tr["x"], tr["y"], tr["yaw"])
                 score = vis + 0.5 * share - 0.004 * abs(ahead - 34)
