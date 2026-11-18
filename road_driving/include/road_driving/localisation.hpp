@@ -143,11 +143,23 @@ struct SensorZones {
     std::vector<Obstacle> obstacles;
 };
 
+// Faults an operator injects during a live episode (road_drive live and its recorded sessions); none in
+// headless runs. They act like the condition's zones: no fixes during the outage (their noise is still drawn,
+// so the other sensors are unchanged), a constant map-frame offset added to every fix, no kerb scans during
+// the blackout.
+struct LiveFaults {
+    bool gnssOutage = false;
+    bool kerbBlackout = false;
+    double gnssBiasX = 0.0, gnssBiasY = 0.0;  // m
+};
+
 // World side: truth in, measurements out. Deterministic for a seed. The kerb scanner sees the map's
 // kerbs (shifted by the kerb deviation) and the obstacles; it uses its own random stream, so the other
 // sensors' measurements do not depend on whether it exists.
 class SensorSimulator {
 public:
+    void setLiveFaults(const LiveFaults& faults) { live_ = faults; }
+    const LiveFaults& liveFaults() const { return live_; }
     SensorSimulator(const SensorConditions& cond, const SensorZones& zones, std::uint64_t seed, double wheelbase,
                     const LaneNetwork* map = nullptr);
     // Called every world tick (dt) with the true rear-axle state at time t. Generates the measurements
@@ -183,6 +195,7 @@ private:
     double lastYawRate_ = 0.0;
     double mpSince_ = -1.0, rampInside_ = 0.0, rampBias_ = 0.0, gnssFault_ = 0.0;
     bool gnssAvailable_ = true, inMultipath_ = false, inSlip_ = false, stepped_ = false;
+    LiveFaults live_;
     std::vector<Measurement> pending_;
     std::vector<Measurement> log_;
 };
