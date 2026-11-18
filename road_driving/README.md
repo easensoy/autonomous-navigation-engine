@@ -6,6 +6,7 @@ It can drive on simulator truth (the reference) or on its own state estimate. Si
 
 Labels:
 - **SYNTHETIC_ROADS:** networks R1 to R7, no real street.
+- **SOURCE_INFORMED_ROADS:** the district networks `KEN` and `KNB`: real streets reconstructed from OpenStreetMap, with approximated details ([below](#london-district-scenes)).
 - **ORACLE_CLOSURE:** the scenario tells the stack about the closure; nothing is sensed.
 - **Pose source:** either **GROUND_TRUTH_POSE**, the simulator's truth, or **ESTIMATED_POSE**, an estimator fed by **SIMULATED_SENSORS**.
 
@@ -73,6 +74,38 @@ powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1
 ```
 
 The first command installs Panda3D in `road_driving\viewer\.venv`, once; the second starts demonstration C. The C++ builds do not need Python, and CI runs the viewer's tests without Panda3D or a display.
+
+## London district scenes
+
+Two district networks drive real London streets, built by the grids' rules from OpenStreetMap: **`KEN`**, Kensington Gore and Queen's Gate, and **`KNB`**, Brompton Road, Hans Road and Basil Street ([`include/road_driving/district.hpp`](include/road_driving/district.hpp)).
+
+What they take from OpenStreetMap, and what is inferred:
+- **Sourced:** junction positions, street names, adjacency, one-way rules and a turn restriction.
+- **Inferred:** carriageway widths, kerbs, Queen's Gate's central reservation and the turning paths.
+
+They are source-informed reconstructions with approximated details, not surveyed models. They are two separate patches, not one continuous route. The viewer draws them with OpenStreetMap's building outlines and modular facades ([provenance](viewer/districts/PROVENANCE.md)).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1 --demo K
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1 --demo N
+```
+
+How a district network differs from a grid:
+- Junctions meet at any angle, and each side of a street has its own kerb.
+- A turning path is a clothoid-arc-clothoid on the two lanes' intersection, at the largest radius that fits.
+- A patch edge closes the carriageway where a street carries on beyond the model. It bounds the road for clearance, but it is no kerb, so the scanner sees nothing on it.
+- The kerb distance takes its sign from the nearest kerb point.
+
+The grids keep their own code paths, and their results are unchanged.
+
+The two routes, each driven by `ekf_kerb2` with the unique re-join:
+- **`KEN-A`** (696 m): Kensington Gore westbound past the Royal Albert Hall, left into Queen's Gate, and right into Elvaston Place. Under `gnss_outage_ldn` (seed 1) there are no fixes for 22 s on Queen's Gate. The filter dead-reckons on the IMU and wheels and keeps registering kerb scans, and the run completes with a position RMSE of 0.07 m.
+- **`KNB-A`** (637 m): Brompton Road south-westbound past Harrods, left into Hans Road, left into Basil Street, and right into Hans Crescent. Under `multipath_ldn` (seed 1) the fixes are 6 m off for 23 s on Brompton Road. The integrity monitor excludes them, and the run completes with a position RMSE of 0.10 m.
+
+Neither run crosses a kerb. These conditions were chosen to show the system at work in these scenes; they are not an evaluation.
 
 ## How the engine is used
 
@@ -155,7 +188,7 @@ build/road-gcc/road_driving/road_drive map R3 --json out/r3.json
 python road_driving/tools/render_demo.py --map out/r3.json --episode out/demo --out out/test-drive-relocalise.gif --poster out/test-drive-relocalise-poster.png --poster-time 50 --compare ekf_kerb
 ```
 
-The default build (`BUILD_ROAD_DRIVING=OFF`) is unchanged. CI enables the option in all four build jobs (Windows MSVC, Windows MSYS2 GCC, Ubuntu GCC and Clang), so CTest runs the six tests below on each. The Linux jobs also replay a stored sensor log through every estimator, and run the 3D viewer's Python tests without a display against the backend they built.
+The default build (`BUILD_ROAD_DRIVING=OFF`) is unchanged. CI enables the option in all four build jobs (Windows MSVC, Windows MSYS2 GCC, Ubuntu GCC and Clang), so CTest runs the seven tests below on each. The Linux jobs also replay a stored sensor log through every estimator, and run the 3D viewer's Python tests without a display against the backend they built.
 
 ## Closure results on ground-truth pose
 
@@ -181,7 +214,7 @@ Across all 192 episodes:
 
 GCC 14.2 and MSVC 19.51 produce byte-identical truth logs in all 192 episodes. The variants differ only in `c4_d3`.
 
-CTest runs six tests with the option on:
+CTest runs seven tests with the option on:
 
 - **`road_driving_tests`** (288 checks):
   - map invariants, including a mirrored right-hand copy that must be rejected;
@@ -217,6 +250,14 @@ CTest runs six tests with the option on:
 - **`road_driving_regression_replay`** replays the stored failing episode.
 - **`road_driving_replay_detects_change`** swaps that episode's variant label and requires the replay to fail.
 - **`road_driving_live_tests`** (23 checks): the live server for the 3D viewer. With no commands it equals the headless run, for four configurations. Pacing, pausing, stepping and observing only every 7th tick change nothing. Injected faults leave no fix or scan inside them, and an offset moves each fix by exactly itself. A recorded session replays to the live trace.
+- **`road_driving_district_tests`** (31 checks): the district networks `KEN` and `KNB`.
+  - Each validates, and keeps left-hand traffic.
+  - The footprint with mirrors, driven exactly along every movement and lane segment, clears the kerb: by 0.17 m at the tightest, a right turn out of Queen's Gate.
+  - The kerb distance's sign matches a point-in-polygon test at about 109,000 points.
+  - Patch edges bound the road but give the scanner no return.
+  - The one-way streets and the recorded turn restriction hold, with no U-turn through Queen's Gate's reservation.
+  - Both routes are reachable and legal, and drive to completion, deterministically, on simulator truth and on `ekf_kerb2`'s estimate.
+  - A parked-car condition is refused.
 - **`road_driving_session_replay`** replays a session recorded through the viewer ([`viewer/examples/sandbox_session.json`](viewer/examples/sandbox_session.json)): six operator commands, among them a closure and its reopening.
 
 ## Episode files and replay
@@ -235,11 +276,11 @@ The trace hash is FNV-1a over `truth.csv`. `road_drive replay <dir>` reruns the 
 
 ## Experimental scope
 
-- **Network and inputs.** The roads are synthetic. The one closure is reported by an oracle, and there is no other road user.
+- **Network and inputs.** The roads of R1 to R7 are synthetic. The district networks follow real streets but are reconstructions: widths, kerbs, parking, junction geometry and turning paths are inferred, minor side streets are left out, and Queen's Gate's two carriageways are modelled about their midline ([provenance](viewer/districts/PROVENANCE.md)). The one closure is reported by an oracle, and there is no other road user.
 - **Pose and sensors.** Pose is ground truth unless a run is labelled ESTIMATED_POSE. The sensors are simulated from truth with simple error models: GNSS, IMU, wheel speed, steering angle, and a planar range scanner at kerb height. The scanner sees only kerbs and objects standing in the carriageway; there is no point cloud, camera, or processed lidar or camera data. The receiver does not detect multipath.
 - **Map.** The estimators and the world share the same kerb map, except for a smooth modelled deviation of 0.03 m RMS. Larger map errors, such as a moved kerb or roadworks, were not tested.
 - **Vehicle model.** The kinematic model ignores tyre forces, so wheel slip exists only as a sensor error. The I-PACE parameters are a proxy built from published dimensions, not a model of the vehicle. Nothing here was driven on a physical vehicle.
-- **The 3D viewer.** It draws what the backend reports and senses nothing itself. The car is an original proxy with the simulated dimensions. Its roof rig, the buildings and the street furniture are decorative, and no simulated sensor sees them.
+- **The 3D viewer.** It draws what the backend reports and senses nothing itself. The car is an original proxy with the simulated dimensions. Its roof rig, the buildings and the street furniture are decorative, and no simulated sensor sees them. In the district scenes the buildings stand on OpenStreetMap's outlines, at heights taken from their mapped storeys, and their facades show each building type's elements, not a survey of any building.
 - **Tuning.** The controller was tuned on R1. The controller settings are a look-ahead of 2.0 m + 0.30 s × speed, a 0.1 s pose prediction, and a speed envelope planned at 1.6 m/s² with a 0.4 s preview.
   - The first EKF was tuned on R1, and R2 was held out ([protocol](benchmark/PROTOCOL.md)).
   - Integrity, kerb registration and the clearance layer were developed on R1 and R2, and R3 was held out ([protocol](benchmark/PROTOCOL_R3.md)).
