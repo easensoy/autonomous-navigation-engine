@@ -104,6 +104,9 @@ public:
     Command control(const VehicleState& pose, double t, const VerifiedCorrection& verified = {});  // every control tick (50 Hz)
 
     Mode mode() const { return mode_; }
+    // Read-only views for live display (road_drive live); nothing reads them back into the stack.
+    const DrivePath& path() const { return path_; }
+    double pathS() const { return s_; }
     const char* modeName() const;
     double engineMs() const { return router_.engineMilliseconds(); }
     std::uint64_t silencedBytes() const { return router_.silencedBytes(); }
