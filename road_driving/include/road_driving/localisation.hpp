@@ -121,13 +121,14 @@ struct SensorConditions {
 // _h, and combined_h. Held out on R3 (new fault types): the names in conditionNamesR3(). Held out on R4
 // for the second versions (new magnitudes and combinations, and a kerb map error): conditionNamesR4(). Held
 // out on R5 for the stack's re-join after pose corrections: conditionNamesR5(). Held out on R6 for the
-// verified re-join: conditionNamesR6().
+// verified re-join: conditionNamesR6(). Held out on R7 for the unique re-join: conditionNamesR7().
 SensorConditions sensorConditions(const std::string& name);
 std::vector<std::string> conditionNames(bool heldOut);
 std::vector<std::string> conditionNamesR3();
 std::vector<std::string> conditionNamesR4();
 std::vector<std::string> conditionNamesR5();
 std::vector<std::string> conditionNamesR6();
+std::vector<std::string> conditionNamesR7();
 
 struct Zone {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
@@ -206,6 +207,11 @@ struct StateEstimate {
     // correction instead of steering at it; nothing else the estimator does is verified against the map.
     int verifiedCorrections = 0;
     double verifiedJumpX = 0.0, verifiedJumpY = 0.0;
+    // The same for the registrations whose scan fits the map uniquely: the registered pose beats every pose
+    // 1.5 m or more across by 4 returns, the test the kerb re-localisation applies (a re-localisation has
+    // passed it in its search).
+    int uniqueCorrections = 0;
+    double uniqueJumpX = 0.0, uniqueJumpY = 0.0;
     double sigmaPos() const;     // sqrt of the largest eigenvalue of the position covariance
     double sigmaAlong(double heading) const;  // position 1-sigma along / across a direction
     double sigmaAcross(double heading) const;
