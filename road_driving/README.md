@@ -55,6 +55,25 @@ What failed or remains:
 
 Details, the earlier evaluations and the next improvement: [LOCALISATION.md](LOCALISATION.md#results).
 
+## Live 3D viewer
+
+[`viewer/`](viewer/README.md) runs this simulation live in a native Panda3D application. The backend, `road_drive live`, runs the episode loop that every headless run uses and streams each 10 ms tick. The viewer draws what it reports: the true car, the estimate the stack drives on, kerb returns, GNSS fixes and corrections. Faults and closures can be injected while the car drives, each at a recorded tick, and a saved session replays headlessly.
+
+<img src="docs/media/viewer-demo-c-turn.jpg" width="100%" alt="The live 3D viewer from overhead, in a right turn. A white car-sized proxy with a roof rig turns right out of a junction, its body over the kerb at the edge of the road. A teal outline, the estimate the car drives on, lies about a metre to its right, on the road. Red rays from the front bumper show a rejected kerb scan, violet squares are GNSS fixes, and white and teal trails curve in from the lower left. Panels show the configuration, the errors against truth with a lateral error of 1.25 m and 0.88 m over the kerb, the events, a caption and the controls.">
+
+<sub><b>Demonstration C, the sixth evaluation's failure, run live:</b> R7-A, kerb faults, seed 7, `ekf_kerb2` with the unique re-join. A correct 1.23 m kerb correction left 2.7 m of along-road error that the kerbs could not see on the straight. In this right turn it becomes lateral error, and the body goes 0.88 m over the kerb, as in the evaluation. Independent research simulation: synthetic streets, and an I-PACE-sized proxy, not a Jaguar.<br>
+[Viewer](viewer/README.md) · [Full recording (MP4, 79 s)](docs/media/viewer-demo-c.mp4) · [Asset provenance](viewer/ASSETS.md)</sub>
+
+```powershell
+powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1 -Setup
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1
+```
+
+The first command installs Panda3D in `road_driving\viewer\.venv`, once; the second starts demonstration C. The C++ builds do not need Python, and CI runs the viewer's tests without Panda3D or a display.
+
 ## How the engine is used
 
 | Concern | Mechanism |
@@ -122,6 +141,13 @@ build/road-gcc/road_driving/road_drive bench-loc --split r4 --seeds 10 --out out
 build/road-gcc/road_driving/road_drive bench-closed --split r4 --seeds 10 --scenario R4-A --out out/r4-cl/R4-A
 ```
 
+`live` is the server behind the [3D viewer](viewer/README.md), which starts it itself. It reads commands on standard input and writes JSON lines ([protocol](viewer/PROTOCOL.md)). With `--script FILE` it takes the commands, each with its tick, from a file, and ends with the episode. `session-replay` replays a session the viewer saved, without it:
+
+```bash
+build/road-gcc/road_driving/road_drive live --scenario R7-A --condition kerb_faults_r7 --estimator ekf_kerb2 --seed 7 --speed 0 --script /dev/null > out/live.jsonl
+build/road-gcc/road_driving/road_drive session-replay road_driving/viewer/examples/sandbox_session.json
+```
+
 The test-drive animation is rendered from that episode (Python with matplotlib, numpy and Pillow). `--compare ekf_kerb` draws the first kerb filter replayed on the same log:
 
 ```bash
@@ -129,7 +155,7 @@ build/road-gcc/road_driving/road_drive map R3 --json out/r3.json
 python road_driving/tools/render_demo.py --map out/r3.json --episode out/demo --out out/test-drive-relocalise.gif --poster out/test-drive-relocalise-poster.png --poster-time 50 --compare ekf_kerb
 ```
 
-The default build (`BUILD_ROAD_DRIVING=OFF`) is unchanged. CI enables the option in all four build jobs (Windows MSVC, Windows MSYS2 GCC, Ubuntu GCC and Clang), so CTest runs the four tests below on each. The Linux jobs also replay a stored sensor log through every estimator.
+The default build (`BUILD_ROAD_DRIVING=OFF`) is unchanged. CI enables the option in all four build jobs (Windows MSVC, Windows MSYS2 GCC, Ubuntu GCC and Clang), so CTest runs the six tests below on each. The Linux jobs also replay a stored sensor log through every estimator, and run the 3D viewer's Python tests without a display against the backend they built.
 
 ## Closure results on ground-truth pose
 
@@ -155,7 +181,7 @@ Across all 192 episodes:
 
 GCC 14.2 and MSVC 19.51 produce byte-identical truth logs in all 192 episodes. The variants differ only in `c4_d3`.
 
-CTest runs four tests with the option on:
+CTest runs six tests with the option on:
 
 - **`road_driving_tests`** (288 checks):
   - map invariants, including a mirrored right-hand copy that must be rejected;
@@ -190,6 +216,8 @@ CTest runs four tests with the option on:
   - R5's, R6's and R7's map invariants, exact footprint clearance, legal routes, closure lanes and defined conditions, and the r7 split's pairing.
 - **`road_driving_regression_replay`** replays the stored failing episode.
 - **`road_driving_replay_detects_change`** swaps that episode's variant label and requires the replay to fail.
+- **`road_driving_live_tests`** (23 checks): the live server for the 3D viewer. With no commands it equals the headless run, for four configurations. Pacing, pausing, stepping and observing only every 7th tick change nothing. Injected faults leave no fix or scan inside them, and an offset moves each fix by exactly itself. A recorded session replays to the live trace.
+- **`road_driving_session_replay`** replays a session recorded through the viewer ([`viewer/examples/sandbox_session.json`](viewer/examples/sandbox_session.json)): six operator commands, among them a closure and its reopening.
 
 ## Episode files and replay
 
@@ -211,6 +239,7 @@ The trace hash is FNV-1a over `truth.csv`. `road_drive replay <dir>` reruns the 
 - **Pose and sensors.** Pose is ground truth unless a run is labelled ESTIMATED_POSE. The sensors are simulated from truth with simple error models: GNSS, IMU, wheel speed, steering angle, and a planar range scanner at kerb height. The scanner sees only kerbs and objects standing in the carriageway; there is no point cloud, camera, or processed lidar or camera data. The receiver does not detect multipath.
 - **Map.** The estimators and the world share the same kerb map, except for a smooth modelled deviation of 0.03 m RMS. Larger map errors, such as a moved kerb or roadworks, were not tested.
 - **Vehicle model.** The kinematic model ignores tyre forces, so wheel slip exists only as a sensor error. The I-PACE parameters are a proxy built from published dimensions, not a model of the vehicle. Nothing here was driven on a physical vehicle.
+- **The 3D viewer.** It draws what the backend reports and senses nothing itself. The car is an original proxy with the simulated dimensions. Its roof rig, the buildings and the street furniture are decorative, and no simulated sensor sees them.
 - **Tuning.** The controller was tuned on R1. The controller settings are a look-ahead of 2.0 m + 0.30 s × speed, a 0.1 s pose prediction, and a speed envelope planned at 1.6 m/s² with a 0.4 s preview.
   - The first EKF was tuned on R1, and R2 was held out ([protocol](benchmark/PROTOCOL.md)).
   - Integrity, kerb registration and the clearance layer were developed on R1 and R2, and R3 was held out ([protocol](benchmark/PROTOCOL_R3.md)).
