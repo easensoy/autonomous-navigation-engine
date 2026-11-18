@@ -54,6 +54,7 @@ class Hud:
                                        shadow=(0, 0, 0, 1), mayChange=True, text=DISCLAIMER)
         self._disclaimer = DISCLAIMER
         self._panel_h = 0.40
+        self._caption_h = 0.24
         self.panel = DirectFrame(parent=base.a2dTopLeft, frameColor=PANEL, frameSize=(0.0, 1.22, -0.40, 0.0), pos=(0.02, 0, -0.16))
         self.labels = OnscreenText(parent=self.panel, pos=(0.03, -0.045), scale=READOUT_SCALE, align=TextNode.ALeft, fg=MUTED, mayChange=True,
                                    text="")
@@ -146,6 +147,16 @@ class Hud:
         if h != self._panel_h:
             self._panel_h = h
             self.panel["frameSize"] = (0.0, 1.22, -h, 0.0)
+
+    def fit_caption(self):
+        """Grow the caption box (upwards from its foot) to the caption's rows, so that no line runs out of it."""
+        tn = self.caption.textNode
+        rows = tn.getNumRows() if self.caption["text"] else 0
+        h = round(max(0.24, 0.05 + rows * tn.getLineHeight() * 0.029 + 0.015), 3)
+        if h != self._caption_h:
+            self._caption_h = h
+            self.caption_frame["frameSize"] = (-0.55, 0.55, 0.0, h)
+            self.caption.setTextPos(-0.52, h - 0.05)
 
     def set_toggle(self, key, on, text=None):
         b = self.buttons.get(key)
