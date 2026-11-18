@@ -409,6 +409,47 @@ std::vector<Scenario> closedLoopScenariosR7() {
     return out;
 }
 
+bool findNamedScenario(const std::string& name, Scenario& sc) {
+    if (findScenario(name, sc)) return true;
+    for (bool held : {false, true}) {
+        for (const RouteSpec& r : benchmarkRoutes(held)) {
+            if (r.name == name) {
+                sc = benchmarkScenario(r, "", 0, "ground_truth");
+                return true;
+            }
+        }
+        for (const Scenario& s : closedLoopScenarios(held)) {
+            if (s.name == name) {
+                sc = s;
+                return true;
+            }
+        }
+    }
+    for (int n : {3, 4, 5, 6, 7}) {
+        for (const RouteSpec& r : n == 3   ? benchmarkRoutesR3()
+                                  : n == 4 ? benchmarkRoutesR4()
+                                  : n == 5 ? benchmarkRoutesR5()
+                                  : n == 6 ? benchmarkRoutesR6()
+                                           : benchmarkRoutesR7()) {
+            if (r.name == name) {
+                sc = benchmarkScenario(r, "", 0, "ground_truth");
+                return true;
+            }
+        }
+        for (const Scenario& s : n == 3   ? closedLoopScenariosR3()
+                                 : n == 4 ? closedLoopScenariosR4()
+                                 : n == 5 ? closedLoopScenariosR5()
+                                 : n == 6 ? closedLoopScenariosR6()
+                                          : closedLoopScenariosR7()) {
+            if (s.name == name) {
+                sc = s;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 SplitSpec splitSpec(const std::string& name) {
     SplitSpec s;
     s.name = name;
