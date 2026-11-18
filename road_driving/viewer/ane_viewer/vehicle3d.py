@@ -47,7 +47,13 @@ class Vehicle:
         if ghost:
             self.root.attachNewNode(mesh_node(vm.body(params, stations=12, ring=10)))  # a coarse hull reads as an outline
         elif not self.imported:
-            self.root.attachNewNode(mesh_node(parts["body"]))
+            body = self.root.attachNewNode(mesh_node(parts["body"]))
+            # Glossy paint: a specular highlight over the vertex colours (the colours stay the diffuse colour).
+            from panda3d.core import Material
+            paint = Material("paint")
+            paint.setSpecular((0.55, 0.55, 0.55, 1.0))
+            paint.setShininess(42.0)
+            body.setMaterial(paint)
         if not ghost:
             if not self.imported or model_cfg.get("add_mirrors", False):
                 self.root.attachNewNode(mesh_node(parts["mirrors"]))
