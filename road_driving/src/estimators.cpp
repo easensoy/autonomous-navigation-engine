@@ -276,6 +276,9 @@ public:
         e.verifiedCorrections = c.kerbCorrections;
         e.verifiedJumpX = c.kerbJumpX;
         e.verifiedJumpY = c.kerbJumpY;
+        e.uniqueCorrections = c.kerbUniqueCorrections;
+        e.uniqueJumpX = c.kerbUniqueJumpX;
+        e.uniqueJumpY = c.kerbUniqueJumpY;
         const double sp = e.sigmaPos();
         e.status = sp > 2.0 ? "LOST" : (sp > 0.5 ? "DEGRADED" : (t - c.lastGnss > 2.0 ? "DEAD_RECKONING" : "OK"));
         if (cfg_.integrity) {
@@ -314,6 +317,8 @@ private:
         int kerbRejectRun = 0;
         int kerbCorrections = 0;  // kerb registrations that moved the position by more than 0.1 m
         double kerbJumpX = 0.0, kerbJumpY = 0.0;
+        int kerbUniqueCorrections = 0;  // those whose scan fits the map uniquely
+        double kerbUniqueJumpX = 0.0, kerbUniqueJumpY = 0.0;
         bool lastKerbOk = false;
     };
     struct Entry {
@@ -779,6 +784,29 @@ private:
         }
     }
 
+    // The end points of a kerb scan's returns in the vehicle frame.
+    static std::vector<std::pair<double, double>> scanPoints(const Measurement& m) {
+        std::vector<std::pair<double, double>> body;
+        for (size_t i = 0; i < m.ranges.size(); ++i) {
+            const double r = m.ranges[i];
+            if (r <= 0.0) continue;
+            const double th = m.a + static_cast<double>(i) * m.b;
+            body.push_back({m.c + r * std::cos(th), r * std::sin(th)});
+        }
+        return body;
+    }
+
+    // How many of every other return end within 0.3 m of a mapped kerb, with the vehicle at (x, y, yaw).
+    int kerbInliers(const std::vector<std::pair<double, double>>& body, double x, double y, double yaw) const {
+        const double cs = std::cos(yaw), sn = std::sin(yaw);
+        int n = 0;
+        for (size_t k = 0; k < body.size(); k += 2) {
+            const double ex = x + cs * body[k].first - sn * body[k].second, ey = y + sn * body[k].first + cs * body[k].second;
+            n += std::fabs(map_.roadClearance(ex, ey)) < 0.3 ? 1 : 0;
+        }
+        return n;
+    }
+
     // A grid search for the pose a kerb scan fits, around the filter's pose: offsets along and across its
     // heading up to relocRadius, then a few heading offsets at the best. A return counts when it ends within
     // 0.3 m of a mapped kerb. The best must beat every pose at least 1.5 m away by 4 (a unique match); along
@@ -786,26 +814,13 @@ private:
     // across, and only the offset across is adopted. It must also count at least 10 returns and half of
     // those scored, and beat the filter's own pose by 5.
     bool relocalSearch(const Core& c, const Measurement& m, double (&out)[3]) const {
-        std::vector<std::pair<double, double>> body;  // return end points in the vehicle frame
-        for (size_t i = 0; i < m.ranges.size(); ++i) {
-            const double r = m.ranges[i];
-            if (r <= 0.0) continue;
-            const double th = m.a + static_cast<double>(i) * m.b;
-            body.push_back({m.c + r * std::cos(th), r * std::sin(th)});
-        }
+        const std::vector<std::pair<double, double>> body = scanPoints(m);  // return end points in the vehicle frame
         if (body.size() < 20) {
             return false;
         }
         const double x0 = c.x[PX], y0 = c.x[PY], psi = c.x[YAW], cp = std::cos(psi), sp = std::sin(psi);
         auto score = [&](double along, double across, double dyaw) {
-            const double cx = x0 + cp * along - sp * across, cy = y0 + sp * along + cp * across;
-            const double cs = std::cos(psi + dyaw), sn = std::sin(psi + dyaw);
-            int n = 0;
-            for (size_t k = 0; k < body.size(); k += 2) {
-                const double ex = cx + cs * body[k].first - sn * body[k].second, ey = cy + sn * body[k].first + cs * body[k].second;
-                n += std::fabs(map_.roadClearance(ex, ey)) < 0.3 ? 1 : 0;
-            }
-            return n;
+            return kerbInliers(body, x0 + cp * along - sp * across, y0 + sp * along + cp * across, psi + dyaw);
         };
         const int K = static_cast<int>(std::lround(cfg_.relocRadius / cfg_.relocStep));
         struct Cand {
@@ -855,6 +870,33 @@ private:
         out[1] = y0 + sp * best.along + cp * best.across;
         out[2] = wrapAngle(psi + bestYaw);
         return true;
+    }
+
+    // Whether a kerb scan fits the map uniquely at pose q, by relocalSearch's test: q must count at least 10
+    // returns and half of those scored, and beat by 4 every pose 1.5 m or more across its heading on a grid
+    // around it (offsets along and across up to relocRadius). Along a straight kerb every offset along it fits
+    // equally, so only the offset across can be unique; that is the offset a stack follows.
+    bool kerbUnique(const Measurement& m, const double (&q)[3]) const {
+        const std::vector<std::pair<double, double>> body = scanPoints(m);
+        if (body.size() < 20) {
+            return false;
+        }
+        const int own = kerbInliers(body, q[0], q[1], q[2]);
+        const int scored = static_cast<int>((body.size() + 1) / 2);
+        if (own < std::max(10, scored / 2)) {
+            return false;
+        }
+        const double cp = std::cos(q[2]), sp = std::sin(q[2]);
+        const int K = static_cast<int>(std::lround(cfg_.relocRadius / cfg_.relocStep));
+        int second = 0;
+        for (int i = -K; i <= K; ++i) {
+            for (int j = -K; j <= K; ++j) {
+                const double along = i * cfg_.relocStep, across = j * cfg_.relocStep;
+                if (std::fabs(across) < 1.5) continue;
+                second = std::max(second, kerbInliers(body, q[0] + cp * along - sp * across, q[1] + sp * along + cp * across, q[2]));
+            }
+        }
+        return second <= own - 4;
     }
 
     // One registration, anchored by the filter's prediction; `start` (optional) is where the search begins.
@@ -994,12 +1036,20 @@ private:
         ++stats.kerbUsed;
         c.lastKerbOk = true;
         c.distSinceKerb = 0.0;
-        {  // a correction verified against the map, reported so that a stack can follow it
+        // A correction verified against the map, reported so that a stack can follow it; and separately when the
+        // scan fits the map uniquely. A re-localisation (`start`) passed that test in its search; any other
+        // registration is tested at the registered pose.
+        {
             const double jx = c.x[PX] - p0[0], jy = c.x[PY] - p0[1];
             if (std::hypot(jx, jy) > 0.1) {
                 ++c.kerbCorrections;
                 c.kerbJumpX = jx;
                 c.kerbJumpY = jy;
+                if (start != nullptr || kerbUnique(m, p)) {
+                    ++c.kerbUniqueCorrections;
+                    c.kerbUniqueJumpX = jx;
+                    c.kerbUniqueJumpY = jy;
+                }
             }
         }
         if (nisTot <= cfg_.kerbRobust) {
