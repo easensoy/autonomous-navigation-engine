@@ -759,6 +759,7 @@ class Viewer(ShowBase):
         caption = self.narrator.text() if self.narrator else ("Replaying a recorded session: its commands take effect at their recorded ticks."
                                                               if mode == "replay" else "")
         h.caption.setText(caption)
+        h.fit_caption()
         cfg = self.pending or st.config
         for field, node in h.cycle_text.items():
             node.setText("%s: %s" % (field, cfg.get(field, "-")))
