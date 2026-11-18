@@ -41,10 +41,12 @@ bool parseReveal(const std::string& s, Reveal& r);
 // - Off: the stack evaluated on R3 and R4. It chases the path; its monitor measures from the unshifted path.
 // - All: the stack evaluated on R5. It re-joins every sideways jump of the estimate; its monitor measures
 //   from the path with its clearance shift.
-// - Verified: it re-joins only corrections the estimator verified against the map, by the amount the map
-//   moved the estimate; every other jump meets the R3 and R4 stack, monitor included.
-enum class Rejoin { Off, All, Verified };
-const char* rejoinName(Rejoin r);                      // "off", "on" (All, as R5 recorded it), "verified"
+// - Verified: the stack evaluated on R6. It re-joins only corrections the estimator verified against the
+//   map, by the amount the map moved the estimate; every other jump meets the R3 and R4 stack, monitor included.
+// - Unique: as Verified, but only corrections whose kerb scan fits the map uniquely
+//   (StateEstimate::uniqueCorrections).
+enum class Rejoin { Off, All, Verified, Unique };
+const char* rejoinName(Rejoin r);                      // "off", "on" (All, as R5 recorded it), "verified", "unique"
 bool parseRejoin(const std::string& s, Rejoin& out);  // accepts those names
 
 struct Scenario {
@@ -79,7 +81,7 @@ struct Scenario {
     bool feasibility = true;
     // The stack's response to a pose correction (rejoinpolicy). Manifests written before it existed replay
     // with it off.
-    Rejoin rejoin = Rejoin::Verified;
+    Rejoin rejoin = Rejoin::Unique;
 };
 
 std::vector<Scenario> catalogue();
