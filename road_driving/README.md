@@ -102,8 +102,8 @@ How a district network differs from a grid:
 The grids keep their own code paths, and their results are unchanged.
 
 The two routes, each driven by `ekf_kerb2` with the unique re-join:
-- **`KEN-A`** (696 m): Kensington Gore westbound past the Royal Albert Hall, left into Queen's Gate, and right into Elvaston Place. Under `gnss_outage_ldn` (seed 1) there are no fixes for 22 s on Queen's Gate. The filter dead-reckons on the IMU and wheels and keeps registering kerb scans, and the run completes with a position RMSE of 0.07 m.
-- **`KNB-A`** (637 m): Brompton Road south-westbound past Harrods, left into Hans Road, left into Basil Street, and right into Hans Crescent. Under `multipath_ldn` (seed 1) the fixes are 6 m off for 23 s on Brompton Road. The integrity monitor excludes them, and the run completes with a position RMSE of 0.10 m.
+- **`KEN-A`** (696 m): Kensington Gore westbound past the Royal Albert Hall, left into Queen's Gate, and right into Elvaston Place. Under `gnss_outage_ldn` (seed 1) the fixes stop for 24 s on Queen's Gate. The filter dead-reckons for 22 s on the IMU and wheels, keeps registering kerb scans, and the run completes with a position RMSE of 0.07 m.
+- **`KNB-A`** (637 m): Brompton Road south-westbound past Harrods, left into Hans Road, left into Basil Street, and right into Hans Crescent. Under `multipath_ldn` (seed 1) the fixes are biased by about 6 m for 22 s on Brompton Road. The integrity monitor flags them within 0.2 s and excludes them for 23 s, and the run completes with a position RMSE of 0.10 m.
 
 Neither run crosses a kerb. These conditions were chosen to show the system at work in these scenes; they are not an evaluation.
 
