@@ -1,0 +1,13 @@
+# San Francisco: criteria
+
+Computed by `road_driving/tools/sf_analysis.py` from the records in this folder.
+
+| # | Criterion | Result | Verdict |
+|---|---|---|---|
+| P1 | gnss_outage_sf: ekf_kerb2's end-of-outage error below dead reckoning's in at least 27 of 30 pairs, and its median at most 0.50 m | `{"pairs":30,"a_lower":30,"median_b_minus_a":4.734,"a_median":0.027,"b_median":4.75}` | passed |
+| P2 | nominal_sf: ekf_kerb2's lateral 95th percentile at most 0.10 m (bounded by its largest run's) and every run's 95th percentile position error at most 0.50 m; no EKF run fails; median NEES (3 dof) of ekf, ekf_int2 and ekf_kerb2 within 0.5 to 6 | `{"ekf_kerb2_worst_run_p95":0.383,"ekf_kerb2_lateral_p95_bound":0.051,"failed_ekf_runs":0,"nees_median":{"ekf":1.397,"ekf_int2":1.397,"ekf_kerb2":1.149}}` | passed |
+| P3 | nominal_sf and gnss_outage_sf, closed loop: ekf_kerb2 ends at least 29 of 30 episodes as the reference does, with no episode over a kerb and no fallback stop | `{"nominal_sf":{"episodes":30,"same_as_reference":30,"over_kerb":0,"fallback_stops":0},"gnss_outage_sf":{"episodes":30,"same_as_reference":30,"over_kerb":0,"fallback_stops":0}}` | passed |
+| P4 | kerb_map_error_sf: no ekf_kerb2 episode with the body over a kerb (the comparison with ekf_int2 is reported, not judged) | `{"segment_max_lateral":{"pairs":30,"a_lower":18,"median_b_minus_a":0.234,"a_median":0.644,"b_median":0.899},"end_of_outage_error":{"pairs":30,"a_lower":10,"median_b_minus_a":-0.363,"a_median":1.686,"b_median":1.214},"closed_loop":{"ekf_kerb2":{"episodes":30,"completed":24,"fallback_stops":6,"over_kerb":0,"min_clearance":4.287},"ekf_int2":{"episodes":30,"completed":0,"localisation_stop_episodes":30,"over_kerb":0}}}` | passed |
+| P5 | reported: SF reproduces the R7-A seed 7 mechanism if in some run ekf_kerb2 enters the turn after the drift with more than 1.0 m of along-road error and less than 0.3 m lateral (open loop), and in closed loop a drift episode then ends in a fallback stop for lateral error or with the body over a kerb; it reproduces the R7 failure only if one is over a kerb | `{"open_loop_runs":30,"along_over_1m_lateral_under_0_3m":13,"end_along_abs_median":0.056,"end_lateral_abs_median":0.009,"closed_loop_outcomes_of_those":{"completed":3,"fallback":10},"closed_loop_episodes":30,"converted_episodes":11,"over_kerb":0}` | mechanism reproduced; no crossing |
+| P6 | nominal_sf: no integrity alarm (FAULTED or INCONSISTENT) by ekf_int, ekf_int2, ekf_kerb or ekf_kerb2 | `{"false_alarms":0}` | passed |
+| P7 | the I-PACE proxy, on its own sensor logs: P1's test (at least 27 of 30 pairs, median at most 0.50 m) | `{"pairs":30,"a_lower":30,"median_b_minus_a":4.73,"a_median":0.029,"b_median":4.745}` | passed |
