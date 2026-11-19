@@ -21,6 +21,12 @@ PLANS = {
     # cupolas would stand close under the camera and fill the frame.
     "KNB-A": [(0.0, "chase"), (8.0, "orbit"), (17.0, "street"), (25.0, "chase_low"), (36.5, "street"), (58.0, "orbit"),
               (67.0, "chase_low"), (74.0, "overhead"), (82.0, "chase")],
+    # San Francisco: Townsend Street past the rail yard, the first turn from overhead (where the outage ends), 5th Street
+    # across Bluxome, the second turn, Brannan Street.
+    "SF-A": [(0.0, "chase"), (6.0, "street"), (14.0, "orbit"), (22.0, "chase_low"), (27.5, "overhead", 55.0), (35.0, "chase"), (41.0, "street"),
+             (50.0, "overhead", 60.0), (57.0, "orbit"), (66.0, "chase_low")],
+    "SF-B": [(0.0, "chase"), (6.0, "street"), (14.0, "orbit"), (22.0, "chase_low"), (27.5, "overhead", 55.0), (35.0, "chase"), (41.0, "street"),
+             (50.0, "overhead", 60.0), (57.0, "chase_low"), (66.0, "street"), (75.0, "chase")],
     "default": [(0.0, "chase"), (15.0, "orbit"), (30.0, "chase"), (45.0, "overhead"), (60.0, "chase")],
 }
 
