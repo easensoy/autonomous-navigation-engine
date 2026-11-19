@@ -1,0 +1,13 @@
+{
+ "episode": "road_driving\\benchmark\\sf\\examples\\sf-a_gnss_outage_sf_seed2",
+ "outcome": "COMPLETED",
+ "min_clearance_body": 5.624,
+ "max_abs_along": 0.354,
+ "max_abs_lateral": 0.135,
+ "outage_windows": [
+  [
+   8.87,
+   31.64
+  ]
+ ]
+}
