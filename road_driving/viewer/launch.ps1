@@ -13,7 +13,8 @@ Creates road_driving\viewer\.venv and installs requirements.txt (Panda3D, panda3
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1
-Starts demonstration C (the R7-A kerb-fault failure). Add --demo A, --demo B or --demo S for the others.
+Starts demonstration C (the R7-A kerb-fault failure). Add --demo A, B or S for the others, K or N for London,
+and SF, SFB, SFD or SFM for San Francisco (right-hand traffic, the Cybercab-inspired proxy).
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1 --demo A --quality high --size 1920x1080
