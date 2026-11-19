@@ -54,11 +54,13 @@ class Vehicle:
             paint.setSpecular((0.55, 0.55, 0.55, 1.0))
             paint.setShininess(42.0)
             body.setMaterial(paint)
+        self.wheel_radius = vm.design(params)["wheel_radius"]
         if not ghost:
-            if not self.imported or model_cfg.get("add_mirrors", False):
+            if (not self.imported or model_cfg.get("add_mirrors", False)) and parts["mirrors"].v:
                 self.root.attachNewNode(mesh_node(parts["mirrors"]))
             if not self.imported or model_cfg.get("add_rig", True):
-                self.rig = self.root.attachNewNode(mesh_node(parts["roof_rig"]))
+                if parts["roof_rig"].v:  # the Cybercab-inspired proxy has none
+                    self.rig = self.root.attachNewNode(mesh_node(parts["roof_rig"]))
                 self.root.attachNewNode(mesh_node(parts["gnss_antenna"]))
             self.root.attachNewNode(mesh_node(parts["kerb_scanner"]))
             if not self.imported or model_cfg.get("add_wheels", False):
@@ -112,7 +114,7 @@ class Vehicle:
     def set_pose(self, x, y, yaw, steer=0.0, v=0.0, dt=0.0):
         self.root.setPos(x, y, 0.0)
         self.root.setH(math.degrees(yaw))
-        self.spin = (self.spin + math.degrees(v * dt / vm.WHEEL_RADIUS)) % 360.0
+        self.spin = (self.spin + math.degrees(v * dt / self.wheel_radius)) % 360.0
         for key, (steer_np, spin_np) in self.wheels.items():
             if key in ("fl", "fr"):
                 steer_np.setH(math.degrees(steer))
