@@ -179,8 +179,10 @@ void Stack::clearancePolicy(const Observation& obs) {
             if (clrTurn_[i]) {
                 lo[k] = std::max(lo[k], -kShiftMax);
                 hi[k] = std::min(hi[k], kShiftMax);
+            } else if (net_.spec.rightHand) {
+                hi[k] = std::min(hi[k], laneLimit);  // right-hand traffic: the centre line is on the lane's left
             } else {
-                lo[k] = std::max(lo[k], -laneLimit);
+                lo[k] = std::max(lo[k], -laneLimit);  // left-hand traffic: the centre line is on the lane's right
             }
         }
     };
