@@ -275,6 +275,67 @@ def institutional(wall, storeys, rng, front_room, mat):
         wall.slab(mat, 0.0, L, z + sh - 0.5, z + sh - 0.3, 0.0, 0.12, WHITE)
 
 
+def soma_warehouse(wall, storeys, rng, front_room, mat):
+    """South of Market's converted warehouses and lofts: a tall ground floor of wide openings (shopfronts, roll-up
+    doors, lobby glazing) between brick or concrete piers, steel multi-pane windows in wide bays above, and a
+    plain parapet with a coping. Generic: proportions and elements, not any building."""
+    L, base, top = wall.L, wall.base, wall.top
+    if L < 3.0:
+        return
+    centres, bw = bays(L, 4.6)
+    ground = min(4.6, max(3.6, (top - base) * 0.32))
+    for i, uc in enumerate(centres):
+        w = max(1.2, bw - 1.1)
+        kind = rng.random()
+        if kind < 0.35:  # a roll-up door
+            wall.face("dark", uc - 0.5 * w, uc + 0.5 * w, base, base + ground - 0.6, 0.03, (0.30, 0.31, 0.33, 1.0))
+        else:  # glazing: a shopfront or a lobby
+            wall.face("glass", uc - 0.5 * w, uc + 0.5 * w, base + 0.3, base + ground - 0.5, 0.04, (0.86, 0.88, 0.90, 1.0),
+                      uv=((0, 0), (1, 0), (1, 1), (0, 1)))
+        wall.slab("trim", uc - 0.5 * w - 0.08, uc + 0.5 * w + 0.08, base + ground - 0.5, base + ground - 0.32, 0.0, 0.10, DARK)
+    z = base + ground + 0.4
+    storey = (top - base - ground - 0.9) / max(1, storeys - 1) if storeys > 1 else 3.6
+    while z + storey * 0.55 < top - 0.8:
+        for uc in centres:
+            wall.window(uc, z + 0.35, max(1.0, bw - 1.4), min(2.4, storey - 0.9), frame=DARK, sill=True, mat_frame="dark",
+                        glass_tint=(0.80, 0.83, 0.86, 1.0))
+        z += storey
+    wall.slab(mat, 0.0, L, top - 0.45, top - 0.25, 0.0, 0.16, WHITE)
+
+
+def soma_modern(wall, storeys, rng, front_room, mat):
+    """The newer residential and office blocks: glazed curtain-wall bands between concrete or panel spandrels, and a
+    glazed ground floor. Generic."""
+    L, base, top = wall.L, wall.base, wall.top
+    if L < 3.0:
+        return
+    wall.face("glass", 0.3, L - 0.3, base + 0.2, base + 3.6, 0.04, (0.84, 0.88, 0.92, 1.0),
+              uv=((0, 0), (max(1, round(L / 2.0)), 0), (max(1, round(L / 2.0)), 1), (0, 1)))
+    n = max(1, storeys - 1)
+    sh = (top - base - 4.4) / n
+    for k in range(n):
+        z = base + 4.2 + k * sh
+        wall.face("glass", 0.3, L - 0.3, z + 0.7, z + sh - 0.2, 0.04, (0.78, 0.84, 0.90, 1.0),
+                  uv=((0, 0), (max(1, round(L / 1.6)), 0), (max(1, round(L / 1.6)), 1), (0, 1)))
+        wall.slab(mat, 0.0, L, z + sh - 0.2, z + sh + 0.05, 0.0, 0.10, WHITE)
+
+
+def station_front(wall, storeys, rng, front_room):
+    """A low station building: a glazed frontage between pilasters, a deep canopy along the street and plain
+    lettering ("4TH & KING STATION", the place's name; no operator's lettering or emblem). Generic, not a survey."""
+    L, base, top = wall.L, wall.base, wall.top
+    if L < 6.0:
+        return []
+    centres, bw = bays(L, 5.0)
+    for uc in centres:
+        wall.face("glass", uc - 0.5 * bw + 0.45, uc + 0.5 * bw - 0.45, base + 0.2, top - 1.4, 0.04, (0.82, 0.86, 0.90, 1.0),
+                  uv=((0, 0), (1, 0), (1, 1), (0, 1)))
+        wall.slab("stone", uc - 0.5 * bw - 0.2, uc - 0.5 * bw + 0.45, base, top - 0.2, 0.0, 0.25, WHITE)
+    wall.slab("trim", 0.5, L - 0.5, top - 1.25, top - 1.05, 0.0, 2.6, (0.20, 0.22, 0.25, 1.0))  # the canopy
+    wall.slab("stone", 0.0, L, top - 0.3, top, 0.0, 0.3, WHITE)
+    return [(0.5 * L, top - 0.75, (0.95, 0.95, 0.92, 1.0), "4TH & KING STATION")] if L > 20.0 else []
+
+
 def plain(wall, storey, rng):
     """A side or rear wall that can be seen: a sparse grid of windows."""
     L, base, top = wall.L, wall.base, wall.top
