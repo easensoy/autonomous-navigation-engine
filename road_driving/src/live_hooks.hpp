@@ -31,7 +31,8 @@ struct TickView {
     double t = 0.0;
     double dt = 0.01;
     const Scenario* scenario = nullptr;
-    const LaneNetwork* net = nullptr;
+    const LaneNetwork* net = nullptr;                 // the world's network: the true kerb
+    const LaneNetwork* map = nullptr;                 // the map the estimator and the stack use (net, unless a map error)
     const VehicleParams* vehicle = nullptr;
     const VehicleState* truth = nullptr;              // the true state at t
     const Command* command = nullptr;                 // afterTick: the command computed at t
