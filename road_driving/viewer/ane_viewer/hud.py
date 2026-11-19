@@ -25,8 +25,9 @@ LEGEND = [
     ((0.25, 0.95, 0.35, 1), "green / red returns: kerb scan used / rejected by the filter"),
     ((0.30, 0.90, 1.00, 1), "cyan (toggle): the same returns placed from the estimated pose"),
     ((1.00, 0.55, 0.08, 1), "orange stripe on the bumper: the active planar kerb scanner (37 beams, ±90°, 0.5-25 m)"),
-    ((0.65, 0.69, 0.75, 1), "roof rig and fender pods: decorative only; no 3D lidar or camera is simulated"),
+    ((0.65, 0.69, 0.75, 1), "simulated: GNSS, IMU, wheel and steering sensors, kerb scanner; any roof rig is decorative, no lidar or camera"),
     ((0.95, 0.25, 0.25, 1), "shaded ground: sensor-condition zones (outage, multipath, ramp, kerb blackout, map error)"),
+    ((1.00, 0.50, 0.05, 1), "orange translucent kerb: where the vehicle's map has a kerb the world does not (map error)"),
 ]
 HELP = """Keys
   Space  pause / resume          N  step 0.1 s (Shift+N: one 10 ms tick)      R  restart this configuration
@@ -134,9 +135,13 @@ class Hud:
         for i, (k, label) in enumerate((("legend", "Legend"), ("help", "Help"), ("quality", "Quality"), ("record", "Record video"))):
             self._button(k, label, -0.64 + i * 0.165, y, 0.15, a[k])
 
-    def set_disclaimer(self, district):
-        """The footer says what the streets are: synthetic, or a source-informed reconstruction of real ones."""
+    def set_disclaimer(self, district, vehicle_id="ipace_proxy_v1"):
+        """The footer says what the streets are (synthetic, or a source-informed reconstruction of real ones) and what
+        the vehicle is."""
         text = DISCLAIMER_DISTRICT if district else DISCLAIMER
+        if vehicle_id == "cybercab_proxy_v1":
+            text = ("Independent simulation  |  source-informed reconstruction, details approximated; map data © OpenStreetMap contributors (ODbL)  |  "
+                    "Cybercab-inspired proxy, not a Tesla vehicle or Tesla software")
         if text != self._disclaimer:
             self._disclaimer = text
             self.disclaimer.setText(text)
