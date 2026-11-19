@@ -1,9 +1,9 @@
 #pragma once
-// Left-hand-traffic lane network. Lane segments and turning movements (connectors) are the graph nodes,
-// so one-way streets, banned turns and the absence of U-turns are expressed by which nodes and directed
-// edges exist. Geometry is in metres. The R1 to R7 grids are synthetic: nothing in them comes from a real
+// Lane network. Lane segments and turning movements (connectors) are the graph nodes, so one-way streets,
+// banned turns and the absence of U-turns are expressed by which nodes and directed edges exist. Geometry is
+// in metres. The R1 to R7 grids are synthetic left-hand-traffic networks: nothing in them comes from a real
 // street. District networks (district.hpp) are built by the same rules from source-informed reconstructions
-// of real streets, and set `general`.
+// of real streets, and set `general`; a district sets its own traffic side (NetworkSpec::rightHand).
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -75,6 +75,11 @@ struct NetworkSpec {
     double tightKerbRadius = 3.0;  // corner kerb radius of a tight junction (side-road entry class)
     double tightLeftRadius = 5.5;  // left-turn arc at a tight junction; uses carriageway beyond its own lane
     double tightSpeed = 2.5;       // m/s, limit on a tight junction's left turns
+    // Traffic side. False (every grid, and the London districts): lanes run left of the carriageway's centre
+    // line and right turns cross the opposing lane. True (a right-hand-traffic district such as SF-SOMA): lanes
+    // run right of it, and left turns cross; the district builder then swaps penaltyLeft and penaltyRight, so
+    // the turn that crosses the opposing lane always costs the larger penalty. The grids refuse it.
+    bool rightHand = false;
 };
 
 struct BannedTurn {
@@ -215,9 +220,10 @@ LaneNetwork buildR6(const NetworkSpec& spec = NetworkSpec{});
 // J12>J22 -> J22>J21 and no left turn J30>J31 -> J31>J21; tight junctions J23 and J41; a 40 m cul-de-sac
 // east of J42. Junction design as R2's.
 LaneNetwork buildR7(const NetworkSpec& spec = NetworkSpec{});
-// "R1" to "R7", or a district network ("KEN", "KNB": district.hpp); throws for any other name.
+// "R1" to "R7", or a district network ("KEN", "KNB", "SF-SOMA": district.hpp); throws for any other name.
 LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec = NetworkSpec{});
-// A right-hand-traffic copy (x mirrored). validate() must reject it.
+// A copy with x mirrored: its lanes change side but its traffic-side setting does not, so validate() must
+// reject it (a left-hand grid mirrored is right-hand geometry labelled left-hand, and the reverse).
 LaneNetwork mirrored(const LaneNetwork& net);
 
 // Polyline distance from a point to an element's centreline: arc length and signed lateral offset
