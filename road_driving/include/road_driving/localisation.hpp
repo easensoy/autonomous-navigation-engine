@@ -86,9 +86,11 @@ struct KerbConfig {
     double kerbDeviation = 0.03;      // m RMS, real kerb against the map, varying along it
     double deviationWavelength = 25.0;  // m
 };
-// A stretch of the route, as fractions of its length; the world turns it into map-frame rectangles.
+// A stretch of the route, as fractions of its length (or, with `metres`, as distances along it from the start);
+// the world turns it into map-frame rectangles.
 struct Span {
     double from = 0.0, to = 0.0;
+    bool metres = false;
     bool active() const { return to > from; }
 };
 struct SensorConditions {
@@ -106,6 +108,7 @@ struct SensorConditions {
     Span ramp;                      // fixes drift away and back (no jump): the offset grows at rampRate inside
     double rampRate = 0.0;          // m/s, until rampMax, then decays at the same rate (direction drawn per seed)
     double rampMax = 0.0;           // m
+    bool rampSustain = false;       // true: the offset holds at rampMax while inside the zone, and decays only after it
     Span slip;                      // wheel speed reads (1 + slipRatio) times the truth
     double slipRatio = 0.0;
     double gyroBiasStepTime = -1.0; // s; a step change of the gyro bias at this time (< 0: none)
@@ -115,7 +118,30 @@ struct SensorConditions {
     Span kerbBlackout;              // no kerb scans (sensor fault or full occlusion)
     Span kerbShift;                 // a map error: the kerb on the scanner's left lies further out than mapped
     double kerbShiftDistance = 0.0; // m (a widened carriageway, a new lay-by)
+    // A map error kept apart from the world (the SF conditions): a misplaced map segment. Over the stretch of the
+    // route `mapSegment` (in metres along it), the kerbs either side of the route are moved mapKerbShift metres
+    // sideways, to the route's left (> 0) or right (< 0), in the map the estimator and the stack use, with a step at
+    // each end where the map's kerb jogs. The world keeps the true kerbs: the scanner sees them and the evaluator
+    // measures clearance to them.
+    Span mapSegment;
+    double mapKerbShift = 0.0;      // m, positive to the route's left
 };
+
+// A deliberate map error, as the world sets it up: the part of kerb line `line` of the true network between the
+// fractions t0 and t1 of its length lies `offset` metres along the line's normal (positive into the carriageway,
+// negative away from it) in the map the vehicle's software uses.
+struct MapKerbError {
+    int line = -1;
+    double offset = 0.0;
+    double t0 = 0.0, t1 = 1.0;
+};
+// The map the estimator and the stack use: the true district network with those parts of its kerb lines displaced,
+// joined to the rest of the kerb by a step at each end (so the map's kerb still closes). The kerb lines keep their
+// indices; the displaced parts and the steps are appended. Throws std::invalid_argument for a grid network, a line
+// that does not exist or is a patch edge, or fractions outside 0 < t0 < t1 < 1.
+LaneNetwork withMapErrors(const LaneNetwork& truth, const std::vector<MapKerbError>& errors);
+// The displaced part of one map error as the map has it: its two ends (map frame).
+void mapErrorSegment(const LaneNetwork& truth, const MapKerbError& e, double& ax, double& ay, double& bx, double& by);
 // Named conditions. Development: nominal, gnss_outage, multipath, wheel_slip, imu_bias, delay_drop.
 // Held out on R2 (different placements and magnitudes, plus a combination): the same names with suffix
 // _h, and combined_h. Held out on R3 (new fault types): the names in conditionNamesR3(). Held out on R4
@@ -132,6 +158,11 @@ std::vector<std::string> conditionNamesR7();
 // The district networks' conditions (KEN, KNB), for the viewer's London scenes: nominal_ldn, gnss_outage_ldn
 // (no fixes over 40 to 70% of the route) and multipath_ldn (fixes 6 m off over 15 to 45%). Not an evaluation.
 std::vector<std::string> conditionNamesDistrict();
+// The San Francisco conditions (SF-SOMA), placed in metres along the route so that they cover the same stretch of
+// both routes (their first 230 m straight and the turn after it); frozen in benchmark/PROTOCOL_SF.md:
+// nominal_sf, gnss_outage_sf, gnss_drift_sf (a sustained slow excursion, no jump) and kerb_map_error_sf (the outage,
+// with a 110 m stretch of the first street's kerbs mapped 0.6 m to the route's right).
+std::vector<std::string> conditionNamesSF();
 
 struct Zone {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
@@ -144,6 +175,7 @@ struct Obstacle {
 struct SensorZones {
     std::vector<Zone> outage, multipath, slip, ramp, kerbBlackout, kerbShift;
     std::vector<Obstacle> obstacles;
+    std::vector<MapKerbError> mapErrors;  // the condition's map error (no sensor sees it: the vehicle's map differs from the world)
 };
 
 // Faults an operator injects during a live episode (road_drive live and its recorded sessions); none in
