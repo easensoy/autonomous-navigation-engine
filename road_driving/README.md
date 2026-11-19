@@ -1,12 +1,12 @@
 # road_driving
 
-A first road-driving loop on top of the engine. An approximately I-PACE-sized kinematic car follows lane-level routes from `Graph` and `NavigationCore` on small synthetic left-hand-traffic networks. When an oracle reports a roadworks closure, the car reroutes from where it actually is or stops before the barrier.
+A first road-driving loop on top of the engine. A kinematic car follows lane-level routes from `Graph` and `NavigationCore` on small synthetic left-hand-traffic networks, and on reconstructed streets in London and in San Francisco, where traffic keeps right. The car is an approximately I-PACE-sized proxy by default, or a Cybercab-inspired proxy (`--vehicle cybercab_proxy_v1`). When an oracle reports a roadworks closure, the car reroutes from where it actually is or stops before the barrier.
 
 It can drive on simulator truth (the reference) or on its own state estimate. Simulated GNSS, IMU, wheel, steering and kerb-ranging sensors feed one of five EKF variants, and the stack drives on its output. It keeps a margin from the kerb that follows the estimate's uncertainty, and stops explicitly when no clear continuation exists. Every episode is logged and can be replayed from its manifest.
 
 Labels:
 - **SYNTHETIC_ROADS:** networks R1 to R7, no real street.
-- **SOURCE_INFORMED_ROADS:** the district networks `KEN` and `KNB`: real streets reconstructed from OpenStreetMap, with approximated details ([below](#london-district-scenes)).
+- **SOURCE_INFORMED_ROADS:** the district networks `KEN` and `KNB` ([London](#london-district-scenes)) and `SF-SOMA` ([San Francisco](#san-francisco-soma)): real streets reconstructed from OpenStreetMap, with approximated details.
 - **ORACLE_CLOSURE:** the scenario tells the stack about the closure; nothing is sensed.
 - **Pose source:** either **GROUND_TRUTH_POSE**, the simulator's truth, or **ESTIMATED_POSE**, an estimator fed by **SIMULATED_SENSORS**.
 
@@ -19,7 +19,7 @@ There is no other traffic, and no perception or prediction.
 
 ## Localisation in brief
 
-Six predeclared evaluations, each run once on a network held out of all tuning:
+Seven predeclared evaluations, each run once with frozen code on data held out of all tuning:
 
 | Evaluation (held out) | Tested | Criteria passed | Failed |
 |---|---|---|---|
@@ -29,6 +29,7 @@ Six predeclared evaluations, each run once on a network held out of all tuning:
 | Fourth (R5) | the stack's re-join after pose corrections, each filter driven with and without it | 4 of 6 | with GNSS-only filters, one more crossing episode in five cells and one completion fewer |
 | Fifth (R6) | a re-join limited to map-verified corrections, each filter driven with and without it | 4 of 6 | `ekf_kerb` followed two wrong kerb matches into deeper crossings; one `ekf_kerb2` closure incursion, identical without the re-join |
 | Sixth (R7) | a re-join limited to kerb matches that fit the map uniquely, each filter driven with and without it | 5 of 6 | one `ekf_kerb2` episode over a kerb that had stopped on the road without the re-join, after two correct corrections |
+| Seventh (San Francisco: route SF-B and seeds 1 to 15) | the unchanged filters and stack on a right-hand-traffic district, with a second vehicle profile and a misplaced map segment | 6 of 6, and one reported | none crossed a kerb; reported: R7's along-road mechanism recurred, as 10 fallback stops for lateral error |
 
 On R4, every estimator processed the same recorded logs: 210 drives under seven conditions, with new fault magnitudes and combinations and a kerb map error. The stack then drove 1,440 closed-loop episodes:
 - **Recovery after drift:** under a gyro-bias step during multipath, `ekf_int` never left the fault (errors up to 70 m). `ekf_int2` left it in 29 of 30 runs, and its pooled 95th percentile was 4.80 m against 54.8 m.
@@ -54,7 +55,7 @@ What failed or remains:
 - **GNSS-only drift:** while GNSS is rightly excluded, nothing bounds dead reckoning. `ekf_int2` still exceeded 5 m in 20 of 30 gyro-fault runs, and in one the fault never ended.
 - **Losing kerbs and GNSS together** stopped the kerb filters for clearance in every such episode, 34 of the 40 stops unwarranted.
 
-Details, the earlier evaluations and the next improvement: [LOCALISATION.md](LOCALISATION.md#results).
+Details, the earlier evaluations and the next improvement: [LOCALISATION.md](LOCALISATION.md#results). The San Francisco evidence: [`benchmark/sf/`](benchmark/sf/README.md).
 
 ## Live 3D viewer
 
@@ -106,6 +107,28 @@ The two routes, each driven by `ekf_kerb2` with the unique re-join:
 - **`KNB-A`** (637 m): Brompton Road south-westbound past Harrods, left into Hans Road, left into Basil Street, and right into Hans Crescent. Under `multipath_ldn` (seed 1) the fixes are biased by about 6 m for 22 s on Brompton Road. The integrity monitor flags them within 0.2 s and excludes them for 23 s, and the run completes with a position RMSE of 0.10 m.
 
 Neither run crosses a kerb. These conditions were chosen to show the system at work in these scenes; they are not an evaluation.
+
+## San Francisco: SoMa
+
+**`SF-SOMA`** drives real San Francisco streets with **right-hand traffic**: Townsend, 5th, Brannan, 4th and Bluxome Streets, by the Caltrain station at 4th and Townsend. It is built like the London districts, from a pinned OpenStreetMap extract ([provenance](viewer/districts/PROVENANCE.md#san-francisco-soma)):
+- **Sourced:** junction positions, street names, 4th Street's one-way rule and its two recorded turn restrictions, and the kerbs of 4th Street's light-rail trackway.
+- **Inferred:** widths, kerbs and turning paths, with one modelled lane for each direction of travel.
+
+The traffic side is a district setting. Lanes keep right of the centre line, the left turn crosses the opposing lane and carries the larger turn penalty, and the stack bounds its clearance shift on the lane's left. London and R1 to R7 keep left-hand traffic, and their results reproduce exactly.
+
+**Vehicle profiles.** `ipace_proxy_v1` is the default. `cybercab_proxy_v1` is a Cybercab-inspired proxy: a 2.75 m wheelbase, 4.20 m long, 1.93 m wide, with no exterior mirrors. Its GNSS antenna, IMU and kerb scanner sit 1.30, 1.10 and 3.55 m ahead of the rear axle; the simulated sensors and the estimators' lever arms both use these mounts. Its size follows public figures, and its mounts and actuator limits are research assumptions ([`vehicle.hpp`](include/road_driving/vehicle.hpp)). It is not a Tesla vehicle and runs no Tesla software.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File road_driving\viewer\launch.ps1 --demo SF
+```
+
+**The seventh evaluation** ([protocol](benchmark/PROTOCOL_SF.md), [evidence](benchmark/sf/README.md)) drove the unchanged filters and stack on two routes, under four conditions, with 15 seeds, on each vehicle:
+- **Outage:** after 190 m without fixes, `ekf_kerb2` was 0.027 m from the truth when they returned (median), against 4.75 m for dead reckoning. It completed every closed-loop episode.
+- **Drift:** the kerbs held a drift's across-road part, and the monitor flagged it. They cannot see its along-road part on a straight. In 13 of 30 runs `ekf_kerb2` entered the turn 1.8 to 4.0 m along the road from the truth, and 10 of those closed-loop episodes ended in fallback stops for lateral error. R7's along-road mechanism recurred; these wider streets left at least 3.9 m of clearance.
+- **Map error:** `ekf_kerb2` followed a 110 m segment misplaced 0.6 m in its map. 6 of 30 episodes ended in fallback stops, none over a kerb.
+- **Vehicle transfer:** the I-PACE proxy, on its own logs, gave the same picture.
+
+A first run was stopped unread when a provenance check found that the network continued 5th Street into the Caltrain rail yard. The network was corrected, and the protocol committed again before the run reported here ([details](benchmark/PROTOCOL_SF.md#a-first-run-stopped)).
 
 ## How the engine is used
 
@@ -165,7 +188,7 @@ build/road-gcc/road_driving/road_drive suite --variant B0 --seeds 6
 Localisation:
 - `drive` drives on an estimator (`ekf`, `ekf_int`, `ekf_int2`, `ekf_kerb`, `ekf_kerb2`; `--feasibility off` gives the stack without the clearance layer; `--rejoin` chooses the response to a pose correction: `unique`, the default, re-joins only corrections whose kerb scan fits the map uniquely, `verified` every map-verified correction as evaluated on R6, `on` every jump as evaluated on R5, and `off` none);
 - `localise` replays the logged sensors through every estimator without the simulator;
-- `bench-loc` and `bench-closed` run the campaigns. The splits are `dev` (R1), `heldout` (the first evaluation, R2), `r2` (R2 as development data), `r3` (the second evaluation), `r3dev` (R3 as development data), `r4` (the third evaluation), `r5` (the fourth), `r6` (the fifth) and `r7` (the sixth). `bench-closed --scenario` runs some of a split's scenarios; `tools/merge_closed_loop.py` merges such parts into the files one process writes. Each split drives the stack it was evaluated with; `bench-closed --rejoin off|on|verified|unique` overrides the re-join.
+- `bench-loc` and `bench-closed` run the campaigns. The splits are `dev` (R1), `heldout` (the first evaluation, R2), `r2` (R2 as development data), `r3` (the second evaluation), `r3dev` (R3 as development data), `r4` (the third evaluation), `r5` (the fourth), `r6` (the fifth), `r7` (the sixth), and San Francisco's `sf-dev` (development), `sf` (the seventh) and `sf-ipace` (its vehicle transfer). `drive`, `live` and `map` take `--vehicle ipace_proxy_v1|cybercab_proxy_v1`. `bench-closed --scenario` runs some of a split's scenarios; `tools/merge_closed_loop.py` merges such parts into the files one process writes. Each split drives the stack it was evaluated with; `bench-closed --rejoin off|on|verified|unique` overrides the re-join.
 
 ```bash
 build/road-gcc/road_driving/road_drive drive R3-B --condition gnss_ramp_r3 --estimator ekf_kerb2 --seed 5 --out out/demo
@@ -188,7 +211,7 @@ build/road-gcc/road_driving/road_drive map R3 --json out/r3.json
 python road_driving/tools/render_demo.py --map out/r3.json --episode out/demo --out out/test-drive-relocalise.gif --poster out/test-drive-relocalise-poster.png --poster-time 50 --compare ekf_kerb
 ```
 
-The default build (`BUILD_ROAD_DRIVING=OFF`) is unchanged. CI enables the option in all four build jobs (Windows MSVC, Windows MSYS2 GCC, Ubuntu GCC and Clang), so CTest runs the seven tests below on each. The Linux jobs also replay a stored sensor log through every estimator, and run the 3D viewer's Python tests without a display against the backend they built.
+The default build (`BUILD_ROAD_DRIVING=OFF`) is unchanged. CI enables the option in all four build jobs (Windows MSVC, Windows MSYS2 GCC, Ubuntu GCC and Clang), so CTest runs the eight tests below on each. The Linux jobs also replay a stored sensor log through every estimator, and run the 3D viewer's Python tests without a display against the backend they built.
 
 ## Closure results on ground-truth pose
 
@@ -214,7 +237,7 @@ Across all 192 episodes:
 
 GCC 14.2 and MSVC 19.51 produce byte-identical truth logs in all 192 episodes. The variants differ only in `c4_d3`.
 
-CTest runs seven tests with the option on:
+CTest runs eight tests with the option on:
 
 - **`road_driving_tests`** (288 checks):
   - map invariants, including a mirrored right-hand copy that must be rejected;
@@ -258,6 +281,12 @@ CTest runs seven tests with the option on:
   - The one-way streets and the recorded turn restriction hold, with no U-turn through Queen's Gate's reservation.
   - Both routes are reachable and legal, and drive to completion, deterministically, on simulator truth and on `ekf_kerb2`'s estimate.
   - A parked-car condition is refused.
+- **`road_driving_sf_tests`** (44 checks): the San Francisco network and the vehicle profiles.
+  - Lanes run right of their carriageway's centre, a left-hand copy is rejected, the grids refuse right-hand traffic, and the turn across the opposing lane carries the larger penalty: left in San Francisco, right in London.
+  - 5th and Townsend is a T-junction; 4th Street is one-way with its trackway as a reservation, and its two recorded turn restrictions hold. The local frame reproduces a geodesic length to 2 cm.
+  - Both profiles' footprints clear every movement; the kerb distance's sign matches a point-in-polygon test; patch edges give the scanner no return; both routes are reachable and legal.
+  - The profile reaches the episode, the sensors' mounts, the estimators' lever arms, the manifest, the live scene message and a saved session; an older manifest replays with the I-PACE proxy, and an unknown profile is refused.
+  - The four conditions: one outage with no fix inside it, a drift held at 4 m without a jump, and a map error that changes no measurement while the vehicle's map has both kerbs of a 110 m stretch 0.6 m to the side. A London live smoke run equals the headless one.
 - **`road_driving_session_replay`** replays a session recorded through the viewer ([`viewer/examples/sandbox_session.json`](viewer/examples/sandbox_session.json)): six operator commands, among them a closure and its reopening.
 
 ## Episode files and replay
@@ -276,10 +305,10 @@ The trace hash is FNV-1a over `truth.csv`. `road_drive replay <dir>` reruns the 
 
 ## Experimental scope
 
-- **Network and inputs.** The roads of R1 to R7 are synthetic. The district networks follow real streets but are reconstructions: widths, kerbs, parking, junction geometry and turning paths are inferred, minor side streets are left out, and Queen's Gate's two carriageways are modelled about their midline ([provenance](viewer/districts/PROVENANCE.md)). The one closure is reported by an oracle, and there is no other road user.
+- **Network and inputs.** The roads of R1 to R7 are synthetic. The district networks follow real streets but are reconstructions: widths, kerbs, parking, junction geometry and turning paths are inferred, minor side streets are left out, and Queen's Gate's and 4th Street's two carriageways are modelled about their midlines ([provenance](viewer/districts/PROVENANCE.md)). No signals or stop control are modelled. The one closure is reported by an oracle, and there is no other road user.
 - **Pose and sensors.** Pose is ground truth unless a run is labelled ESTIMATED_POSE. The sensors are simulated from truth with simple error models: GNSS, IMU, wheel speed, steering angle, and a planar range scanner at kerb height. The scanner sees only kerbs and objects standing in the carriageway; there is no point cloud, camera, or processed lidar or camera data. The receiver does not detect multipath.
-- **Map.** The estimators and the world share the same kerb map, except for a smooth modelled deviation of 0.03 m RMS. Larger map errors, such as a moved kerb or roadworks, were not tested.
-- **Vehicle model.** The kinematic model ignores tyre forces, so wheel slip exists only as a sensor error. The I-PACE parameters are a proxy built from published dimensions, not a model of the vehicle. Nothing here was driven on a physical vehicle.
+- **Map.** The estimators and the world share the same kerb map, except for a smooth modelled deviation of 0.03 m RMS and the tested map errors: on R4 a kerb section 0.5 m out, and in San Francisco a 110 m segment whose two kerbs are 0.6 m to one side in the vehicle's map. Roadworks and other changes to the world were not tested.
+- **Vehicle model.** The kinematic model ignores tyre forces, so wheel slip exists only as a sensor error. The I-PACE parameters are a proxy built from published dimensions, not a model of the vehicle; the Cybercab-inspired proxy likewise takes only its size from public figures, and its sensor mounts are assumptions. Nothing here was driven on a physical vehicle.
 - **The 3D viewer.** It draws what the backend reports and senses nothing itself. The car is an original proxy with the simulated dimensions. Its roof rig, the buildings and the street furniture are decorative, and no simulated sensor sees them. In the district scenes the buildings stand on OpenStreetMap's outlines, at heights taken from their mapped storeys, and their facades show each building type's elements, not a survey of any building.
 - **Tuning.** The controller was tuned on R1. The controller settings are a look-ahead of 2.0 m + 0.30 s × speed, a 0.1 s pose prediction, and a speed envelope planned at 1.6 m/s² with a 0.4 s preview.
   - The first EKF was tuned on R1, and R2 was held out ([protocol](benchmark/PROTOCOL.md)).
