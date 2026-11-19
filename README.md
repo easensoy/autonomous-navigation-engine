@@ -389,8 +389,8 @@ caller reports; a step is one node.
   sensors with simple error models. The kerb scanner is simulated against the same map the filter uses,
   up to a modelled 0.03 m deviation and the tested map errors. There is no real lidar or camera data.
 - **Vehicle:** the model is kinematic, with parameters that approximate an I-PACE's published
-  dimensions, or a Cybercab-inspired proxy's size with assumed sensor mounts. Both are simulated
-  proxies; nothing was driven on a physical vehicle.
+  dimensions, or a Cybercab-inspired proxy whose outer dimensions and sensor mounts are research
+  assumptions. Both are simulated proxies; nothing was driven on a physical vehicle.
 - **Tuning:** each evaluation was developed on earlier data, then run once on held-out data under a
   protocol fixed before the run: pushed for the first six, committed for San Francisco's.
 - **Known gaps:**
