@@ -116,7 +116,7 @@ def main(argv):
     a.fill_between(t[valid], -2 * sig_lat[valid], 2 * sig_lat[valid], color="#d62728", alpha=0.12, lw=0, label="filter's 2-sigma across")
     a.axhline(0.0, color="k", lw=0.5)
     a.set_ylabel("error against truth (m)")
-    a.legend(loc="upper left", fontsize=8, ncol=2)
+    a.legend(loc="lower left", fontsize=8, ncol=2)  # clear of the fault window's label at the top
     if windows:
         a.text(windows[0][0], a.get_ylim()[1] * 0.92, " GNSS outage", color="#3344cc", fontsize=8)
     a = ax[1]
