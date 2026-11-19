@@ -54,8 +54,9 @@ SHOWCASES = {
                          "Townsend, with approximated details, not a surveyed digital twin. Street geometry, names, one-way rules and turn "
                          "restrictions from OpenStreetMap (ODbL, (c) OpenStreetMap contributors); widths, kerbs and turning paths "
                          "inferred; facades decorative; signals and stop control not modelled. Independent simulation: a "
-                         "Cybercab-inspired proxy (cybercab_proxy_v1) whose dimensions follow public figures and whose sensor mounts "
-                         "are research assumptions, not a Tesla vehicle; no Tesla or Waymo software or data. See "
+                         "Cybercab-inspired proxy (cybercab_proxy_v1) whose outer dimensions and sensor mounts are research "
+                         "assumptions, with the I-PACE proxy's simulated actuator limits; not a Tesla vehicle; no Tesla or Waymo "
+                         "software or data. See "
                          "road_driving/viewer/districts/PROVENANCE.md and road_driving/benchmark/PROTOCOL_SF.md."},
 }
 SF_RESULTS = REPO / "road_driving" / "benchmark" / "sf" / "sf" / "closed_loop.jsonl"
