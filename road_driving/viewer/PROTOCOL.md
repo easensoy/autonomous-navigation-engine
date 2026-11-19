@@ -50,7 +50,7 @@ The world commands are `gnss_outage`, `gnss_bias`, `kerb_blackout` and `closure`
 |---|---|---|
 | `hello` | once | protocol name, backend commit and toolchain, command list |
 | `session` | each episode | `mode` (`live` or `replay`), the full configuration, labels, `dt` |
-| `scene` | each episode | the map (junctions, streets, lanes, kerb lines and corner arcs), vehicle dimensions, sensor mounts, condition zones, obstacles the kerb scanner sees. A district network's map (`KEN`, `KNB`) adds three fields, still version 1: `district` (its id, name, title, origin, source and licence), `street_info` (per street: its real name, the kerb's distance left and right of the centreline, the central reservation's width, the lane's offset) and `kerb_boundary` (the indices of the kerb lines that are patch edges: they close the carriageway but are not kerbs). The grids' maps are unchanged. |
+| `scene` | each episode | the map (junctions, streets, lanes, kerb lines and corner arcs), vehicle dimensions, sensor mounts, condition zones, obstacles the kerb scanner sees. A district network's map (`KEN`, `KNB`) adds three fields, still version 1: `district` (its id, name, title, origin, source and licence), `street_info` (per street: its real name, the kerb's distance left and right of the centreline, the central reservation's width, the lane's offset) and `kerb_boundary` (the indices of the kerb lines that are patch edges: they close the carriageway but are not kerbs). The grids' maps are unchanged. A right-hand-traffic district (`SF-SOMA`) adds `city`, `frame` and `"traffic":"right"` to `district`; a left-hand one omits `traffic`. The vehicle carries its profile: `id`, `description`, and `height`, `wheel_radius` and `track` for drawing; an older message without them is drawn as the I-PACE proxy. `map_errors` lists each misplaced kerb of the vehicle's map: the kerb line, its offset, and its ends as the map has them (`map`) and where the world's kerb is (`true`). |
 | `tick` | every tick (or every N) | the true state (for drawing and diagnostics only), the command, the estimate with its covariance and integrity state, the stack's mode and offsets, the truth diagnostics (`diag`: along-road, lateral and heading error in the true heading frame; `clearance`; `crossing`), the sensors' availability and the injected faults |
 | `gnss` | each fix released | the fix (map frame) and its reported sigma |
 | `scan` | each kerb scan released | the scanner's true pose at the scan, the beam geometry, the 37 ranges (-1: no return), and the filter's decision on that scan (`MATCHED`, `REJECTED`, `-`) |
@@ -68,6 +68,8 @@ The world commands are `gnss_outage`, `gnss_bias`, `kerb_blackout` and `closure`
 ```json
 {"scenario": "R7-A", "condition": "kerb_faults_r7", "mode": "estimated", "estimator": "ekf_kerb2", "seed": 7, "rejoin": "unique"}
 ```
+
+`vehicle` (`ipace_proxy_v1`, the default, or `cybercab_proxy_v1`) chooses the vehicle profile; the session message echoes it.
 
 - `scenario`: a benchmark route such as `R7-A`, a closure scenario such as `R7-B_late_closure`, or a catalogue scenario such as `c3_r30`.
 - `mode`: `estimated` or `ground_truth`.
