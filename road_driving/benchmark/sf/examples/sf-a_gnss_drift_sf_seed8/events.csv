@@ -1,0 +1,6 @@
+t,source,type,detail
+0.00,WORLD,EPISODE_START,network=SF-SOMA;labels=SOURCE_INFORMED_ROADS,ESTIMATED_POSE(ekf_kerb2),ORACLE_CLOSURE;start=T4>T5/0;goal=B5>B4/5;sensors=gnss_drift_sf
+2.00,STACK,ROUTE_PLANNED,elements=30;engine=ACTIVE
+33.80,STACK,MONITOR_TRIGGER,lateral error -1.80 m
+33.80,STACK,FALLBACK_STOP,v=4.01;decel=8.00
+34.70,STACK,STOPPED,after fallback
