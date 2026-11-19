@@ -32,6 +32,7 @@ Compatibility notes for code that uses the library. Dates are when the change re
   - The Cybercab-inspired proxy is drawn from its profile. The overlay names the city, the traffic side and the vehicle.
   - `tools/make_showcase.py --showcase sf` records SF-A on the seed the protocol's rule picks.
 - **Tests:** CTest gains `road_driving_sf_tests` (44 checks). The viewer's Python tests grow from 51 to 62; the new ones run without Panda3D.
+- **The San Francisco showcase:** a 1920×1080, 50 fps recording of SF-A under `gnss_outage_sf` on seed 2, the seed the protocol's rule picks, in one uninterrupted run, published as the GitHub release `viewer-sf-v1` with its metadata and the OpenStreetMap extract. The video is not in the repository; its poster and a frame are in `road_driving/docs/media`.
 
 ### Road-driving: district networks for Kensington and Knightsbridge, and the viewer's London scenes (`road_driving/`)
 
