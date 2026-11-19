@@ -66,7 +66,7 @@ Each is a single drive (`road_drive drive ... --out`) that reproduces its campai
 
 - **One district, simulated.** Two routes share the district's streets in opposite directions, with 15 seeds. There is no other traffic, and no signals or stop control. The network is a source-informed reconstruction from OpenStreetMap, not a survey.
 - **The faults are prescribed models.** The outage, the drift and the misplaced map segment are placed in metres along each route. No building geometry generates them. The drift's direction is drawn per seed, so how many runs drift along the road is itself a random outcome.
-- **The proxies are not the vehicles they are named after.** The Cybercab-inspired proxy takes its size from public figures; its sensor mounts and actuator limits are research assumptions ([`vehicle.hpp`](../../include/road_driving/vehicle.hpp)).
+- **The proxies are not the vehicles they are named after.** The simulation uses a Cybercab-inspired proxy. Its outer dimensions and sensor mounts are research assumptions, and it uses the simulated actuator limits of the I-PACE proxy ([`vehicle.hpp`](../../include/road_driving/vehicle.hpp)).
 - **One toolchain is the reference.** MSVC and GCC produce different estimated-pose traces (floating point), and these results are MSVC's.
 - **A first run was stopped.** It was stopped and set aside unread when a check found that the network continued 5th Street into the Caltrain rail yard. The network was corrected, development re-run and the protocol committed again before this run ([details](../PROTOCOL_SF.md#a-first-run-stopped)).
 
