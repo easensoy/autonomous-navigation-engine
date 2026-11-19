@@ -4,6 +4,35 @@ Compatibility notes for code that uses the library. Dates are when the change re
 
 ## November 2026
 
+### Road-driving: San Francisco, right-hand traffic and vehicle profiles (`road_driving/`)
+
+- **Right-hand traffic is a district setting:** `DistrictSpec::rightHand` and `NetworkSpec::rightHand`.
+  - Lanes run right of the centre line, and `validate` checks the side.
+  - The turn penalties swap, since the left turn crosses the opposing lane, and the far-side corner takes `DistrictSpec::farRadius()`.
+  - The stack bounds its clearance shift on the lane's left. The grids refuse the setting.
+
+  Everything left-hand is unchanged: the 192-episode suite is byte-identical, demonstration C still reproduces `0x58876d2b4ce5fe2c`, `KEN-A` and `KNB-A` reproduce their traces, and the 850 R7-A held-out closed loops reproduce their records.
+- **Network `SF-SOMA`** (`districtSanFranciscoSoma()`, `buildNetwork("SF-SOMA")`): South of Market, San Francisco, from an OpenStreetMap extract of 2026-11-19T00:42:21Z, in the WGS84 tangent plane at 37.7770 N, 122.3950 W. It has 5 junctions, 9 patch edges, 25 lanes and 42 turning movements. 4th Street is one-way about its light-rail trackway, and two turn restrictions are recorded. Its routes are `SF-A` and `SF-B` (`benchmarkRoutesSF()`). A district spec gains `city` and `frame`, and its scene message gains `city`, `frame` and `"traffic":"right"`.
+- **Vehicle profiles** (`vehicle.hpp`):
+  - `VehicleParams` gains `id`, `description`, the sensor mounts (`gnssAntennaX`, `gnssAntennaY`, `imuX`, `kerbScannerX`), and `height`, `wheelRadius` and `track` for drawing.
+  - New functions: `vehicleProfile(id)`, which throws for an unknown id, `findVehicleProfile`, `vehicleProfileNames` and `vehicleProfileText`.
+  - `ipace_proxy_v1` is the default, equal field for field to the old `VehicleParams`. `cybercab_proxy_v1` is a Cybercab-inspired proxy.
+  - `Scenario::vehicle` (default `ipace_proxy_v1`) reaches the sensors' mounts, the estimators' lever arms (`estimatorConfigFor`), the manifest (`vehicle_profile=`, `vehicle_params=`), `road_drive drive|live|map --vehicle` and the live configuration. Older manifests replay with the I-PACE proxy.
+- **Conditions placed in metres, and a map kept apart from the world** (`localisation.hpp`):
+  - New fields: `Span::metres`, `SensorConditions::rampSustain`, `mapSegment` and `mapKerbShift`.
+  - `MapKerbError` and `withMapErrors` give the estimator and the stack a map that differs from the world's kerb.
+  - `conditionNamesSF()`: `nominal_sf`, `gnss_outage_sf`, `gnss_drift_sf` and `kerb_map_error_sf`.
+- **Extended metrics** (`benchmark.hpp`), written only by the San Francisco splits:
+  - Along-road and lateral errors in the true heading's frame, per-axis NEES, and the fault window's timing.
+  - Detection, trust and reacquisition delays, false alarms, and kerb corrections.
+  - The splits are `sf-dev`, `sf` and `sf-ipace`. Their closed-loop lines also carry the vehicle, the fallback stop's reason and time, the largest steering and lateral acceleration, and emergency events. Earlier splits write exactly what they wrote.
+- **The seventh evaluation**, [`PROTOCOL_SF.md`](road_driving/benchmark/PROTOCOL_SF.md), committed at `5f2c004` and run once: six criteria passed and one was reported ([evidence](road_driving/benchmark/sf/README.md)). A first run, at `f2dd126`, was stopped unread when `tools/district_deviation.py` found that the network continued 5th Street into the Caltrain rail yard. Tools: `sf_analysis.py`, `sf_plots.py` and `sf_timeline.py`; `district_extract.py` and `district_deviation.py` handle SF-SOMA.
+- **The viewer:** `--demo SF`, `SFB`, `SFD` and `SFM` (F7), and `--vehicle`; `--seed` now also replaces a demonstration's seed.
+  - The scene has SoMa's buildings, the station, United States street furniture and markings, the rail yard's tracks, and the map error drawn beside the true kerb.
+  - The Cybercab-inspired proxy is drawn from its profile. The overlay names the city, the traffic side and the vehicle.
+  - `tools/make_showcase.py --showcase sf` records SF-A on the seed the protocol's rule picks.
+- **Tests:** CTest gains `road_driving_sf_tests` (44 checks). The viewer's Python tests grow from 51 to 62; the new ones run without Panda3D.
+
 ### Road-driving: district networks for Kensington and Knightsbridge, and the viewer's London scenes (`road_driving/`)
 
 - **`district.hpp`: `DistrictSpec`, `buildDistrict`, `findDistrict`.** These build a lane network from a street description: junctions at any angle, a kerb width for each side of a street, an optional central reservation, gentle bends, and patch edges where a street carries on beyond the modelled area. `buildNetwork` knows two districts, `KEN` and `KNB`. They are source-informed reconstructions of real streets from OpenStreetMap (`viewer/districts/PROVENANCE.md`), with approximated details, not surveyed models.
