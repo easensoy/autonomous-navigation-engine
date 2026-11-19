@@ -66,7 +66,10 @@ target_link_libraries(test_live PRIVATE road_driving)
 add_executable(test_district tests/test_district.cpp)
 target_link_libraries(test_district PRIVATE road_driving)
 
-foreach(_road_target road_driving road_drive test_road_driving test_localisation test_live test_district)
+add_executable(test_sf tests/test_sf.cpp)
+target_link_libraries(test_sf PRIVATE road_driving)
+
+foreach(_road_target road_driving road_drive test_road_driving test_localisation test_live test_district test_sf)
   if(MSVC)
     target_compile_options(${_road_target} PRIVATE /W4)
   else()
@@ -81,6 +84,8 @@ add_test(NAME road_driving_localisation_tests COMMAND test_localisation)
 add_test(NAME road_driving_live_tests COMMAND test_live)
 # The Kensington and Knightsbridge district networks: geometry, lane graph, feasible turning paths, routes.
 add_test(NAME road_driving_district_tests COMMAND test_district)
+# San Francisco (right-hand traffic), the vehicle profiles and the San Francisco conditions, map to live to replay.
+add_test(NAME road_driving_sf_tests COMMAND test_sf)
 # A session recorded through the 3D viewer (operator commands at recorded ticks) must replay headlessly:
 # bit for bit on the recording toolchain, to the same outcome on another.
 add_test(NAME road_driving_session_replay
