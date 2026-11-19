@@ -120,7 +120,7 @@ std::string after(const std::string& s, char c) { return s.substr(s.find(c) + 1)
 
 }  // namespace
 
-std::vector<std::string> districtNames() { return {"KEN", "KNB"}; }
+std::vector<std::string> districtNames() { return {"KEN", "KNB", "SF-SOMA"}; }
 
 bool findDistrict(const std::string& name, DistrictSpec& out) {
     if (name == "KEN") {
@@ -131,6 +131,10 @@ bool findDistrict(const std::string& name, DistrictSpec& out) {
         out = districtKnightsbridge();
         return true;
     }
+    if (name == "SF-SOMA") {
+        out = districtSanFranciscoSoma();
+        return true;
+    }
     return false;
 }
 
@@ -139,6 +143,12 @@ LaneNetwork buildDistrict(const DistrictSpec& d, const NetworkSpec& baseSpec) {
     spec.name = d.id;
     spec.laneWidth = 3.2;
     spec.mouth = 8.0;  // a typical value, for display; each junction arm sets its own
+    spec.rightHand = d.rightHand;
+    if (d.rightHand) {
+        // The turn across the opposing lane keeps the larger penalty: the left turn in right-hand traffic.
+        std::swap(spec.penaltyLeft, spec.penaltyRight);
+    }
+    const double laneSide = d.rightHand ? -1.0 : 1.0;  // the modelled lane: left (+1) or right (-1) of the direction of travel
     LaneNetwork net;
     net.spec = spec;
     net.general = true;
@@ -306,7 +316,7 @@ LaneNetwork buildDistrict(const DistrictSpec& d, const NetworkSpec& baseSpec) {
                 const double off = std::max(d.streets[static_cast<size_t>(as[0].street)].laneOffset, d.streets[static_cast<size_t>(as[1].street)].laneOffset);
                 const double cap = 0.45 * std::min(L[static_cast<size_t>(as[0].street)], L[static_cast<size_t>(as[1].street)]);
                 const double rMin = std::max(5.5, ls / delta) + 1e-9;
-                const double rPref = std::max(rMin, delta < 0.35 ? d.bendRadius : d.rightRadius);
+                const double rPref = std::max(rMin, delta < 0.35 ? d.bendRadius : d.farRadius());
                 const double extra = off * std::tan(0.5 * delta) + 0.3;
                 double R = fitRadius(delta, rMin, rPref, cap - extra, ls, spec.sampleStep);
                 if (R < 0.0) R = rMin;
@@ -318,7 +328,8 @@ LaneNetwork buildDistrict(const DistrictSpec& d, const NetworkSpec& baseSpec) {
         for (Arm& a : as) a.mouth = std::max(7.0, std::max(a.cornerL, a.cornerR) + 1.5);
     }
 
-    // Lanes, left of each street's centreline in the direction of travel.
+    // Lanes, on the traffic side of each street's centreline in the direction of travel (left in left-hand
+    // traffic, right in right-hand traffic).
     for (size_t i = 0; i < ns; ++i) {
         const DistrictStreet& st = d.streets[i];
         const Arm& aa = armOf(JA[i], i, true);
@@ -335,7 +346,7 @@ LaneNetwork buildDistrict(const DistrictSpec& d, const NetworkSpec& baseSpec) {
             const P dir = forward ? U[i] : U[i] * -1.0;
             const P start = forward ? A[i] : B[i];
             const double m0 = forward ? aa.mouth : ab.mouth, m1 = forward ? ab.mouth : aa.mouth;
-            const P nl = leftOf(dir);
+            const P nl = leftOf(dir) * laneSide;
             const P c0 = start + dir * m0;
             const P p0 = c0 + nl * st.laneOffset;
             const P p1 = start + dir * (L[i] - m1) + nl * st.laneOffset;
@@ -821,6 +832,123 @@ DistrictSpec districtKnightsbridge() {
     };
     d.banned = {{"HBJ", "HRS>HBJ", "HBJ>HCB"}};
     d.bannedSource = {"OSM relation 9932431: no_right_turn from Hans Road (way 226148622) via node 26389722 to Basil Street (way 10809271)"};
+    return d;
+}
+
+// San Francisco, South of Market (SoMa), by the Caltrain station at 4th and Townsend: the block bounded by
+// Townsend, 5th, Brannan and 4th Streets, with Bluxome Street where it crosses 5th Street. Right-hand traffic.
+// The local frame is the WGS84 tangent plane at (37.7770 N, 122.3950 W): over the 0.83 km between the
+// patch's furthest junctions it reproduces geodesic distances between the mapped nodes to within 4 mm
+// (road_driving/tools/district_extract.py --check SFS). road_driving/viewer/districts/PROVENANCE.md has the
+// full account: what is sourced, inferred and left out.
+DistrictSpec districtSanFranciscoSoma() {
+    DistrictSpec d;
+    d.id = "SF-SOMA";
+    d.district = "SoMa";
+    d.city = "San Francisco";
+    d.title = "San Francisco, SoMa: Townsend, Brannan, 4th and 5th Streets";
+    d.lat0 = 37.7770;
+    d.lon0 = -122.3950;
+    d.frame = "WGS84 tangent plane at the origin: x = (lon - lon0) 88097.763 m, y = (lat - lat0) 110992.261 m per degree (the ellipsoid's radii of "
+              "curvature at lat0)";
+    d.source = "OpenStreetMap, Overpass extract of 2026-11-19T00:42:21Z (bbox 37.7700,-122.4060,37.7830,-122.3870)";
+    d.licence = "ODbL 1.0, (c) OpenStreetMap contributors";
+    d.rightHand = true;
+    // In right-hand traffic the right turn keeps to the near side and the left turn crosses the opposing lane.
+    d.leftRadius = 14.0;
+    d.rightRadius = 9.0;
+    // 4th Street is two one-way carriageways either side of the T Third light-rail trackway. Its junctions are the
+    // midpoints of the two carriageways' mapped nodes, moved 1.1 m north-east to the trackway's centre, so that
+    // the trackway's raised kerbs (OSM ways 1138158271 and 1138158272, 2.5 m south-west and 4.7 m north-east of
+    // that midpoint) lie symmetrically about the modelled centreline. Each street is straight through the patch:
+    // the patch edges continue the line between its two junctions, and Bluxome Street's junction is the mapped
+    // node projected onto 5th Street's line (0.5 m from it), so that going ahead never needs a curve.
+    struct Q {
+        double x, y;
+    };
+    auto along = [](Q a, Q b, double s) {  // s metres from a towards b (negative: away from b)
+        const double l = std::hypot(b.x - a.x, b.y - a.y);
+        return Q{a.x + (b.x - a.x) * s / l, a.y + (b.y - a.y) * s / l};
+    };
+    const Q t4{-0.59, 13.35}, b4{-135.55, 149.24}, t5{-197.25, -182.64}, b5{-333.40, -46.71};
+    const Q x5node{-264.65, -114.61}, x4node{-72.60, 74.98};  // OSM nodes 65324087 (5th x Bluxome) and 65285622 (4th x Bluxome)
+    const double l5 = std::hypot(b5.x - t5.x, b5.y - t5.y);
+    const Q x5 = along(t5, b5, ((x5node.x - t5.x) * (b5.x - t5.x) + (x5node.y - t5.y) * (b5.y - t5.y)) / l5);
+    const Q tne = along(t4, t5, -60.0), tsw = along(t5, t4, -50.0), bne = along(b4, b5, -60.0), bsw = along(b5, b4, -50.0);
+    const Q n4 = along(b4, t4, -50.0), s4 = along(t4, b4, -45.0), s5 = along(t5, b5, -50.0), n5 = along(b5, t5, -50.0);
+    const Q xne = along(x5, x4node, 40.0), xsw = along(x5, x4node, -40.0);
+    d.junctions = {
+        {"T4", t4.x, t4.y, 4.5, -1.0, false,
+         "midpoint of OSM nodes 65334473 and 6329528592 (4th Street's two carriageways at Townsend Street), moved 1.1 m north-east to the trackway's "
+         "centre; traffic signals, not modelled"},
+        {"B4", b4.x, b4.y, 4.5, -1.0, false,
+         "midpoint of OSM nodes 65315477 and 6329528588 (4th Street x Brannan Street), moved 1.1 m north-east likewise; traffic signals, not modelled"},
+        {"T5", t5.x, t5.y, 4.5, -1.0, false, "OSM node 65325061, 5th Street x Townsend Street; an all-way stop, not modelled"},
+        // A narrow street meets a wide one: the lanes end 11 m from the junction, so that the near-side turns out
+        // of Bluxome Street fit a 5.5 m or larger arc.
+        {"X5", x5.x, x5.y, 3.0, 11.0, false, "OSM node 65324087, 5th Street x Bluxome Street, projected 0.5 m onto 5th Street's line"},
+        {"B5", b5.x, b5.y, 4.5, -1.0, false, "OSM node 65315481, 5th Street x Brannan Street; traffic signals, not modelled"},
+        {"TNE", tne.x, tne.y, 6.0, -1.0, true, "patch edge on Townsend Street, 60 m north-east of 4th Street (towards 3rd Street)"},
+        {"TSW", tsw.x, tsw.y, 6.0, -1.0, true, "patch edge on Townsend Street, 50 m south-west of 5th Street (towards 6th Street)"},
+        {"BNE", bne.x, bne.y, 6.0, -1.0, true, "patch edge on Brannan Street, 60 m north-east of 4th Street (towards 3rd Street)"},
+        {"BSW", bsw.x, bsw.y, 6.0, -1.0, true, "patch edge on Brannan Street, 50 m south-west of 5th Street (towards 6th Street)"},
+        {"N4", n4.x, n4.y, 6.0, -1.0, true, "patch edge on 4th Street, 50 m north-west of Brannan Street (towards Bryant Street)"},
+        {"S4", s4.x, s4.y, 6.0, -1.0, true, "patch edge on 4th Street, 45 m south-east of Townsend Street (towards King Street)"},
+        {"S5", s5.x, s5.y, 6.0, -1.0, true, "patch edge on 5th Street, 50 m south-east of Townsend Street (towards King Street)"},
+        {"N5", n5.x, n5.y, 6.0, -1.0, true, "patch edge on 5th Street, 50 m north-west of Brannan Street (towards Bryant Street)"},
+        {"XNE", xne.x, xne.y, 6.0, -1.0, true, "patch edge on Bluxome Street, 40 m north-east of 5th Street (Bluxome Street carries on to 4th Street)"},
+        {"XSW", xsw.x, xsw.y, 6.0, -1.0, true, "patch edge on Bluxome Street, 40 m south-west of 5th Street (towards 6th Street)"},
+    };
+    auto asym = [](DistrictStreet s, double right) {
+        s.halfWidthRight = right;
+        return s;
+    };
+    const std::string tw = "inferred: the south-east kerb at the road-side edge of the mapped walkway (OSM area way 1247989053, 7.3 m from the centreline; its "
+                           "two transit bulbs, reaching 4.3 m, are not modelled) and the north-west kerb 1.6 m inside the mapped sidewalk (way 774852551, "
+                           "9.9 m); one lane each way modelled, 1.65 m from the centreline (OSM lanes=3: two north-east, one south-west)";
+    const std::string br = "inferred: 25 m between the building lines (walls and fences 12.5 to 13 m from the centreline) and sidewalks mapped 11.2 to "
+                           "11.7 m from it; kerbs 8.8 m either side for a lane each way, a centre turning lane, bike lanes and parking (OSM lanes=3, "
+                           "cycleway=lane, parking:both=lane); the modelled lane 1.8 m from the centreline";
+    const std::string ff = "inferred: 24 to 25 m between the building lines (walls and buildings 11.5 to 12.5 m from the centreline) and sidewalks "
+                           "mapped 10.4 to 11.9 m from it; kerbs 8.8 m either side for three traffic lanes and cycle tracks (OSM lanes=3, "
+                           "cycleway=track); one lane each way modelled, 1.65 m from the centreline";
+    const std::string fo = "inferred: one-way south-east in two carriageways either side of the light-rail trackway; modelled as one street along the "
+                           "trackway's centre with a 7.2 m central reservation (the trackway between its raised kerbs), kerbs 8.4 m north-east and 11.1 m "
+                           "south-west of the centre (sidewalks mapped 10.6 to 12.2 m from the carriageways' midline), and the modelled lane in the "
+                           "south-west carriageway (OSM lanes=2), 7.6 m from the centre";
+    const std::string bl = "inferred: a residential street with parking both sides (OSM parking:both=lane): 10 m between the kerbs, one lane each "
+                           "way 1.6 m from the centreline";
+    d.streets = {
+        asym({"Townsend Street", "TSW", "T5", 0, 8.3, 0.0, 1.65, "OSM ways 442572412, 442572413 (tertiary, lanes=2)", tw}, 7.3),
+        asym({"Townsend Street", "T5", "T4", 0, 8.3, 0.0, 1.65, "OSM ways 143617587, 1089572945, 739664234, 681295116 (tertiary, lanes=3)", tw}, 7.3),
+        asym({"Townsend Street", "T4", "TNE", 0, 8.3, 0.0, 1.65, "OSM ways 682762588, 770016877, 1368334400, 525564024, 680402684 (tertiary, lanes=3)", tw},
+             7.3),
+        {"Brannan Street", "BSW", "B5", 0, 8.8, 0.0, 1.8, "OSM ways 1120695892, 397127924 (secondary)", br},
+        {"Brannan Street", "B5", "B4", 0, 8.8, 0.0, 1.8, "OSM ways 396951398, 396951397, 1120695893 (secondary, lanes=3)", br},
+        {"Brannan Street", "B4", "BNE", 0, 8.8, 0.0, 1.8, "OSM ways 396952210, 769990214 (secondary, lanes=3)", br},
+        {"5th Street", "S5", "T5", 0, 8.8, 0.0, 1.65, "OSM 5th Street ways south-east of Townsend Street (tertiary)", ff},
+        {"5th Street", "T5", "X5", 0, 8.8, 0.0, 1.65, "OSM ways 1089572944, 1120887426 (tertiary, cycleway=track)", ff},
+        {"5th Street", "X5", "B5", 0, 8.8, 0.0, 1.65, "OSM ways 674189179, 1124155909 (tertiary, lanes=3, cycleway=track)", ff},
+        {"5th Street", "B5", "N5", 0, 8.8, 0.0, 1.65, "OSM way 1120887425 (tertiary, lanes=4)", ff},
+        asym({"4th Street", "N4", "B4", 1, 8.4, 7.2, 7.6, "OSM ways 107674372 (south-west carriageway), 675862894 (north-east carriageway), oneway=yes", fo},
+             11.1),
+        asym({"4th Street", "B4", "T4", 1, 8.4, 7.2, 7.6,
+              "OSM ways 396937570, 769990217, 769990216, 255330069, 681676491 (south-west carriageway, lanes=2) and 769990215 (north-east carriageway, "
+              "lanes=1), oneway=yes; trackway kerbs 1138158271, 1138158272; light rail 181376034, 331461214",
+              fo},
+             11.1),
+        asym({"4th Street", "T4", "S4", 1, 8.4, 7.2, 7.6,
+              "OSM ways 619568405, 396937569 (south-west carriageway towards King Street); the north-east carriageway's north-westbound "
+              "right-turn-only lane (way 675862895) is not modelled",
+              fo},
+             11.1),
+        {"Bluxome Street", "XSW", "X5", 0, 5.0, 0.0, 1.6, "OSM way 7373736 (residential, parking:both=lane)", bl},
+        {"Bluxome Street", "X5", "XNE", 0, 5.0, 0.0, 1.6, "OSM way 7373736 (residential, parking:both=lane)", bl},
+    };
+    d.banned = {{"T4", "B4>T4", "T4>TNE"}, {"B4", "N4>B4", "B4>BNE"}};
+    d.bannedSource = {
+        "OSM relation 10673966: no_left_turn from 4th Street (way 681676491) via node 65334473 onto Townsend Street (way 682762588)",
+        "OSM relation 10673575: no_left_turn from 4th Street (way 107674372) via node 65315477 onto Brannan Street (way 396952210)"};
     return d;
 }
 
