@@ -35,14 +35,42 @@ struct LocMetrics {
     double nisKerbMean = -1.0;
     std::vector<double> errors;     // per-sample position errors (pooled statistics; not serialised)
     std::vector<double> lateral;    // per-sample absolute lateral errors (not serialised)
+    // The San Francisco evaluation's further metrics (`extended`; absent from the earlier splits' records). Errors are
+    // projected on the true heading at each sample: along it and across it (lateral, above), so they are defined at
+    // junctions too and need no route association. Times are simulated seconds.
+    bool extended = false;
+    double alongRmse = 0.0, alongP95 = 0.0, alongMax = 0.0;
+    // Consistency of each axis alone (1 dof): mean of (error / reported sigma along that axis)^2, and the share inside
+    // the 95% interval. Samples without a covariance are left out.
+    double alongNees = -1.0, alongInside = -1.0, lateralNees = -1.0, lateralInside = -1.0;
+    // The condition's GNSS fault window, from the world: the longest outage, else the segment where the fixes carry
+    // their full offset. -1: none.
+    double faultOn = -1.0, faultOff = -1.0;
+    double faultEndError = -1.0, faultEndAlong = -1.0, faultEndLateral = -1.0, faultMax = -1.0;  // m: at the window's end, and the largest inside
+    double firstFixMeas = -1.0, firstFixArrival = -1.0;  // the first fix after the window: its time of validity and its arrival
+    double detectDelay = -1.0;  // s from onset to the first FAULTED or INCONSISTENT state; -1: never (or no window)
+    double trustDelay = -1.0;   // s from the window's end until TRUSTED is held for 1 s; 999: never
+    double reacquire = -1.0;    // s from the window's end until the error is held below 0.5 m for 1 s; 999: never
+    int falseAlarms = 0;        // entries into FAULTED or INCONSISTENT outside the window and the 10 s after it
+    int corrections = 0, uniqueCorrections = 0;  // kerb corrections the estimator verified against the map, and the unique ones
+    double maxCorrection = 0.0;                  // m, the largest
+    // The misplaced map segment (kerb_map_error_sf), while the true car is beside it: the largest and the final lateral error.
+    double segmentOn = -1.0, segmentOff = -1.0, segmentMaxLateral = -1.0, segmentEndLateral = -1.0;
 };
 constexpr double kFailError = 5.0;  // m
 
-// Every estimator in `names` (default: estimatorNames()) processes the same sensor log.
+// What the extended metrics need from the drive: the world's fault trace and segment window (EpisodeResult).
+struct LocContext {
+    const std::vector<float>* gnssFault = nullptr;
+    double segmentOn = -1.0, segmentOff = -1.0;
+};
+
+// Every estimator in `names` (default: estimatorNames()) processes the same sensor log. With `ctx`, the extended
+// metrics are computed too.
 std::vector<LocMetrics> evaluateLocalisation(const std::vector<TruthSample>& truth, const std::vector<Measurement>& sensors,
                                              const std::vector<std::pair<double, double>>& outages, const LaneNetwork& net,
                                              const EstimatorConfig& cfg, std::vector<std::vector<StateEstimate>>* traces = nullptr,
-                                             const std::vector<std::string>* names = nullptr);
+                                             const std::vector<std::string>* names = nullptr, const LocContext* ctx = nullptr);
 std::string locMetricsJson(const LocMetrics& m);
 
 struct RouteSpec {
@@ -57,7 +85,8 @@ std::vector<RouteSpec> benchmarkRoutesR4();             // three routes on R4
 std::vector<RouteSpec> benchmarkRoutesR5();             // three routes on R5
 std::vector<RouteSpec> benchmarkRoutesR6();             // three routes on R6
 std::vector<RouteSpec> benchmarkRoutesR7();             // three routes on R7
-std::vector<RouteSpec> districtRoutes();                // KEN-A (Kensington) and KNB-A (Knightsbridge): district.hpp
+std::vector<RouteSpec> districtRoutes();                // KEN-A, KNB-A (London), SF-A, SF-B (San Francisco): district.hpp
+std::vector<RouteSpec> benchmarkRoutesSF();             // SF-A and SF-B
 Scenario benchmarkScenario(const RouteSpec& route, const std::string& condition, std::uint64_t seed, const std::string& mode);
 // Closed-loop scenarios: development uses R1's closure scenarios; held out uses the R2 routes and one
 // R2 closure scenario; R3 and R4 their three routes and one closure scenario each.
@@ -93,7 +122,14 @@ struct SplitSpec {
     std::vector<PoseSource> sources;            // closed loop, after the ground-truth reference
     bool referenceFeasibility = false;
     Rejoin referenceRejoin = Rejoin::Verified;  // recorded for the reference; nothing jumps on simulator truth
+    // The San Francisco splits: the vehicle every episode uses, the seeds' offset (seeds seedBase + 1 ...), and the
+    // extended metrics in the records. The earlier splits keep the defaults, and their records are unchanged.
+    std::string vehicle = "ipace_proxy_v1";
+    int seedBase = 0;
+    bool extended = false;
 };
+// "sf-dev" (development: SF-A, seeds 901 to 905), "sf" (the evaluation: SF-A and SF-B, seeds 1 to N) and "sf-ipace"
+// (the vehicle transfer: the same routes, conditions and seeds with the I-PACE proxy): benchmark/PROTOCOL_SF.md.
 SplitSpec splitSpec(const std::string& name);  // throws for an unknown split
 
 struct CampaignOptions {
