@@ -8,9 +8,9 @@ robot in Gazebo through ROS 2, then runs on its own on a warehouse graph. Both a
 regenerated from recorded runs, and CI recomputes the routes and checks the headline numbers against the
 data in [`docs/data`](docs/data) and [`ros2/evidence`](ros2/evidence/README.md). An opt-in extension,
 [`road_driving/`](road_driving/README.md), uses the same routing and replanning for a car-sized
-kinematic vehicle on synthetic left-hand-traffic road networks and on two source-informed reconstructions
-of London streets. It drives either on ground truth or on its own EKF estimate from simulated sensors, and
-a live 3D viewer shows it running ([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
+kinematic vehicle on synthetic left-hand-traffic road networks, on two source-informed reconstructions
+of London streets, and on one of San Francisco's SoMa, with right-hand traffic. It drives either on ground
+truth or on its own EKF estimate from simulated sensors, and a live 3D viewer shows it running ([summary](#road-driving-a-synthetic-left-hand-traffic-slice)).
 
 <img src="ros2/evidence/media/simulation-mission-preview.gif" width="100%" alt="Recording of one simulated trial in four parts. Top: Gazebo Harmonic, a camera following an orange differential-drive robot along a warehouse aisle between blue-and-orange pallet racks; a red pallet appears in the aisle ahead; the view widens over the middle and south aisles while the robot turns back, then follows it through the south aisle to the delivery station. Bottom left: RViz2, a top-down view of the roadmap with the engine's route in green, the ground-truth trajectory in blue and the lidar-blocked nodes in red; the green route switches from the middle aisle to the south aisle. Bottom right: the navigator's recorded telemetry: simulation time, mission and engine state, waypoint, remaining route cost, tracking error, velocity command, last blockage and last engine call. A caption and a timeline name each recorded event, and a label states the playback speed.">
 
@@ -302,8 +302,12 @@ the engine and the car stops before the barrier instead.
     after GNSS drift, the kerb filter ended 24 of 40 episodes as the reference did instead of 18.
     Under a gyro fault the re-join followed no correction, where the R6 version followed wrong matches
     into deeper crossings. The one failure: a correct correction let a car drive on with an along-road error
-    that the next turn made a 0.88 m crossing. Five of six criteria passed
-    ([results](road_driving/LOCALISATION.md#results)).
+    that the next turn made a 0.88 m crossing. Five of six criteria passed.
+  - Seventh (San Francisco): the unchanged filters and stack on a right-hand-traffic district, with a
+    second, Cybercab-inspired vehicle proxy and a misplaced map segment. All six judged criteria passed,
+    and no episode crossed a kerb. Reported: R7's along-road blindness recurred under a slow GNSS drift,
+    and ended 10 episodes in fallback stops at the next turn
+    ([results](road_driving/LOCALISATION.md#results), [evidence](road_driving/benchmark/sf/README.md)).
 - **Live 3D viewer:** [`road_driving/viewer/`](road_driving/viewer/README.md) runs the simulation in a
   native Panda3D application. It draws what the backend computes at each 10 ms tick: the true car, the
   estimate it drives on, kerb returns, GNSS fixes and corrections. Faults and closures can be injected
@@ -313,6 +317,12 @@ the engine and the car stops before the barrier instead.
   OpenStreetMap; widths, kerbs and turning paths are inferred. The viewer draws them on OpenStreetMap's
   building outlines with modular facades ([London district scenes](road_driving/README.md#london-district-scenes),
   [1080p50 showcase](https://github.com/easensoy/autonomous-navigation-engine/releases/tag/viewer-london-v1)).
+- **San Francisco scene:** `SF-SOMA`, by the Caltrain station at 4th and Townsend, with right-hand
+  traffic as a district setting, built the same way from a pinned OpenStreetMap extract. A second
+  vehicle profile, a Cybercab-inspired proxy, carries its own sensor mounts into the simulation and the
+  estimators. It is not a Tesla vehicle and runs no Tesla software
+  ([San Francisco](road_driving/README.md#san-francisco-soma),
+  [provenance](road_driving/viewer/districts/PROVENANCE.md#san-francisco-soma)).
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
 
@@ -372,19 +382,21 @@ caller reports; a step is one node.
 
 **Road-driving extension.**
 
-- **Inputs:** synthetic roads, two source-informed reconstructions of London streets with approximated
-  details, and an oracle-reported closure, with no other road user.
+- **Inputs:** synthetic roads, source-informed reconstructions of London and San Francisco streets with
+  approximated details, and an oracle-reported closure, with no other road user or traffic signal.
 - **Pose:** ground truth, or an EKF fed by simulated GNSS, IMU, wheel-speed, steering and kerb-ranging
   sensors with simple error models. The kerb scanner is simulated against the same map the filter uses,
-  up to a modelled 0.03 m deviation and one tested map error. There is no real lidar or camera data.
+  up to a modelled 0.03 m deviation and the tested map errors. There is no real lidar or camera data.
 - **Vehicle:** the model is kinematic, with parameters that approximate an I-PACE's published
-  dimensions. It is a simulated proxy; nothing was driven on a physical vehicle.
-- **Tuning:** each evaluation was developed on earlier networks, then run once on a held-out network
-  under a protocol pushed before the run.
+  dimensions, or a Cybercab-inspired proxy's size with assumed sensor mounts. Both are simulated
+  proxies; nothing was driven on a physical vehicle.
+- **Tuning:** each evaluation was developed on earlier data, then run once on held-out data under a
+  protocol fixed before the run: pushed for the first six, committed for San Francisco's.
 - **Known gaps:**
   - After a large pose correction the stack's steering is lightly damped. The stack re-joins its path only
     after kerb corrections that fit the map uniquely. A correct sideways correction can still leave an
-    along-road error that the filter does not report.
+    along-road error that the filter does not report; in San Francisco a slow GNSS drift left the same
+    unreported error, which the next turn made lateral.
   - With GNSS-only localisation, the clearance layer stops the car in every degraded-GNSS episode; so does
     losing kerbs and GNSS together with the kerb filter.
   - A slow GNSS excursion with no jump drags every GNSS-only filter.
@@ -460,9 +472,13 @@ Which figure comes from which file: [docs/EVIDENCE.md](docs/EVIDENCE.md#artifact
   - `test_api_link_coverage`, which takes the address of all 172 public member functions of the 15
     classes whose declarations were audited, so a declared but undefined member fails the build;
   - 2 benchmark smoke programs.
-- **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds four entries:
+- **Road-driving extension:** with `-DBUILD_ROAD_DRIVING=ON`, CTest adds eight entries:
   - `test_road_driving` (288 checks);
   - `test_localisation` (185 checks);
+  - `test_live` (23 checks), the live server behind the 3D viewer;
+  - `test_district` (31 checks), the London district networks;
+  - `test_sf` (44 checks), the San Francisco network and the vehicle profiles;
+  - a headless replay of a session recorded through the viewer;
   - a replay of the stored failing episode;
   - a replay of a changed copy, which must be rejected.
 
