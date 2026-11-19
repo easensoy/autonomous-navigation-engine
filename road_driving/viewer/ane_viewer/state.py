@@ -126,6 +126,8 @@ class SimState:
         st = self.status
         rows = []
         rows.append(("scenario", "%s  %s" % (cfg.get("scenario", "-"), cfg.get("condition", "-"))))
+        if cfg.get("vehicle") and cfg.get("vehicle") != "ipace_proxy_v1":
+            rows.append(("vehicle", "%s (simulated proxy)" % cfg["vehicle"]))
         rows.append(("pose source", "%s  %s  re-join %s  seed %s" % (
             cfg.get("mode", "-"), cfg.get("estimator", "-") if cfg.get("mode") == "estimated" else "(truth)", cfg.get("rejoin", "-"), cfg.get("seed", "-"))))
         if tk is None:
