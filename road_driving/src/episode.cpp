@@ -196,6 +196,22 @@ bool engineSourcesModified() { return ROAD_ENGINE_SOURCES_MODIFIED == 1; }
 
 EpisodeResult runEpisode(const Scenario& sc) { return runEpisodeHooked(sc, nullptr); }
 
+SensorConditions sensorConditionsFor(const std::string& condition, const VehicleParams& vp) {
+    SensorConditions c = sensorConditions(condition);
+    c.gnss.antennaX = vp.gnssAntennaX;
+    c.gnss.antennaY = vp.gnssAntennaY;
+    c.imu.leverX = vp.imuX;
+    c.kerb.mountX = vp.kerbScannerX;
+    return c;
+}
+
+EstimatorConfig estimatorConfigFor(const VehicleParams& vp, EstimatorConfig base) {
+    base.antennaX = vp.gnssAntennaX;
+    base.antennaY = vp.gnssAntennaY;
+    base.imuLeverX = vp.imuX;
+    return base;
+}
+
 EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     EpisodeResult r;
     r.scenario = sc;
@@ -213,7 +229,7 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     if (estimatedMode && sc.condition.empty()) {
         throw std::runtime_error("estimated mode needs a sensor condition");
     }
-    const VehicleParams vp;
+    const VehicleParams vp = vehicleProfile(sc.vehicle);  // throws for an unknown profile
     const double dt = 0.01;
     const int startLane = net.lane(sc.startLane), goalLane = net.lane(sc.goalLane);
     const int closureLane = sc.closure ? net.lane(sc.closureLane) : -1;
@@ -279,17 +295,22 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     }
 
     // Sensors (world side) and, in estimated mode, the estimator that drives. Condition spans along the
-    // route become map-frame rectangles around the route elements they cover.
+    // route become map-frame rectangles around the route elements they cover. The sensors are mounted where the
+    // vehicle profile puts them, and the estimator knows the same positions.
     std::unique_ptr<SensorSimulator> sensors;
     std::unique_ptr<Estimator> est;
+    // The map the estimator and the stack use: the world's network, unless the condition sets a map error.
+    LaneNetwork mapStore;
+    const LaneNetwork* mapNet = &net;
+    double segS0 = -1.0, segS1 = -1.0;  // the misplaced map segment, along the route (for its timing in the results)
     if (!sc.condition.empty()) {
-        const SensorConditions cond = sensorConditions(sc.condition);
+        const SensorConditions cond = sensorConditionsFor(sc.condition, vp);
         const double L = corridor.length();
         auto spanZones = [&](const Span& span, std::vector<Zone>& out) {
             if (!span.active()) {
                 return;
             }
-            const double s0 = span.from * L, s1 = span.to * L;
+            const double s0 = span.metres ? span.from : span.from * L, s1 = span.metres ? std::min(span.to, L) : span.to * L;
             const size_t n = corridor.elements().size();
             for (size_t i = 0; i < n; ++i) {
                 const double a = std::max(corridor.elementStart(i), s0);
@@ -336,9 +357,52 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
                 r.zones.obstacles.push_back({p.x - std::sin(p.yaw) * off, p.y + std::cos(p.yaw) * off, p.yaw, 4.5, 1.8});
             }
         }
+        if (cond.mapSegment.active()) {
+            // A misplaced map segment: the kerb lines either side of the route at the stretch's middle (the first each
+            // ray across the route meets; a patch edge is no kerb), the part of each beside the stretch moved sideways
+            // by the shift in the vehicle's map.
+            const double m0 = cond.mapSegment.metres ? cond.mapSegment.from : cond.mapSegment.from * L;
+            const double m1 = cond.mapSegment.metres ? std::min(cond.mapSegment.to, L) : cond.mapSegment.to * L;
+            segS0 = m0;
+            segS1 = m1;
+            const PathSample p = corridor.at(0.5 * (m0 + m1));
+            const PathSample e0 = corridor.at(m0), e1 = corridor.at(m1);
+            const double lx = -std::sin(p.yaw), ly = std::cos(p.yaw);  // the route's left
+            for (const double side : {-1.0, 1.0}) {
+                const double dx = lx * side, dy = ly * side;
+                int best = -1;
+                double bestT = 30.0;
+                for (size_t i = 0; i < net.kerbLines.size(); ++i) {
+                    const KerbLine& k = net.kerbLines[i];
+                    if (k.boundary) continue;
+                    const double ex = k.bx - k.ax, ey = k.by - k.ay, den = dx * ey - dy * ex;
+                    if (std::fabs(den) < 1e-12) continue;
+                    const double wx = k.ax - p.x, wy = k.ay - p.y;
+                    const double t = (wx * ey - wy * ex) / den, u = (wx * dy - wy * dx) / den;
+                    if (t > 1e-9 && u >= 0.0 && u <= 1.0 && t < bestT) {
+                        bestT = t;
+                        best = static_cast<int>(i);
+                    }
+                }
+                if (best < 0) {
+                    throw std::runtime_error("condition " + sc.condition + ": no kerb line beside the route at " + fixed(0.5 * (m0 + m1), 1) + " m");
+                }
+                const KerbLine& k = net.kerbLines[static_cast<size_t>(best)];
+                // The stretch's ends projected onto the kerb line, as fractions of its length.
+                const double kx = k.bx - k.ax, ky = k.by - k.ay, k2 = kx * kx + ky * ky;
+                double t0 = ((e0.x - k.ax) * kx + (e0.y - k.ay) * ky) / k2, t1 = ((e1.x - k.ax) * kx + (e1.y - k.ay) * ky) / k2;
+                if (t0 > t1) std::swap(t0, t1);
+                if (!(t0 > 0.0 && t1 < 1.0)) {
+                    throw std::runtime_error("condition " + sc.condition + ": the misplaced stretch reaches past the end of kerb line " + std::to_string(best));
+                }
+                r.zones.mapErrors.push_back({best, cond.mapKerbShift * (lx * k.nx + ly * k.ny), t0, t1});  // along the kerb's own normal
+            }
+            mapStore = withMapErrors(net, r.zones.mapErrors);
+            mapNet = &mapStore;
+        }
         sensors.reset(new SensorSimulator(cond, r.zones, sc.seed, vp.wheelbase, &net));
         if (estimatedMode) {
-            est = makeEstimator(sc.estimator, EstimatorConfig{}, net);
+            est = makeEstimator(sc.estimator, estimatorConfigFor(vp), *mapNet);
             if (!est) {
                 throw std::runtime_error("unknown estimator " + sc.estimator);
             }
@@ -346,7 +410,7 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
     }
 
     Vehicle veh(vp, dt, init);
-    Stack stack(net, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility, sc.rejoin);
+    Stack stack(*mapNet, vp, sc.variant, goalElem, sc.goalLaneS, sc.feasibility, sc.rejoin);
     VerifiedCorrection verified;  // the estimator's map-verified corrections, for the stack
     bool& present = cl.present;
     bool& revealed = cl.revealed;
@@ -393,6 +457,7 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
             v.dt = dt;
             v.scenario = &sc;
             v.net = &net;
+            v.map = mapNet;
             v.vehicle = &vp;
             v.truth = &vs;
             v.command = c;
@@ -486,6 +551,10 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
         if (onCorridor) {
             sCorr = pc.s;
         }
+        if (segS0 >= 0.0) {  // a results record only: nothing reads it during the episode
+            if (r.mapSegmentOn < 0.0 && sCorr >= segS0) r.mapSegmentOn = t;
+            if (r.mapSegmentOff < 0.0 && sCorr >= segS1) r.mapSegmentOff = t;
+        }
         if (sc.closure && present && !revealed && onCorridor) {
             const double front = sCorr + vp.frontOffset();
             const double toJ = junctionS - front, toB = barrierS - front;
@@ -562,6 +631,9 @@ EpisodeResult runEpisodeHooked(const Scenario& sc, EpisodeHooks* hooks) {
             }
             const int code = !cl.on ? 0 : (lifted ? 3 : (revealed ? 2 : 1));
             r.truth.push_back({t, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel, cmd.steer, cmd.accel, code});
+            if (sensors) {
+                r.gnssFaultTrace.push_back(sensors->gnssAvailable() ? static_cast<float>(sensors->gnssFault()) : -1.0f);
+            }
             char line[256];
             std::snprintf(line, sizeof line, "%.2f,%.6f,%.6f,%.7f,%.6f,%.7f,%.6f,%.7f,%.6f,%d\n", t, vs.x, vs.y, vs.yaw, vs.v, vs.steer, vs.accel,
                           cmd.steer, cmd.accel, code);
@@ -711,16 +783,19 @@ static std::string districtManifestLines(const std::string& network) {
         return "labels=SYNTHETIC_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE\nnetwork=R1 synthetic left-hand-traffic grid, 20 mph, no real geometry\n";
     }
     return "labels=SOURCE_INFORMED_ROADS,GROUND_TRUTH_POSE,ORACLE_CLOSURE\nnetwork=" + d.id + " " + d.title +
-           ": source-informed reconstruction with approximated details (" + d.source + "; " + d.licence + "), not a surveyed model\n";
+           ": source-informed reconstruction with approximated details (" + d.source + "; " + d.licence + "), not a surveyed model" +
+           (d.rightHand ? std::string(", right-hand traffic") : std::string()) + "\n";
 }
 
 std::string manifestText(const EpisodeResult& r) {
     const Scenario& s = r.scenario;
     const Metrics& m = r.metrics;
+    VehicleParams vp;
+    findVehicleProfile(s.vehicle, vp);  // an episode ran with a known profile
     std::ostringstream o;
     o << "format=road-driving-episode/1\n"
       << districtManifestLines(s.network)
-      << "vehicle=ipace_proxy_v1 kinematic bicycle (approximate I-PACE dimensions)\n"
+      << "vehicle=" << vp.id << " " << vp.description << "\n"
       << "scenario=" << s.name << "\nclass=" << s.scenarioClass << "\nvariant=" << variantName(s.variant) << "\nseed=" << s.seed
       << "\nmax_segment=" << exact(s.maxSegment) << "\nstart_lane=" << s.startLane << "\nstart_lane_s=" << exact(s.startLaneS)
       << "\ngoal_lane=" << s.goalLane << "\ngoal_lane_s=" << exact(s.goalLaneS) << "\nclosure=" << (s.closure ? 1 : 0)
@@ -771,6 +846,16 @@ std::string manifestText(const EpisodeResult& r) {
     for (size_t i = 0; i < r.zones.obstacles.size(); ++i) {
         const Obstacle& ob = r.zones.obstacles[i];
         o << (i ? ";" : "") << fixed(ob.cx, 2) << ":" << fixed(ob.cy, 2) << ":" << fixed(ob.yaw, 4) << ":" << fixed(ob.length, 2) << ":" << fixed(ob.width, 2);
+    }
+    // The vehicle profile and every parameter it set; the map error, if any (absent from older manifests: the I-PACE
+    // proxy and the world's own map).
+    o << "\nvehicle_profile=" << vp.id << "\nvehicle_params=" << vehicleProfileText(vp);
+    if (!r.zones.mapErrors.empty()) {
+        o << "\nmap_errors=";  // kerb line:offset along its normal:from:to (fractions of the line)
+        for (size_t i = 0; i < r.zones.mapErrors.size(); ++i) {
+            const MapKerbError& me = r.zones.mapErrors[i];
+            o << (i ? ";" : "") << me.line << ":" << exact(me.offset) << ":" << exact(me.t0) << ":" << exact(me.t1);
+        }
     }
     o << "\n";
     return o.str();
@@ -877,6 +962,11 @@ bool scenarioFromManifest(const std::map<std::string, std::string>& kv, Scenario
         sc.feasibility = optional("feasibility", "off") == "on";  // older manifests: the stack before the layer existed
         if (!parseRejoin(optional("rejoin", "off"), sc.rejoin)) {  // older manifests: the stack before the re-join existed
             throw std::runtime_error("unknown rejoin setting");
+        }
+        sc.vehicle = optional("vehicle_profile", "ipace_proxy_v1");  // older manifests: the I-PACE proxy, the only vehicle then
+        VehicleParams probe;
+        if (!findVehicleProfile(sc.vehicle, probe)) {
+            throw std::runtime_error("unknown vehicle profile '" + sc.vehicle + "'");
         }
     } catch (const std::exception& ex) {
         error = ex.what();
