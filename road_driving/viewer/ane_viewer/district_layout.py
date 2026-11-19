@@ -14,12 +14,18 @@ from . import geometry as g
 from .occlusion import Occluders, point_in_polygon
 
 DISTRICTS = pathlib.Path(__file__).resolve().parents[1] / "districts"
-FILES = {"KEN": "kensington.json", "KNB": "knightsbridge.json"}
+FILES = {"KEN": "kensington.json", "KNB": "knightsbridge.json", "SF-SOMA": "san_francisco_soma.json"}
 H = g.KERB_HEIGHT
 STOREY = {"stucco_terrace": 3.4, "mansion_block": 3.1, "brick_terrace": 3.1, "commercial": 3.6, "harrods": 4.2, "institutional": 3.8,
-          "church": 4.0, "rah": 4.0}
-DEFAULT_LEVELS = {"stucco_terrace": 5, "mansion_block": 6, "brick_terrace": 4, "commercial": 5, "harrods": 7, "institutional": 5, "church": 4, "rah": 6}
+          "church": 4.0, "rah": 4.0, "soma_warehouse": 3.9, "soma_modern": 3.2, "station": 5.0}
+DEFAULT_LEVELS = {"stucco_terrace": 5, "mansion_block": 6, "brick_terrace": 4, "commercial": 5, "harrods": 7, "institutional": 5, "church": 4, "rah": 6,
+                  "soma_warehouse": 3, "soma_modern": 7, "station": 1}
 EXTRA_TOP = {"harrods": 8.0 + 6.0, "rah": 15.0}  # domes and turrets above the parapet (prism tops)
+
+
+def us_style(district):
+    """True for a district drawn with United States street furniture and markings (right-hand traffic)."""
+    return district == "SF-SOMA"
 
 
 def load(district_id):
@@ -75,6 +81,14 @@ def kerb_pieces(m):
 def classify(b, district, fronts):
     """The building's style, from its OSM tags and name and the streets it fronts."""
     name, kind = b["name"], b["type"]
+    if district == "SF-SOMA":
+        # SoMa: the station building, newer towers and blocks (mapped height or storeys), and the older warehouses
+        # and lofts (brick, or low and wide).
+        if kind == "train_station" or "4th & King" in name:
+            return "station"
+        if (b["height"] or 0) >= 24.0 or (b["levels"] or 0) >= 7 or kind in ("apartments", "office", "commercial", "hotel") and (b["height"] or 0) >= 15.0:
+            return "soma_modern"
+        return "soma_warehouse"
     if name == "Royal Albert Hall":
         return "rah"
     if name == "Harrods":
@@ -201,8 +215,9 @@ def decorative_trees(m, data, kerb, rng, quality):
     out = []
     if quality == "low":
         return out
+    planted = not us_style((m.get("district") or {}).get("id"))  # San Francisco's reservation is a light-rail trackway
     for (a, b, ax, ay, bx, by), si in zip(m["streets"], m.get("street_info") or []):
-        if si["median"] > 3.0:
+        if planted and si["median"] > 3.0:
             L = math.hypot(bx - ax, by - ay)
             s = 22.0
             while s < L - 22.0:
