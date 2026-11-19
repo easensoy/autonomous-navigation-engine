@@ -20,8 +20,17 @@ REPLAY = (1.00, 0.62, 0.15, 1.0)
 STATUS_COLOUR = {"OK": GOOD, "INIT": MUTED, "DEAD_RECKONING": WARN, "DEGRADED": WARN, "UNRELIABLE": BAD, "LOST": BAD}
 STATUS_TEXT = {"OK": "integrity OK", "INIT": "initialising", "DEAD_RECKONING": "dead reckoning", "DEGRADED": "degraded", "UNRELIABLE": "unreliable",
                "LOST": "lost"}
-GNSS_TEXT = {"TRUSTED": "GNSS trusted", "OUTAGE": "GNSS outage", "FAULTED": "GNSS excluded (fault)", "SUSPECT": "GNSS suspect", "-": "GNSS -"}
+GNSS_TEXT = {"TRUSTED": "GNSS trusted", "OUTAGE": "GNSS outage", "FAULTED": "GNSS excluded (fault)", "SUSPECT": "GNSS suspect",
+             "INCONSISTENT": "GNSS inconsistent with the filter", "-": "GNSS -"}
 KERB_TEXT = {"MATCHED": "kerb scans matched", "REJECTED": "kerb scans rejected", "NONE": "no kerb scans", "-": "kerb -"}
+
+
+def vehicle_text(scene):
+    """How the footer names the simulated vehicle, and what it does not claim."""
+    vid = ((scene or {}).get("vehicle") or {}).get("id", "ipace_proxy_v1")
+    if vid == "cybercab_proxy_v1":
+        return "Independent simulation  |  Cybercab-inspired proxy, not a Tesla vehicle or Tesla software  |  sensors: GNSS, IMU, wheel, steering, planar kerb scanner"
+    return "Independent research simulation  |  simulated I-PACE-sized proxy (not a Jaguar)  |  not Waymo software or data  |  planar kerb scanner only; the roof rig is decorative"
 
 
 def compass(yaw):
@@ -192,14 +201,16 @@ class PresentHud:
             self.streets = Streets(m)
         dist = m.get("district") or {}
         cfg = state.config
-        self.district.setText((dist.get("district") or cfg.get("scenario", "")).upper())
-        self.subtitle.setText("Source-informed reconstruction, details approximated; map data © OpenStreetMap contributors (ODbL)" if dist
-                              else "Synthetic streets")
+        place = dist.get("district") or cfg.get("scenario", "")
+        if dist.get("city"):
+            place = "%s, %s" % (place, dist["city"])
+        self.district.setText(place.upper())
+        self.subtitle.setText(("Source-informed reconstruction, details approximated; " + ("right-hand traffic; " if dist.get("traffic") == "right" else "") +
+                               "map data © OpenStreetMap contributors (ODbL)") if dist else "Synthetic streets")
         live = mode_label == "LIVE"
         self.mode.setText(mode_label + ("  |  1080p50 lock-step" if recording else ""))
         self.mode["fg"] = LIVE if live else REPLAY
-        self.foot.setText("Independent research simulation  |  simulated I-PACE-sized proxy (not a Jaguar)  |  not Waymo software or data  |  "
-                          "planar kerb scanner only; the roof rig is decorative")
+        self.foot.setText(vehicle_text(scene))
         if tk is None:
             self.time_text = ""
             return self.time_text
@@ -219,7 +230,7 @@ class PresentHud:
             self.sens.setText("%s   |   %s" % (GNSS_TEXT.get(est["gnss"], est["gnss"]), KERB_TEXT.get(est["kerb"], est["kerb"].lower())))
             d = tk.get("diag") or {}
             self.err.setText("error against truth  %.2f m   (along %+.2f, lateral %+.2f)" % (d.get("position", 0.0), d.get("along", 0.0), d.get("lateral", 0.0)))
-            self.sig.setText("filter's own 1-sigma  %.2f m   (along %.2f, across %.2f)" % (est["sigma"], est["sigma_along"], est["sigma_across"]))
+            self.sig.setText("filter's own 1-sigma  %.2f m   (along %.2f, across %.2f);  ring: 95%%" % (est["sigma"], est["sigma_along"], est["sigma_across"]))
         else:
             self.est.setText("driving on simulator truth" if cfg.get("mode") == "ground_truth" else "estimate initialising")
             self.est["fg"] = MUTED
