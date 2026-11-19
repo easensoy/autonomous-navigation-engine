@@ -1,5 +1,6 @@
-// The district networks (district.hpp): Kensington and Knightsbridge. Geometry, lane graph, turning paths the
-// vehicle can follow, kerbs the scanner and the clearance checks share, the routes, and their episodes.
+// The London district networks (district.hpp): Kensington and Knightsbridge. Geometry, lane graph, turning paths
+// the vehicle can follow, kerbs the scanner and the clearance checks share, the routes, and their episodes. The San
+// Francisco network (right-hand traffic) has its own tests: test_sf.cpp.
 #include "road_driving/benchmark.hpp"
 #include "road_driving/district.hpp"
 #include "road_driving/episode.hpp"
@@ -128,8 +129,11 @@ void rules() {
     check(!buildNetwork("R7").general && !buildNetwork("R1").general, "the R1 to R7 grids are unchanged in kind");
 }
 
+bool london(const RouteSpec& rs) { return rs.network == "KEN" || rs.network == "KNB"; }
+
 void routes() {
     for (const RouteSpec& rs : districtRoutes()) {
+        if (!london(rs)) continue;
         const LaneNetwork net = buildNetwork(rs.network);
         const int start = net.segmentAt(net.lane(rs.startLane), rs.startS), goal = net.segmentAt(net.lane(rs.goalLane), rs.goalS);
         const RefRoute rr = referenceRoute(net, start, goal);
@@ -157,6 +161,7 @@ void routes() {
 
 void episodes() {
     for (const RouteSpec& rs : districtRoutes()) {
+        if (!london(rs)) continue;
         Scenario sc = benchmarkScenario(rs, "", 0, "ground_truth");
         const EpisodeResult a = runEpisode(sc);
         check(a.outcome == "COMPLETED" && a.metrics.maxCrossing == 0.0 && a.metrics.illegalTransitions == 0,
@@ -191,7 +196,7 @@ void episodes() {
 
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    for (const std::string& n : districtNames()) geometry(n);
+    for (const std::string n : {"KEN", "KNB"}) geometry(n);
     rules();
     routes();
     episodes();
