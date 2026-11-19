@@ -25,6 +25,15 @@ benchmark smoke programs.
 - **Failures reach CTest.** Each functional program exits non-zero when any of its cases fails.
 - **No unit test enforces speed.** The few that time themselves fail only above one second. That
   catches a pathological slowdown without failing on a slower, shared CI machine.
+- **The smoke programs silence the engine's prints.** The engine prints a line for every node and edge
+  it adds and for most search steps: about 3.8 million lines (160 MB) in a `scability_tests` run and
+  64,000 in `algorithm_benchmarks`. Both programs build and search their graphs with `std::cout`
+  silenced, print about 200 and 140 lines of their own, and time the searches without the console.
+- **That output stalled the MSVC job on a newer Windows image.** On `windows-2025-vs2026`
+  20261116.315.1 (Visual Studio 18.12.0, MSVC 19.52.37029), `scability_tests` passed CTest's 600 s
+  timeout twice and `algorithm_benchmarks` took 13–25 s; on 20261103.298.1 (Visual Studio 18.11.3)
+  they took 17–20 s and 0.2 s. The GCC job on the newer image took 19 s and 0.2 s, and the programs
+  that build their graphs silenced kept their usual times.
 - **The regression tests were checked against unfixed code.** The tests for the bugs fixed in
   November 2026 were run against the unfixed code first: 17 of their cases failed there with both
   compilers, and all of them pass now.
