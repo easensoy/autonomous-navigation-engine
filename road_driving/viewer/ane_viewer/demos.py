@@ -5,10 +5,11 @@ reports (events, sensor states, the truth diagnostics), and quote the live value
 against time, smoothed or moved: the demonstration shows the episode exactly as the simulation runs it.
 """
 
-ROUTES = ["KEN-A", "KNB-A", "R7-A", "R7-B", "R7-C", "R6-A", "R6-B", "R6-C", "R5-A", "R5-B", "R5-C", "R4-A", "R4-B", "R4-C",
+ROUTES = ["SF-A", "SF-B", "KEN-A", "KNB-A", "R7-A", "R7-B", "R7-C", "R6-A", "R6-B", "R6-C", "R5-A", "R5-B", "R5-C", "R4-A", "R4-B", "R4-C",
           "R3-A", "R3-B", "R3-C", "R2-A", "R2-B", "R2-C", "R1-A", "R1-B", "R1-C",
           "R7-B_late_closure", "R6-B_late_closure", "R3-B_late_closure"]
 CONDITIONS = {
+    "SF": ["nominal_sf", "gnss_outage_sf", "gnss_drift_sf", "kerb_map_error_sf"],
     "KEN": ["nominal_ldn", "gnss_outage_ldn", "multipath_ldn"],
     "KNB": ["nominal_ldn", "gnss_outage_ldn", "multipath_ldn"],
     "R7": ["nominal_r7", "gnss_outage_r7", "multipath_r7", "kerb_return_r7", "imu_fault_r7", "kerb_faults_r7", "combined_r7"],
@@ -140,6 +141,42 @@ DEMOS = [
          {"scenario": "R7-A", "condition": "nominal_r7", "mode": "estimated", "estimator": "ekf_kerb2", "seed": 1, "rejoin": "unique"},
          "Inject a GNSS outage (G), a biased fix (B), a kerb-scanner blackout (K), or close the road ahead (C) and reopen it (O). "
          "Each takes effect at a recorded tick; save the session (R) to replay it."),
+] + [
+    # San Francisco (SoMa, right-hand traffic), the Cybercab-inspired proxy, the filters unchanged since R7. Development
+    # seeds (901 to 905, benchmark/PROTOCOL_SF.md): what the scenes show is not the evaluation.
+    Demo(key, title,
+         {"scenario": route, "condition": cond, "mode": "estimated", "estimator": "ekf_kerb2", "seed": seed, "rejoin": "unique",
+          "vehicle": "cybercab_proxy_v1"},
+         intro,
+         [Stage(lambda s: ((s.tick or {}).get("est") or {}).get("gnss") == "OUTAGE",
+                lambda s: "GNSS outage: no fixes. The filter dead-reckons on the IMU and wheels and registers kerb scans; error against "
+                          "truth %s m (it reports %s m, 1 sigma)." % (_fmt(_diag(s, "position")), _fmt((s.tick.get("est") or {}).get("sigma"))),
+                live=True),
+          Stage(lambda s: ((s.tick or {}).get("est") or {}).get("gnss") == "INCONSISTENT",
+                lambda s: "The fixes no longer agree with the filter: integrity INCONSISTENT. Along-road error %s m, lateral %s m." % (
+                    _fmt(_diag(s, "along")), _fmt(_diag(s, "lateral"))), live=True),
+          Stage(lambda s: bool(_events(s, "KERB_RELOCALISATION", 5.0)),
+                lambda s: "The scan fits the map uniquely elsewhere: ekf_kerb2 re-localises. Error now %s m." % _fmt(_diag(s, "position"))),
+          Stage(lambda s: ((s.tick or {}).get("est") or {}).get("gnss") == "TRUSTED" and s.tick["t"] > 30.0,
+                lambda s: "GNSS trusted again. Error %s m." % _fmt(_diag(s, "position"))),
+          Stage(lambda s: s.end is not None,
+                lambda s: "%s at %.1f s; position error RMSE %s m, smallest clearance %s m, deepest kerb crossing %s m." % (
+                    s.end["outcome"], s.end["t"], _fmt(s.end["metrics"].get("est_rmse")), _fmt(s.end["metrics"].get("min_clearance")),
+                    _fmt(s.end["metrics"]["max_crossing"])))])
+    for key, title, route, cond, seed, intro in (
+        ("SF", "San Francisco: Townsend Street, GNSS outage", "SF-A", "gnss_outage_sf", 901,
+         "SoMa, by the Caltrain station at 4th and Townsend: south-west along Townsend Street past the rail yard, right into 5th Street, right "
+         "into Brannan Street. Right-hand traffic. The fixes stop over the straight's last 180 m and the turn's entry."),
+        ("SFB", "San Francisco: Brannan Street to the station corner, GNSS outage", "SF-B", "gnss_outage_sf", 901,
+         "South-west along Brannan Street, left into 5th Street, left into Townsend Street towards the station corner at 4th Street. The "
+         "fixes stop over Brannan Street's last 180 m and the left turn's entry."),
+        ("SFD", "San Francisco: a sustained GNSS drift on Townsend Street", "SF-A", "gnss_drift_sf", 902,
+         "A simulated fault: the fixes drift away at 0.3 m/s to 4 m, with no jump, and stay there until the turn. Kerbs see the lateral part; "
+         "the along-road part reaches the turn."),
+        ("SFM", "San Francisco: a misplaced map segment in a GNSS outage", "SF-A", "kerb_map_error_sf", 901,
+         "During the outage the vehicle's map has 110 m of Townsend Street's kerbs 0.6 m to the right (orange: where the map has them). The "
+         "scanner sees the real kerbs; the evaluator measures clearance to them."),
+    )
 ]
 
 
