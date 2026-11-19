@@ -82,7 +82,16 @@ struct Scenario {
     // The stack's response to a pose correction (rejoinpolicy). Manifests written before it existed replay
     // with it off.
     Rejoin rejoin = Rejoin::Unique;
+    // The vehicle profile (vehicle.hpp). Manifests and sessions written before it existed name none, and replay
+    // with this default.
+    std::string vehicle = "ipace_proxy_v1";
 };
+
+// The sensors' mounting and the estimators' lever arms for a vehicle profile: the named condition with the
+// profile's GNSS antenna, IMU and kerb-scanner positions, and an estimator configuration with the same antenna
+// and IMU positions as installation data. For "ipace_proxy_v1" both equal the defaults.
+SensorConditions sensorConditionsFor(const std::string& condition, const VehicleParams& vp);
+EstimatorConfig estimatorConfigFor(const VehicleParams& vp, EstimatorConfig base = EstimatorConfig{});
 
 std::vector<Scenario> catalogue();
 bool findScenario(const std::string& name, Scenario& out);
@@ -159,9 +168,15 @@ struct EpisodeResult {
     std::vector<Measurement> sensors;                    // arrival order, as the estimators saw them
     std::vector<StateEstimate> estimates;                // estimated mode: the driving estimate at every truth sample
     std::vector<std::pair<double, double>> outages;      // GNSS outage intervals [t0, t1] (world record)
-    SensorZones zones;
+    SensorZones zones;                                   // with the condition's map error, if any (zones.mapErrors)
     std::vector<std::pair<double, int>> belief;          // estimated mode: the stack's element at each control tick
     std::string sensorsCsv, estimatesCsv;
+    // The world's GNSS fault at every truth sample (with a sensor condition): -1 inside an outage, otherwise the size
+    // of the offset the fixes carry (0 when clean). In memory only, for the benchmark's fault windows.
+    std::vector<float> gnssFaultTrace;
+    // The times the true car's progress along the route passed the ends of the condition's misplaced map segment
+    // (-1: no map error, or not reached).
+    double mapSegmentOn = -1.0, mapSegmentOff = -1.0;
 };
 
 EpisodeResult runEpisode(const Scenario& sc);
