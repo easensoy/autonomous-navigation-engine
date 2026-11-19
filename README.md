@@ -322,7 +322,8 @@ the engine and the car stops before the barrier instead.
   vehicle profile, a Cybercab-inspired proxy, carries its own sensor mounts into the simulation and the
   estimators. It is not a Tesla vehicle and runs no Tesla software
   ([San Francisco](road_driving/README.md#san-francisco-soma),
-  [provenance](road_driving/viewer/districts/PROVENANCE.md#san-francisco-soma)).
+  [provenance](road_driving/viewer/districts/PROVENANCE.md#san-francisco-soma),
+  [1080p50 showcase](https://github.com/easensoy/autonomous-navigation-engine/releases/tag/viewer-sf-v1)).
 
 <img src="road_driving/docs/media/test-drive-relocalise.gif" width="100%" alt="Animated test drive. A simulated car seen from above drives a route on a grid network, drawn with its real footprint. Yellow dots mark the kerb scanner's returns. In an orange-shaded GNSS fault zone the violet GNSS fixes drift steadily several metres to one side of the road, and the status reads GNSS integrity inconsistent, kerb match matched. A dashed teal outline, the estimate the car drives on, stays on the car. An amber dashed line, the first kerb filter replayed on the same sensor log, follows the drifting fixes off the road. A logarithmic error plot shows the driving estimate falling to about 0.01 m when it re-localises, while the first version's error climbs to about 4 m. The car completes the route.">
 
