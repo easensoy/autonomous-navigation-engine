@@ -42,10 +42,159 @@ void writeFile(const std::filesystem::path& p, const std::string& text) {
 
 }  // namespace
 
+namespace {
+
+// The extended metrics of one estimator's trace (LocMetrics, `extended`).
+void extendedMetrics(LocMetrics& m, const std::vector<TruthSample>& truth, const std::vector<StateEstimate>& trace,
+                     const std::vector<Measurement>& sensors, const std::vector<std::pair<double, double>>& outages, const LocContext& ctx) {
+    m.extended = true;
+    std::vector<double> along;
+    double a2 = 0.0, na = 0.0, nl = 0.0;
+    int nn = 0, ina = 0, inl = 0;
+    auto alongAt = [&](size_t i) {
+        const double c = std::cos(truth[i].yaw), s = std::sin(truth[i].yaw);
+        return (trace[i].x - truth[i].x) * c + (trace[i].y - truth[i].y) * s;
+    };
+    auto lateralAt = [&](size_t i) {
+        const double c = std::cos(truth[i].yaw), s = std::sin(truth[i].yaw);
+        return -(trace[i].x - truth[i].x) * s + (trace[i].y - truth[i].y) * c;
+    };
+    for (size_t i = 0; i < truth.size() && i < trace.size(); ++i) {
+        const StateEstimate& e = trace[i];
+        if (!e.valid) continue;
+        const double ea = alongAt(i), el = lateralAt(i);
+        along.push_back(std::fabs(ea));
+        a2 += ea * ea;
+        if (e.hasCov) {
+            const double sa = e.sigmaAlong(truth[i].yaw), sl = e.sigmaAcross(truth[i].yaw);
+            if (sa > 1e-9 && sl > 1e-9 && std::isfinite(sa) && std::isfinite(sl)) {
+                const double qa = (ea / sa) * (ea / sa), ql = (el / sl) * (el / sl);
+                na += qa;
+                nl += ql;
+                ina += (qa >= kChi2Lo[1] && qa <= kChi2Hi[1]) ? 1 : 0;
+                inl += (ql >= kChi2Lo[1] && ql <= kChi2Hi[1]) ? 1 : 0;
+                ++nn;
+            }
+        }
+    }
+    if (!along.empty()) {
+        m.alongRmse = std::sqrt(a2 / static_cast<double>(along.size()));
+        m.alongP95 = percentile(along, 0.95);
+        m.alongMax = *std::max_element(along.begin(), along.end());
+    }
+    if (nn > 0) {
+        m.alongNees = na / nn;
+        m.lateralNees = nl / nn;
+        m.alongInside = static_cast<double>(ina) / nn;
+        m.lateralInside = static_cast<double>(inl) / nn;
+    }
+    // The fault window: the longest outage, else the samples where the fixes carry their full offset.
+    double on = -1.0, off = -1.0;
+    for (const auto& w : outages) {
+        if (w.second - w.first > off - on) {
+            on = w.first;
+            off = w.second;
+        }
+    }
+    if (on < 0.0 && ctx.gnssFault && !ctx.gnssFault->empty()) {
+        const float peak = *std::max_element(ctx.gnssFault->begin(), ctx.gnssFault->end());
+        if (peak > 0.0f) {
+            for (size_t i = 0; i < ctx.gnssFault->size() && i < truth.size(); ++i) {
+                const float f = (*ctx.gnssFault)[i];
+                if (on < 0.0 && f > 0.0f) on = truth[i].t;
+                if (f >= 0.999f * peak) off = truth[i].t;
+            }
+        }
+    }
+    m.faultOn = on;
+    m.faultOff = off;
+    if (on >= 0.0) {
+        double emax = 0.0;
+        for (size_t i = 0; i < truth.size() && i < trace.size(); ++i) {
+            if (!trace[i].valid || truth[i].t < on || truth[i].t > off) continue;
+            const double e = std::hypot(trace[i].x - truth[i].x, trace[i].y - truth[i].y);
+            emax = std::max(emax, e);
+            m.faultEndError = e;
+            m.faultEndAlong = alongAt(i);
+            m.faultEndLateral = lateralAt(i);
+        }
+        m.faultMax = emax;
+        for (const Measurement& z : sensors) {
+            if (z.kind == Measurement::Gnss && z.tMeas >= off - 1e-9) {
+                m.firstFixMeas = z.tMeas;
+                m.firstFixArrival = z.tArrival;
+                break;
+            }
+        }
+        double good = -1.0, trusted = -1.0;
+        m.reacquire = 999.0;
+        m.trustDelay = 999.0;
+        for (size_t i = 0; i < truth.size() && i < trace.size(); ++i) {
+            const double t = truth[i].t;
+            const StateEstimate& e = trace[i];
+            if (m.detectDelay < 0.0 && t >= on && e.valid && (std::string(e.gnss) == "FAULTED" || std::string(e.gnss) == "INCONSISTENT")) {
+                m.detectDelay = t - on;
+            }
+            if (t < off || !e.valid) continue;
+            const double err = std::hypot(e.x - truth[i].x, e.y - truth[i].y);
+            if (m.reacquire >= 999.0) {
+                if (err < 0.5) {
+                    if (good < 0.0) good = t;
+                    if (t - good >= 1.0) m.reacquire = good - off;
+                } else {
+                    good = -1.0;
+                }
+            }
+            if (m.trustDelay >= 999.0) {
+                if (std::string(e.gnss) == "TRUSTED") {
+                    if (trusted < 0.0) trusted = t;
+                    if (t - trusted >= 1.0) m.trustDelay = trusted - off;
+                } else {
+                    trusted = -1.0;
+                }
+            }
+        }
+    }
+    // False alarms: entries into an integrity alarm outside the window and the 10 s after it; kerb corrections.
+    std::string prev = "-";
+    int seen = 0;
+    for (size_t i = 0; i < truth.size() && i < trace.size(); ++i) {
+        const StateEstimate& e = trace[i];
+        const std::string g = e.gnss;
+        const bool alarm = g == "FAULTED" || g == "INCONSISTENT";
+        const bool before = prev == "FAULTED" || prev == "INCONSISTENT";
+        const bool inside = on >= 0.0 && truth[i].t >= on && truth[i].t <= off + 10.0;
+        if (alarm && !before && !inside) ++m.falseAlarms;
+        prev = g;
+        if (e.verifiedCorrections > seen) {
+            m.corrections = e.verifiedCorrections;
+            m.uniqueCorrections = e.uniqueCorrections;
+            m.maxCorrection = std::max(m.maxCorrection, std::hypot(e.verifiedJumpX, e.verifiedJumpY));
+            seen = e.verifiedCorrections;
+        }
+    }
+    // The misplaced map segment, while the true car is beside it.
+    m.segmentOn = ctx.segmentOn;
+    m.segmentOff = ctx.segmentOff;
+    if (ctx.segmentOn >= 0.0) {
+        const double end = ctx.segmentOff >= 0.0 ? ctx.segmentOff : 1e18;
+        double mx = 0.0;
+        for (size_t i = 0; i < truth.size() && i < trace.size(); ++i) {
+            if (!trace[i].valid || truth[i].t < ctx.segmentOn || truth[i].t > end) continue;
+            const double l = lateralAt(i);
+            mx = std::max(mx, std::fabs(l));
+            m.segmentEndLateral = l;
+        }
+        m.segmentMaxLateral = mx;
+    }
+}
+
+}  // namespace
+
 std::vector<LocMetrics> evaluateLocalisation(const std::vector<TruthSample>& truth, const std::vector<Measurement>& sensors,
                                              const std::vector<std::pair<double, double>>& outages, const LaneNetwork& net,
                                              const EstimatorConfig& cfg, std::vector<std::vector<StateEstimate>>* traces,
-                                             const std::vector<std::string>* names) {
+                                             const std::vector<std::string>* names, const LocContext* ctx) {
     std::vector<LocMetrics> all;
     // The longest outage, for drift and recovery.
     std::pair<double, double> longest{-1.0, -1.0};
@@ -215,6 +364,9 @@ std::vector<LocMetrics> evaluateLocalisation(const std::vector<TruthSample>& tru
             for (double x : st.nisKerb) s += std::min(x, 1e6);
             m.nisKerbMean = s / static_cast<double>(st.nisKerb.size());
         }
+        if (ctx) {
+            extendedMetrics(m, truth, trace, sensors, outages, *ctx);
+        }
         if (traces) traces->push_back(std::move(trace));
         all.push_back(std::move(m));
     }
@@ -239,6 +391,18 @@ std::string locMetricsJson(const LocMetrics& m) {
       << ",\"reanchors\":" << m.reanchors << ",\"kerb_used\":" << m.kerbUsed << ",\"kerb_rejected\":" << m.kerbRejected
       << ",\"nis_kerb_mean\":" << num(m.nisKerbMean, 3) << ",\"fault_recoveries\":" << m.faultRecoveries << ",\"heading_reanchors\":" << m.headingReanchors
       << ",\"kerb_relocalisations\":" << m.kerbRelocalisations;
+    if (m.extended) {
+        o << ",\"along_rmse\":" << num(m.alongRmse, 4) << ",\"along_p95\":" << num(m.alongP95, 4) << ",\"along_max\":" << num(m.alongMax, 4)
+          << ",\"along_nees\":" << num(m.alongNees, 3) << ",\"along_inside\":" << num(m.alongInside, 3) << ",\"lateral_nees\":" << num(m.lateralNees, 3)
+          << ",\"lateral_inside\":" << num(m.lateralInside, 3) << ",\"fault_on\":" << num(m.faultOn, 2) << ",\"fault_off\":" << num(m.faultOff, 2)
+          << ",\"fault_end_error\":" << num(m.faultEndError, 4) << ",\"fault_end_along\":" << num(m.faultEndAlong, 4)
+          << ",\"fault_end_lateral\":" << num(m.faultEndLateral, 4) << ",\"fault_max\":" << num(m.faultMax, 4) << ",\"first_fix_meas\":" << num(m.firstFixMeas, 2)
+          << ",\"first_fix_arrival\":" << num(m.firstFixArrival, 2) << ",\"detect_delay\":" << num(m.detectDelay, 2) << ",\"trust_delay\":" << num(m.trustDelay, 2)
+          << ",\"reacquire\":" << num(m.reacquire, 2) << ",\"false_alarms\":" << m.falseAlarms << ",\"corrections\":" << m.corrections
+          << ",\"unique_corrections\":" << m.uniqueCorrections << ",\"max_correction\":" << num(m.maxCorrection, 3) << ",\"segment_on\":" << num(m.segmentOn, 2)
+          << ",\"segment_off\":" << num(m.segmentOff, 2) << ",\"segment_max_lateral\":" << num(m.segmentMaxLateral, 4)
+          << ",\"segment_end_lateral\":" << num(m.segmentEndLateral, 4);
+    }
     return o.str();
 }
 
@@ -412,8 +576,15 @@ std::vector<Scenario> closedLoopScenariosR7() {
 // Kensington: Kensington Gore westbound past the Royal Albert Hall, left into Queen's Gate, the length of
 // Queen's Gate southbound, right into Elvaston Place. Knightsbridge: Brompton Road south-westbound past
 // Harrods, left into Hans Road, left into Basil Street, right into Hans Crescent.
+// San Francisco (SoMa, right-hand traffic): SF-A runs south-west along Townsend Street from 4th Street, past the
+// Caltrain station's rail yard, right into 5th Street, ahead across Bluxome Street and right into Brannan Street;
+// SF-B runs south-west along Brannan Street from 4th Street, left into 5th Street, ahead across Bluxome Street and
+// left into Townsend Street, ending north-east-bound towards the station corner at 4th Street.
 std::vector<RouteSpec> districtRoutes() {
-    return {{"KEN-A", "KEN", "KGE>KGW", 40.0, "QEP>EGS", 40.0}, {"KNB-A", "KNB", "BRE>BRG", 8.0, "HCB>HCE", 18.0}};
+    return {{"KEN-A", "KEN", "KGE>KGW", 40.0, "QEP>EGS", 40.0},
+            {"KNB-A", "KNB", "BRE>BRG", 8.0, "HCB>HCE", 18.0},
+            {"SF-A", "SF-SOMA", "T4>T5", 15.0, "B5>B4", 100.0},
+            {"SF-B", "SF-SOMA", "B4>B5", 15.0, "T5>T4", 200.0}};
 }
 
 bool findNamedScenario(const std::string& name, Scenario& sc) {
@@ -463,9 +634,39 @@ bool findNamedScenario(const std::string& name, Scenario& sc) {
     return false;
 }
 
+std::vector<RouteSpec> benchmarkRoutesSF() {
+    std::vector<RouteSpec> out;
+    for (const RouteSpec& r : districtRoutes()) {
+        if (r.network == "SF-SOMA") out.push_back(r);
+    }
+    return out;
+}
+
 SplitSpec splitSpec(const std::string& name) {
     SplitSpec s;
     s.name = name;
+    if (name == "sf-dev" || name == "sf" || name == "sf-ipace") {
+        // San Francisco (benchmark/PROTOCOL_SF.md): the estimators and the stack unchanged since R7, on a new network.
+        const bool dev = name == "sf-dev", ipace = name == "sf-ipace";
+        s.title = dev ? "development on SF-A (San Francisco, SoMa), Cybercab-inspired proxy"
+                      : (ipace ? "vehicle transfer: San Francisco (SoMa) with the I-PACE proxy"
+                               : "the unchanged filters on a new network: San Francisco (SoMa), Cybercab-inspired proxy");
+        for (const RouteSpec& r : benchmarkRoutesSF()) {
+            if (!dev || r.name == "SF-A") s.routes.push_back(r);
+        }
+        s.conditions = conditionNamesSF();
+        s.estimators = estimatorNamesV2();
+        for (const RouteSpec& r : s.routes) s.scenarios.push_back(benchmarkScenario(r, "", 0, "ground_truth"));
+        s.closedConditions = conditionNamesSF();
+        s.sources.push_back({"ekf_kerb2", "estimated", "ekf_kerb2", true, Rejoin::Unique});
+        if (!ipace) s.sources.push_back({"ekf_int2", "estimated", "ekf_int2", true, Rejoin::Unique});
+        s.referenceFeasibility = true;
+        s.referenceRejoin = Rejoin::Unique;
+        s.vehicle = ipace ? "ipace_proxy_v1" : "cybercab_proxy_v1";
+        s.seedBase = dev ? 900 : 0;
+        s.extended = true;
+        return s;
+    }
     if (name == "r7") {
         s.title = "held-out evaluation of the unique re-join after pose corrections (network R7)";
         s.routes = benchmarkRoutesR7();
@@ -587,19 +788,29 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
     std::map<std::string, std::vector<std::pair<std::string, std::pair<int, int>>>> wins;
     std::vector<std::string> failures;
     int drives = 0, incomplete = 0;
+    const VehicleParams vehicle = vehicleProfile(sp.vehicle);
     for (const RouteSpec& route : routes) {
         const LaneNetwork net = buildNetwork(route.network);
         for (const std::string& cond : conds) {
-            for (int seed = 1; seed <= opt.seeds; ++seed) {
-                const Scenario sc = benchmarkScenario(route, cond, static_cast<std::uint64_t>(seed), "ground_truth");
+            for (int run = 1; run <= opt.seeds; ++run) {
+                const int seed = sp.seedBase + run;
+                Scenario sc = benchmarkScenario(route, cond, static_cast<std::uint64_t>(seed), "ground_truth");
+                sc.vehicle = sp.vehicle;
                 const EpisodeResult r = runEpisode(sc);
                 ++drives;
                 incomplete += r.outcome == "COMPLETED" ? 0 : 1;
-                const std::vector<LocMetrics> ms = evaluateLocalisation(r.truth, r.sensors, r.outages, net, cfg, nullptr, &sp.estimators);
+                // Every estimator gets the drive's own vehicle lever arms, and the map the vehicle uses (with the
+                // condition's map error, if any).
+                const LaneNetwork vehicleMap = r.zones.mapErrors.empty() ? LaneNetwork{} : withMapErrors(net, r.zones.mapErrors);
+                const LocContext ctx{&r.gnssFaultTrace, r.mapSegmentOn, r.mapSegmentOff};
+                const std::vector<LocMetrics> ms =
+                    evaluateLocalisation(r.truth, r.sensors, r.outages, r.zones.mapErrors.empty() ? net : vehicleMap, estimatorConfigFor(vehicle, cfg), nullptr,
+                                         &sp.estimators, sp.extended ? &ctx : nullptr);
                 std::map<std::string, const LocMetrics*> by;
                 for (const LocMetrics& m : ms) {
                     jl << "{\"split\":\"" << sp.name << "\",\"route\":\"" << route.name << "\",\"condition\":\"" << cond << "\",\"seed\":" << seed
-                       << ",\"drive_outcome\":\"" << r.outcome << "\",\"trace_hash\":\"" << hex64(r.traceHash) << "\"," << locMetricsJson(m) << "}\n";
+                       << (sp.extended ? ",\"vehicle\":\"" + sp.vehicle + "\"" : std::string()) << ",\"drive_outcome\":\"" << r.outcome
+                       << "\",\"trace_hash\":\"" << hex64(r.traceHash) << "\"," << locMetricsJson(m) << "}\n";
                     Group& g = groups[cond][m.estimator];
                     g.runs.push_back(m);
                     g.pooled.insert(g.pooled.end(), m.errors.begin(), m.errors.end());
@@ -663,6 +874,10 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
     md << "Drives: " << drives << " (" << routes.size() << " routes x " << conds.size() << " conditions x " << opt.seeds
        << " seeds); drives not completing their route: " << incomplete << ". Toolchain: " << toolchain() << ". Engine commit at configure: "
        << engineCommit() << ".\n\n";
+    if (sp.extended) {
+        md << "Vehicle: " << vehicle.id << " (" << vehicle.description << "); seeds " << sp.seedBase + 1 << " to " << sp.seedBase + opt.seeds
+           << ". The extended metrics of every run are in runs.jsonl.\n\n";
+    }
     for (const std::string& cond : conds) {
         md << "## " << cond << "\n\n";
         md << "| Estimator | Runs | Failed | RMSE, median run (m) | RMSE, pooled (m) | p95, pooled (m) | Max (m) | Lateral p95, pooled (m) | "
@@ -737,12 +952,13 @@ std::string runLocalisationCampaign(const CampaignOptions& opt) {
     writeFile(fs::path(opt.outDir) / "summary.md", md.str());
 
     std::ostringstream ct;
-    ct << "split=" << sp.name << "\nseeds=1.." << opt.seeds << "\nroutes=";
+    ct << "split=" << sp.name << "\nseeds=" << sp.seedBase + 1 << ".." << sp.seedBase + opt.seeds << "\nroutes=";
     for (const RouteSpec& r : routes) ct << r.name << ":" << r.network << ":" << r.startLane << "@" << r.startS << "->" << r.goalLane << "@" << r.goalS << " ";
     ct << "\nconditions=";
     for (const std::string& c : conds) ct << c << " ";
     ct << "\nestimators=";
     for (const std::string& e : sp.estimators) ct << e << " ";
+    if (sp.extended) ct << "\nvehicle=" << vehicleProfileText(vehicle);
     ct << "\nestimator_config=" << configText(cfg) << "\ntoolchain=" << toolchain() << "\nengine_commit_at_configure=" << engineCommit()
        << "\nconfig.gnss_sigma=" << cfg.gnssSigma << "\nconfig.wheel_sigma=" << cfg.wheelSigma << "\nconfig.gyro_sigma=" << cfg.gyroSigma
        << "\nconfig.accel_sigma=" << cfg.accelSigma << "\nconfig.pos_process=" << cfg.posProcess << "\nconfig.gyro_bias_walk=" << cfg.gyroBiasWalk
@@ -797,13 +1013,31 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
         std::map<int, std::string> refOutcome;
         for (auto& v : variants) {
             if (std::find(modeOrder.begin(), modeOrder.end(), v.first) == modeOrder.end()) modeOrder.push_back(v.first);
-            for (int seed = 1; seed <= opt.seeds; ++seed) {
+            for (int run = 1; run <= opt.seeds; ++run) {
+                const int seed = sp.seedBase + run;
                 Scenario sc = v.second;
                 sc.seed = static_cast<std::uint64_t>(seed);
+                sc.vehicle = sp.vehicle;
                 const EpisodeResult r = runEpisode(sc);
                 const Metrics& m = r.metrics;
                 const bool isRef = sc.mode == "ground_truth";
                 if (isRef) refOutcome[seed] = r.outcome;
+                // The San Francisco records also name the vehicle, why the monitor stopped the car, and when the stack
+                // first stopped on its estimate.
+                std::string more;
+                if (sp.extended) {
+                    std::string reason = "", firstStop = "-1";
+                    for (const LogEvent& e : r.events) {
+                        if (e.type == "MONITOR_TRIGGER" && reason.empty()) reason = e.detail;
+                        if ((e.type == "LOCALISATION_UNRELIABLE" || e.type == "NO_CLEAR_CONTINUATION") && firstStop == "-1") firstStop = num(e.t, 2);
+                    }
+                    for (char& c : reason) {
+                        if (c == '"' || c == '\\') c = '\'';
+                    }
+                    more = ",\"vehicle\":\"" + sc.vehicle + "\",\"fallback_reason\":\"" + reason + "\",\"first_stop_t\":" + firstStop +
+                           ",\"completed\":" + (m.completed ? "true" : "false") + ",\"max_steer\":" + num(m.maxSteer, 4) +
+                           ",\"max_lat_accel\":" + num(m.maxLatAccel, 3) + ",\"emergency_events\":" + std::to_string(m.emergencyEvents);
+                }
                 jl << "{\"split\":\"" << sp.name << "\",\"scenario\":\"" << base.name << "\",\"mode\":\"" << sc.mode << "\",\"estimator\":\""
                    << (isRef ? "-" : sc.estimator) << "\",\"feasibility\":" << (sc.feasibility ? "true" : "false")
                    << ",\"rejoin\":\"" << rejoinName(sc.rejoin) << "\",\"condition\":\"" << sc.condition
@@ -819,7 +1053,7 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
                    << ",\"same_as_reference\":" << (!isRef && refOutcome.count(seed) && refOutcome[seed] == r.outcome ? "true" : "false")
                    << ",\"pose_corrections\":"
                    << std::count_if(r.events.begin(), r.events.end(), [](const LogEvent& e) { return e.type == "POSE_CORRECTION"; })
-                   << ",\"trace_hash\":\"" << hex64(r.traceHash) << "\"}\n";
+                   << ",\"trace_hash\":\"" << hex64(r.traceHash) << "\"" << more << "}\n";
                 Row& row = rows[base.name][v.first];
                 ++row.runs;
                 ++row.outcomes[r.outcome];
@@ -849,8 +1083,11 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
     std::ostringstream md;
     md << "# Closed-loop driving on estimated state: " << sp.title << "\n\n";
     md << "Each scenario is driven with the stack on simulator truth (the labelled reference) and on each estimator's output under each "
-          "sensor condition, with matched seeds 1.." << opt.seeds << ". Every quantity below is measured from truth by the evaluator. Toolchain: "
-       << toolchain() << ".";
+          "sensor condition, with matched seeds " << sp.seedBase + 1 << ".." << sp.seedBase + opt.seeds
+       << ". Every quantity below is measured from truth by the evaluator. Toolchain: " << toolchain() << ".";
+    if (sp.extended) {
+        md << " Vehicle: " << sp.vehicle << ". Each estimator drives with the unique re-join, the default stack since R7.";
+    }
     if (previousStack && sp.sources.size() > 1) {
         md << " \"previous stack\" is the stack evaluated on R2 in November 2026, without the clearance layer; every other row, and the "
               "reference, use the clearance layer.";
@@ -894,8 +1131,10 @@ std::string runClosedLoopCampaign(const CampaignOptions& opt) {
         }
         md << "\n";
     }
-    md << "Clearance is the smallest distance from the footprint with mirrors (4.682 m by 2.139 m) to the kerb; negative means part of the "
-          "footprint crossed it. Runs with the body over a kerb count the body without mirrors (2.011 m wide), and Deepest is how far it went. "
+    const VehicleParams vp = vehicleProfile(sp.vehicle);
+    md << "Clearance is the smallest distance from the footprint with mirrors (" << num(vp.length, 3) << " m by " << num(vp.widthMirrors, 3)
+       << " m) to the kerb; negative means part of the footprint crossed it. Runs with the body over a kerb count the body without mirrors ("
+       << num(vp.width, 3) << " m wide), and Deepest is how far it went. "
           "Lane-association errors count control ticks where the stack's element is not the evaluator's lane (or a movement joining it). "
           "A stop is unwarranted when the true position error at the decision was below "
        << num(kUnwarrantedError, 1) << " m.\n";
