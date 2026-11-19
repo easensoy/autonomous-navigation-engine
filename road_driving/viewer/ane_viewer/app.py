@@ -25,14 +25,16 @@ QUALITY = {
 def parse_args(argv=None):
     p = argparse.ArgumentParser(prog="ane_viewer", description="Live 3D driving and localisation viewer for road_driving.")
     p.add_argument("--backend", help="path to road_drive (default: the build folders, or $ANE_BACKEND)")
-    p.add_argument("--demo", default="C", choices=["A", "B", "C", "S", "K", "N"],
+    p.add_argument("--demo", default="C", choices=["A", "B", "C", "S", "K", "N", "SF", "SFB", "SFD", "SFM"],
                    help="demonstration to start with (default C; K Kensington, N Knightsbridge)")
     p.add_argument("--scenario", help="start a custom configuration instead of a demonstration")
     p.add_argument("--condition", default="nominal_r7")
     p.add_argument("--estimator", default="ekf_kerb2")
-    p.add_argument("--seed", type=int, default=1)
+    p.add_argument("--seed", type=int, help="the seed (default 1); with --demo, it replaces the demonstration's")
     p.add_argument("--mode", default="estimated", choices=["estimated", "ground_truth"])
     p.add_argument("--rejoin", default="unique", choices=["unique", "verified", "on", "off"])
+    p.add_argument("--vehicle", default="", choices=["", "ipace_proxy_v1", "cybercab_proxy_v1"],
+                   help="the vehicle profile of a custom configuration (default: the backend's, ipace_proxy_v1)")
     p.add_argument("--replay", help="start by replaying this session file (REPLAY mode)")
     p.add_argument("--speed", type=float, default=1.0, help="simulated seconds per second (default 1)")
     p.add_argument("--quality", default="medium", choices=list(QUALITY))
@@ -208,10 +210,12 @@ class Viewer(ShowBase):
         if not args.replay:
             if args.scenario:
                 self.pending = {"scenario": args.scenario, "condition": args.condition, "mode": args.mode, "estimator": args.estimator,
-                                "seed": args.seed, "rejoin": args.rejoin}
+                                "seed": 1 if args.seed is None else args.seed, "rejoin": args.rejoin}
+                if args.vehicle:
+                    self.pending["vehicle"] = args.vehicle
                 self.backend.send(protocol.reset(self.pending))
             else:
-                self.start_demo(args.demo)
+                self.start_demo(args.demo, args.seed)
         self._bind_keys()
         self.taskMgr.add(self.update, "update")
         self.exitFunc = self.stop_backend
@@ -246,7 +250,7 @@ class Viewer(ShowBase):
         k("tab", self.hud.toggle_visible)
         k("m", self.toggle_hud_mode)
         k("v", self.toggle_provenance)
-        for key, d in (("f5", "K"), ("f6", "N")):
+        for key, d in (("f5", "K"), ("f6", "N"), ("f7", "SF")):
             k(key, self.start_demo, [d])
         k("f12", self.screenshot_now)
         k("f9", self.toggle_record)
@@ -272,7 +276,7 @@ class Viewer(ShowBase):
             self.send_cmd(self.protocol.replay(self._replay_path))
             return
         cfg = dict(self.state.config) if self.state.config else self.pending
-        self.send_cmd(self.protocol.reset({k: cfg[k] for k in ("scenario", "condition", "mode", "estimator", "seed", "rejoin") if k in cfg}))
+        self.send_cmd(self.protocol.reset({k: cfg[k] for k in ("scenario", "condition", "mode", "estimator", "seed", "rejoin", "vehicle") if k in cfg}))
 
     def set_speed(self, v):
         self.send_cmd(self.protocol.speed(v))
@@ -280,10 +284,12 @@ class Viewer(ShowBase):
     def speed_step(self, f):
         self.set_speed(max(0.125, min(16.0, self.state.status.get("speed", 1.0) * f)))
 
-    def start_demo(self, key):
+    def start_demo(self, key, seed=None):
         self.demo = self.demos.by_key(key)
         self.narrator = self.demos.Narrator(self.demo)
         self.pending = dict(self.demo.config)
+        if seed is not None:
+            self.pending["seed"] = seed
         self.paused = bool(self.args.paused)
         self.send_cmd(self.protocol.reset(self.pending))
 
@@ -622,7 +628,8 @@ class Viewer(ShowBase):
             from .director import PLANS, Director
             key = plan_name if plan_name in PLANS else (self.state.config.get("scenario") if plan_name == "auto" else "default")
             self.director = Director(self, PLANS.get(key, PLANS["default"]))
-        params = scene["vehicle"]
+        # The proxy for the scene's vehicle profile, with the GNSS antenna where the profile mounts it.
+        params = dict(scene["vehicle"], antenna_x=((scene.get("sensors") or {}).get("gnss") or {}).get("antenna_x"))
         if self.vehicle is None or self.vehicle.params != params:
             if self.vehicle:
                 self.vehicle.root.removeNode()
@@ -742,7 +749,7 @@ class Viewer(ShowBase):
         h.labels.setText("\n".join(r[0] for r in rows))
         h.values.setText("\n".join(r[1] for r in rows))
         h.fit_panel(len(rows))
-        h.set_disclaimer(bool(((st.scene or {}).get("map") or {}).get("district")))
+        h.set_disclaimer(bool(((st.scene or {}).get("map") or {}).get("district")), ((st.scene or {}).get("vehicle") or {}).get("id", "ipace_proxy_v1"))
         evs = list(st.events)[-9:]
         lines = ["%7.2f  %-9s %-22s %s" % (e["t"], e["source"], e["event"], e["detail"][:46]) for e in evs]
         errs = list(st.errors)[-2:]
@@ -770,7 +777,7 @@ class Viewer(ShowBase):
         h.set_toggle("kerb_blackout", inj.get("kerb_blackout", False))
         for k in ("chase", "overhead", "driver", "orbit"):
             h.set_toggle("cam_" + k, self.cameras.mode == k)
-        for k in ("A", "B", "C", "S", "K", "N"):
+        for k in ("A", "B", "C", "S", "K", "N", "SF"):
             h.set_toggle("demo" + k, bool(self.demo) and self.demo.key == k and mode == "live")
         h.set_toggle("quality", False, self.quality.capitalize())
 
