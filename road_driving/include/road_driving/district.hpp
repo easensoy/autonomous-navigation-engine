@@ -1,7 +1,9 @@
 #pragma once
-// District networks: compact, bounded reconstructions of real London streets, built by the same rules as the
-// synthetic grids (left-hand traffic, lane segments and turning movements as graph nodes, no U-turns, banned
-// turns never built) but from street centrelines in a local metric frame.
+// District networks: compact, bounded reconstructions of real streets (two London patches, left-hand traffic;
+// one San Francisco patch, right-hand traffic), built by the same rules as the synthetic grids (lane segments
+// and turning movements as graph nodes, no U-turns, banned turns never built) but from street centrelines in a
+// local metric frame. A district sets its traffic side: the modelled lane lies on that side of the centreline,
+// and the turn across the opposing lane costs the larger penalty.
 //
 // They are source-informed research reconstructions with approximated details, not surveyed digital twins.
 // Sourced: junction positions, street names, the order and adjacency of streets, one-way rules and turn
@@ -37,7 +39,7 @@ struct DistrictStreet {
     int oneWay = 0;           // 0: two-way; +1: a -> b only; -1: b -> a only
     double halfWidth = 4.0;   // centreline to the outer kerb on the left of a -> b, m
     double median = 0.0;      // width of a central reservation, m (0: none)
-    double laneOffset = 1.5;  // the modelled lane's centre, left of the direction of travel from the centreline, m
+    double laneOffset = 1.5;  // the modelled lane's centre from the centreline, m: on the traffic side of the direction of travel
     std::string source;       // the OSM ways the centreline follows
     std::string widthBasis;   // how the width was inferred
     double halfWidthRight = -1.0;  // centreline to the kerb on the right of a -> b (< 0: as on the left)
@@ -47,19 +49,30 @@ struct DistrictStreet {
 struct DistrictSpec {
     std::string id;           // the network name, e.g. "KEN"
     std::string title;        // e.g. "Kensington: Queen's Gate and Kensington Gore"
-    std::string district;     // "Kensington", "Knightsbridge"
-    double lat0 = 0.0, lon0 = 0.0;  // origin of the local frame: x east, y north, metres (equirectangular)
+    std::string district;     // "Kensington", "Knightsbridge", "SoMa"
+    std::string city;         // "San Francisco" (empty for the London districts, which predate the field)
+    double lat0 = 0.0, lon0 = 0.0;  // origin of the local frame: x east, y north, metres
+    // How latitude and longitude become the local frame. Empty: the London districts' equirectangular scaling
+    // (111320 cos(lat0) and 110574 m per degree, road_driving/tools/district_extract.py); otherwise the text
+    // here, e.g. the WGS84 tangent plane at the origin.
+    std::string frame;
     std::string source;       // the extract the geometry was taken from
     std::string licence;
+    bool rightHand = false;   // traffic side (NetworkSpec::rightHand)
     std::vector<DistrictJunction> junctions;
     std::vector<DistrictStreet> streets;
     std::vector<BannedTurn> banned;          // junction, from lane, to lane
     std::vector<std::string> bannedSource;   // parallel to banned
-    double leftRadius = 9.0, rightRadius = 14.0, bendRadius = 60.0;  // preferred lane-path radii, m
+    // Preferred lane-path radii, m. In left-hand traffic a left turn keeps to the near side and a right turn
+    // crosses the opposing lane on a wider path; in right-hand traffic the reverse, so a district sets them to
+    // match its traffic side.
+    double leftRadius = 9.0, rightRadius = 14.0, bendRadius = 60.0;
+    double farRadius() const { return rightHand ? leftRadius : rightRadius; }  // the turn across the opposing lane
 };
 
-DistrictSpec districtKensington();    // "KEN"
-DistrictSpec districtKnightsbridge();  // "KNB"
+DistrictSpec districtKensington();      // "KEN"
+DistrictSpec districtKnightsbridge();   // "KNB"
+DistrictSpec districtSanFranciscoSoma();  // "SF-SOMA": right-hand traffic
 std::vector<std::string> districtNames();
 bool findDistrict(const std::string& name, DistrictSpec& out);
 
