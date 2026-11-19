@@ -1,16 +1,25 @@
-"""An original, procedurally built I-PACE-inspired proxy vehicle, as plain triangle meshes (no Panda3D).
+"""Original, procedurally built proxy vehicles, as plain triangle meshes (no Panda3D): one for each vehicle
+profile the backend simulates (road_driving/include/road_driving/vehicle.hpp), picked by the profile id in the
+scene message.
 
-Dimensions come from the backend's VehicleParams (scene message): wheelbase 2.990 m, length 4.682 m, body
-width 2.011 m, 2.139 m over the mirrors, overhangs 0.850 m front and 0.842 m rear. The height (1.565 m),
-wheel size (245/50 R20, radius 0.377 m) and track (1.64 m) are published-figure approximations used only
-for drawing. The silhouette is a loft of hand-made cross-sections: a short bonnet, a cab-forward
-windscreen, a long roof falling to a tall tail with a lip spoiler. No third-party model or texture is used.
+- ipace_proxy_v1: I-PACE-inspired. Wheelbase 2.990 m, length 4.682 m, body width 2.011 m, 2.139 m over the
+  mirrors, overhangs 0.850 m front and 0.842 m rear. The height (1.565 m), wheel size (245/50 R20, radius
+  0.377 m) and track (1.64 m) are published-figure approximations used only for drawing. A short bonnet, a
+  cab-forward windscreen, a long roof falling to a tall tail with a lip spoiler; a decorative roof rig.
+- cybercab_proxy_v1: Cybercab-inspired. Wheelbase 2.750 m, length 4.200 m, width 1.930 m, no exterior mirrors
+  (the profile's research assumptions); height 1.44 m, wheel radius 0.36 m and track 1.62 m are drawing
+  assumptions, and the ground clearance (0.147 m) is Tesla's published figure. A low two-seat body with a long
+  raked windscreen running into a glass roof, a fastback to a short tail, full-width light bars front and rear,
+  aero wheel covers, a champagne-gold finish. No roof rig and no camera is drawn: none is simulated.
+
+The dimensions that the simulation uses (wheelbase, length, widths, overhangs) come from the scene message, so
+the mesh always matches the simulated footprint. No third-party model or texture is used.
 
 Frame: the simulation's body frame. Origin at the rear-axle centre on the ground, x forward, y left, z up.
 The pose the backend reports is this origin, so the mesh needs no other transform.
 
-The roof rig is decorative: the simulation has no 3D lidar or camera. The only ranging sensor it simulates
-is the planar kerb scanner on the front bumper, drawn separately and labelled as active.
+The only ranging sensor the simulation has is the planar kerb scanner on the front bumper, drawn separately and
+labelled as active; the GNSS antenna is drawn where the profile mounts it.
 """
 import math
 
@@ -55,6 +64,49 @@ PROFILE = [
     (1.000, 0.44, 0.57, 0.70, 0.57),
 ]
 
+# The Cybercab-inspired proxy's side profile, in metres at its own height (1.44 m): bottom, top, width fraction,
+# beltline. The roof peaks a little behind the middle; the windscreen runs long and low towards the nose.
+CYBERCAB_PROFILE = [
+    (0.000, 0.30, 0.86, 0.86, 0.86),
+    (0.020, 0.24, 0.97, 0.95, 0.90),
+    (0.050, 0.19, 1.04, 0.98, 0.92),
+    (0.100, 0.16, 1.12, 1.00, 0.93),
+    (0.180, 0.15, 1.24, 1.00, 0.93),
+    (0.260, 0.15, 1.34, 1.00, 0.92),
+    (0.340, 0.15, 1.41, 1.00, 0.91),
+    (0.420, 0.15, 1.44, 1.00, 0.90),
+    (0.500, 0.15, 1.43, 1.00, 0.89),
+    (0.580, 0.15, 1.36, 1.00, 0.87),
+    (0.650, 0.15, 1.21, 1.00, 0.85),
+    (0.720, 0.16, 1.03, 0.99, 0.82),
+    (0.800, 0.17, 0.89, 0.97, 0.78),
+    (0.870, 0.19, 0.79, 0.93, 0.74),
+    (0.930, 0.22, 0.71, 0.88, 0.69),
+    (0.975, 0.28, 0.64, 0.80, 0.62),
+    (1.000, 0.36, 0.57, 0.68, 0.57),
+]
+GOLD = (0.60, 0.47, 0.27, 1.0)  # champagne gold, before the paint's specular highlight
+LIGHT_BAR = (0.98, 0.98, 1.00, 1.0)
+AERO = (0.52, 0.53, 0.55, 1.0)
+
+# Drawing designs per profile. Everything the simulation uses comes from the scene message instead.
+DESIGNS = {
+    "ipace_proxy_v1": {"profile": PROFILE, "height": HEIGHT, "profile_height": 1.565, "wheel_radius": WHEEL_RADIUS, "wheel_width": WHEEL_WIDTH,
+                       "track": TRACK, "paint": WHITE, "mirrors": True, "rig": True, "antenna_x": 1.60, "kind": "ipace"},
+    "cybercab_proxy_v1": {"profile": CYBERCAB_PROFILE, "height": 1.44, "profile_height": 1.44, "wheel_radius": 0.36, "wheel_width": 0.24,
+                          "track": 1.62, "paint": GOLD, "mirrors": False, "rig": False, "antenna_x": 1.30, "kind": "cybercab"},
+}
+
+
+def design(params):
+    """The drawing design for the scene's vehicle (the I-PACE proxy's for an older message without an id)."""
+    d = dict(DESIGNS.get(params.get("id", "ipace_proxy_v1"), DESIGNS["ipace_proxy_v1"]))
+    # A newer scene message carries the drawing figures and the antenna's mount; they win.
+    for key, src in (("height", "height"), ("wheel_radius", "wheel_radius"), ("track", "track"), ("antenna_x", "antenna_x")):
+        if params.get(src) is not None:
+            d[key] = params[src]
+    return d
+
 
 class Mesh:
     def __init__(self, name):
@@ -92,12 +144,12 @@ class Mesh:
         return out
 
 
-def _lerp_profile(u):
-    for (u0, *a), (u1, *b) in zip(PROFILE, PROFILE[1:]):
+def _lerp_profile(u, profile=PROFILE):
+    for (u0, *a), (u1, *b) in zip(profile, profile[1:]):
         if u0 <= u <= u1:
             f = (u - u0) / (u1 - u0)
             return [x + (y - x) * f for x, y in zip(a, b)]
-    return list(PROFILE[-1][1:])
+    return list(profile[-1][1:])
 
 
 def _smooth(f):
@@ -152,16 +204,18 @@ GAP = 0.004  # m: glass and lamps stand this far off the paint, along the surfac
 
 def _section(params, u):
     """The loft's cross-section at station u (0 rear bumper, 1 front bumper): x, bottom, top, beltline, half-width."""
+    d = design(params)
     x = -params["rear_overhang"] + u * params["length"]
-    zb, zt, wf, belt = _lerp_profile(u)
-    scale = HEIGHT / 1.565
+    zb, zt, wf, belt = _lerp_profile(u, d["profile"])
+    scale = d["height"] / d["profile_height"]
     zb, zt, belt = zb * scale, zt * scale, belt * scale
     # Wheel arches: lift the underside over each wheel.
+    wr = d["wheel_radius"]
     for xw in (0.0, params["wheelbase"]):
         dx = x - xw
-        R = WHEEL_RADIUS + 0.06
+        R = wr + 0.06
         if abs(dx) < R:
-            zb = max(zb, WHEEL_RADIUS + math.sqrt(R * R - dx * dx) * 0.98)
+            zb = max(zb, wr + math.sqrt(R * R - dx * dx) * 0.98)
     return x, zb, zt, belt, 0.5 * params["width"] * wf
 
 
@@ -283,6 +337,7 @@ def body(params, stations=72, ring=40):
     """The lofted body with its trim and arches, and its glass and lamps laid on as smooth patches of its
     surface, so their outlines follow the body's lines rather than the mesh's quads."""
     mesh = Mesh("body")
+    d = design(params)
     rings = []
     colors = []
     for i in range(stations + 1):
@@ -290,7 +345,7 @@ def body(params, stations=72, ring=40):
         sec = _section(params, u)
         pts = [_ring_point(sec, 2.0 * math.pi * k / ring) for k in range(ring)]
         rings.append(pts)
-        colors.append([_body_colour(u, q[1], q[2], sec[1], sec[4]) for q in pts])
+        colors.append([_body_colour(u, q[1], q[2], sec[1], sec[4], d) for q in pts])
     # Smooth normals over the whole loft grid, so the shading runs on across stations.
     acc = [[[0.0, 0.0, 0.0] for _ in range(ring)] for _ in range(stations + 1)]
     for i in range(stations):
@@ -326,16 +381,23 @@ def body(params, stations=72, ring=40):
         cx = sum(p[0] for p in pts) / len(pts)
         cz = sum(p[2] for p in pts) / len(pts)
         fan = [(cx, 0.0, cz)] + pts
-        col = [TRIM if front else WHITE] + colors[idx]  # grille dark at the front
+        if d["kind"] == "cybercab":
+            col = [d["paint"]] + colors[idx]  # no grille: the nose and the tail are body colour
+        else:
+            col = [TRIM if front else WHITE] + colors[idx]  # grille dark at the front
         tris = [(0, k + 1, (k + 1) % ring + 1) if front else (0, (k + 1) % ring + 1, k + 1) for k in range(ring)]
         mesh.add(fan, col, tris)
     flat = mesh.normals()  # the end caps: their own (flat) normals
     mesh.n += flat[len(mesh.n):]
 
-    # Glass: two side windows a side, with the B- and C-pillars in body colour, the windscreen and the rear
-    # screen. The side glass runs from just above the beltline to the roof rail.
     sill = lambda sec: _phi_where(sec, lambda q: q[2], sec[3] + 0.03)
     rail = lambda sec: (lambda a: None if a is None else a - 0.03)(_first(_y_at(0.62)(sec), _z_at(sec[2] - 0.05)(sec)))
+    if d["kind"] == "cybercab":
+        _cybercab_glass_and_lights(mesh, params, sill, rail)
+        return mesh
+
+    # Glass: two side windows a side, with the B- and C-pillars in body colour, the windscreen and the rear
+    # screen. The side glass runs from just above the beltline to the roof rail.
     _patch(mesh, params, _const(0.500), lambda t: 0.708 - 0.045 * t, sill, rail, GLASS)   # front door, A-pillar raked
     _patch(mesh, params, lambda t: 0.172 + 0.05 * t, _const(0.456), sill, rail, GLASS)   # rear door and quarter
     screen = lambda sec: (lambda a: None if a is None else a + 0.03)(_y_at(0.62)(sec))
@@ -359,21 +421,53 @@ def body(params, stations=72, ring=40):
     return mesh
 
 
-def _body_colour(u, y, z, zb, a):
+def _cybercab_glass_and_lights(mesh, params, sill, rail):
+    """The Cybercab-inspired proxy's glass and lamps: one long side window a side (a single wide butterfly door),
+    a windscreen that runs on into the glass roof, a small rear screen, and full-width light bars front and rear."""
+    _patch(mesh, params, _const(0.30), lambda t: 0.66 - 0.05 * t, sill, rail, GLASS)  # side glass, the door's window
+    screen = lambda sec: (lambda a: None if a is None else a + 0.03)(_y_at(0.66)(sec))
+    _patch(mesh, params, _const(0.36), _const(0.72), screen, None, GLASS, nu=20, nt=24, across=True)  # windscreen into the glass roof
+    _patch(mesh, params, _const(0.06), _const(0.16), screen, None, GLASS, nu=10, nt=24, across=True)  # rear screen
+    # The light bars: a slim strip across each end cap.
+    for u, z0, z1, col, n in ((1.0, 0.585, 0.615, LIGHT_BAR, 1.0), (0.0, 0.80, 0.84, TAIL, -1.0)):
+        sec = _section(params, u)
+        rows = []
+        for z in (z0, 0.5 * (z0 + z1), z1):
+            phi = _phi_where(sec, lambda q: q[2], z)
+            if phi is None:
+                rows.append(None)
+                continue
+            w = abs(_ring_point(sec, phi)[1]) - 0.02
+            rows.append([((sec[0] + n * 0.5 * GAP, w * (2.0 * k / 10 - 1.0), z), (n, 0.0, 0.0)) for k in range(11)])
+        _add_quads(mesh, rows, col)
+
+
+def _body_colour(u, y, z, zb, a, d=None):
     ay = abs(y)
     if z < zb + 0.07:
         return TRIM  # sills and the edge of each wheel arch (the underside is lifted over the wheels)
+    if d is not None and d["kind"] == "cybercab":
+        return d["paint"]  # no grille
     if u > 0.955 and 0.33 < z < 0.56 and ay < 0.55 * a:
         return TRIM  # grille
     return WHITE
 
 
 def wheel(params, name):
-    """One wheel centred on its hub, axle along y: tyre, rim and five spokes (so its rotation shows)."""
+    """One wheel centred on its hub, axle along y: tyre, rim and five spokes (so its rotation shows); on the
+    Cybercab-inspired proxy a flat aero cover with five darker vanes."""
+    d = design(params)
+    wr, ww = d["wheel_radius"], d["wheel_width"]
     m = Mesh(name)
-    cylinder(m, 0.0, 0.0, 0.0, WHEEL_RADIUS, WHEEL_WIDTH, TYRE, axis="y", seg=28)
+    cylinder(m, 0.0, 0.0, 0.0, wr, ww, TYRE, axis="y", seg=28)
     side = 1.0 if name.endswith("l") else -1.0
-    face = side * (0.5 * WHEEL_WIDTH + 0.004)
+    face = side * (0.5 * ww + 0.004)
+    if d["kind"] == "cybercab":
+        cylinder(m, 0.0, face, 0.0, wr - 0.05, 0.01, AERO, axis="y", seg=32)
+        for k in range(5):
+            a = 2.0 * math.pi * k / 5
+            box(m, math.cos(a) * 0.16, face + side * 0.008, math.sin(a) * 0.16, 0.16, 0.012, 0.035, TRIM)
+        return m
     cylinder(m, 0.0, face, 0.0, 0.25, 0.01, RIM, axis="y", seg=28)
     for k in range(5):
         a = 2.0 * math.pi * k / 5
@@ -383,32 +477,42 @@ def wheel(params, name):
 
 
 def wheel_positions(params):
-    half = 0.5 * TRACK
+    d = design(params)
+    half, wr = 0.5 * d["track"], d["wheel_radius"]
     wb = params["wheelbase"]
-    return {"fl": (wb, half, WHEEL_RADIUS), "fr": (wb, -half, WHEEL_RADIUS), "rl": (0.0, half, WHEEL_RADIUS), "rr": (0.0, -half, WHEEL_RADIUS)}
+    return {"fl": (wb, half, wr), "fr": (wb, -half, wr), "rl": (0.0, half, wr), "rr": (0.0, -half, wr)}
 
 
 def details(params):
-    """Mirrors, the decorative roof rig and the active kerb scanner, as named meshes."""
+    """Mirrors, the decorative roof rig, the GNSS antenna and the active kerb scanner, as named meshes (empty where
+    the profile has none)."""
+    d = design(params)
     W = params["width"]
     Wm = params["width_mirrors"]
     wb = params["wheelbase"]
     front = wb + params["front_overhang"]
     mirrors = Mesh("mirrors")
-    for side in (1.0, -1.0):
-        box(mirrors, wb - 0.36, side * (0.5 * Wm - 0.075), 1.02, 0.20, 0.15, 0.12, WHITE)
-        box(mirrors, wb - 0.33, side * (0.5 * W - 0.05), 0.99, 0.10, 0.12, 0.05, TRIM)
+    if d["mirrors"]:
+        for side in (1.0, -1.0):
+            box(mirrors, wb - 0.36, side * (0.5 * Wm - 0.075), 1.02, 0.20, 0.15, 0.12, WHITE)
+            box(mirrors, wb - 0.33, side * (0.5 * W - 0.05), 0.99, 0.10, 0.12, 0.05, TRIM)
     rig = Mesh("roof_rig")  # visual only
     roof = HEIGHT
-    box(rig, 1.10, 0.0, roof + 0.02, 0.95, 0.80, 0.05, RIG)
-    cylinder(rig, 1.10, 0.0, roof + 0.13, 0.34, 0.18, RIG, seg=32)
-    cylinder(rig, 1.10, 0.0, roof + 0.27, 0.33, 0.10, RIG_DARK, seg=32, caps=False)
-    cylinder(rig, 1.10, 0.0, roof + 0.36, 0.31, 0.08, RIG, seg=32, top_color=RIG)
-    for side in (1.0, -1.0):
-        cylinder(rig, wb - 0.10, side * (0.5 * W - 0.06), 0.98, 0.075, 0.16, RIG_DARK, seg=16)
-        cylinder(rig, -0.55, side * (0.5 * W - 0.10), 1.06, 0.07, 0.14, RIG_DARK, seg=16)
+    if d["rig"]:
+        box(rig, 1.10, 0.0, roof + 0.02, 0.95, 0.80, 0.05, RIG)
+        cylinder(rig, 1.10, 0.0, roof + 0.13, 0.34, 0.18, RIG, seg=32)
+        cylinder(rig, 1.10, 0.0, roof + 0.27, 0.33, 0.10, RIG_DARK, seg=32, caps=False)
+        cylinder(rig, 1.10, 0.0, roof + 0.36, 0.31, 0.08, RIG, seg=32, top_color=RIG)
+        for side in (1.0, -1.0):
+            cylinder(rig, wb - 0.10, side * (0.5 * W - 0.06), 0.98, 0.075, 0.16, RIG_DARK, seg=16)
+            cylinder(rig, -0.55, side * (0.5 * W - 0.10), 1.06, 0.07, 0.14, RIG_DARK, seg=16)
     antenna = Mesh("gnss_antenna")  # the simulated GNSS antenna position
-    cylinder(antenna, 1.60, 0.0, roof - 0.005, 0.07, 0.03, RIG_DARK, seg=16)
+    if d["kind"] == "cybercab":
+        ax = d["antenna_x"]
+        top = _section(params, (ax + params["rear_overhang"]) / params["length"])[2]
+        cylinder(antenna, ax, 0.0, top + 0.012, 0.07, 0.03, RIG_DARK, seg=16)
+    else:
+        cylinder(antenna, 1.60, 0.0, roof - 0.005, 0.07, 0.03, RIG_DARK, seg=16)
     scanner = Mesh("kerb_scanner")  # the active planar kerb scanner, front bumper centre at kerb height
     box(scanner, front - 0.02, 0.0, 0.20, 0.10, 0.22, 0.08, SCANNER)
     box(scanner, front + 0.031, 0.0, 0.20, 0.004, 0.18, 0.025, SCANNER_MARK)
