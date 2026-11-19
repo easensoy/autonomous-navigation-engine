@@ -245,6 +245,20 @@ SensorConditions sensorConditions(const std::string& name) {
         c.multipath = {0.15, 0.45};
         c.multipathBias = 6.0;
         c.multipathSigma = 1.0;
+    } else if (name == "nominal_sf") {
+        // The San Francisco network (SF-SOMA), frozen in benchmark/PROTOCOL_SF.md. Placed in metres along the route:
+        // both routes run 231 m along their first street before their first turn.
+    } else if (name == "gnss_outage_sf") {
+        c.outage = {50.0, 240.0, true};  // the straight's last 180 m and the turn's entry
+    } else if (name == "gnss_drift_sf") {
+        c.ramp = {40.0, 240.0, true};  // a simulated slow excursion: no jump, sustained at 4 m, decaying after the zone
+        c.rampRate = 0.3;
+        c.rampMax = 4.0;
+        c.rampSustain = true;
+    } else if (name == "kerb_map_error_sf") {
+        c.outage = {50.0, 240.0, true};
+        c.mapSegment = {90.0, 200.0, true};  // a misplaced map segment inside the outage: both kerbs 0.6 m to the route's right
+        c.mapKerbShift = -0.6;
     } else {
         throw std::invalid_argument("unknown sensor condition " + name);
     }
@@ -252,6 +266,69 @@ SensorConditions sensorConditions(const std::string& name) {
 }
 
 std::vector<std::string> conditionNamesDistrict() { return {"nominal_ldn", "gnss_outage_ldn", "multipath_ldn"}; }
+
+std::vector<std::string> conditionNamesSF() { return {"nominal_sf", "gnss_outage_sf", "gnss_drift_sf", "kerb_map_error_sf"}; }
+
+void mapErrorSegment(const LaneNetwork& truth, const MapKerbError& e, double& ax, double& ay, double& bx, double& by) {
+    const KerbLine& k = truth.kerbLines.at(static_cast<size_t>(e.line));
+    ax = k.ax + (k.bx - k.ax) * e.t0 + k.nx * e.offset;
+    ay = k.ay + (k.by - k.ay) * e.t0 + k.ny * e.offset;
+    bx = k.ax + (k.bx - k.ax) * e.t1 + k.nx * e.offset;
+    by = k.ay + (k.by - k.ay) * e.t1 + k.ny * e.offset;
+}
+
+LaneNetwork withMapErrors(const LaneNetwork& truth, const std::vector<MapKerbError>& errors) {
+    if (!truth.general) {
+        throw std::invalid_argument("map errors are modelled on the district networks only");
+    }
+    LaneNetwork map = truth;
+    for (const MapKerbError& e : errors) {
+        if (e.line < 0 || static_cast<size_t>(e.line) >= truth.kerbLines.size() || truth.kerbLines[static_cast<size_t>(e.line)].boundary) {
+            throw std::invalid_argument("map error on kerb line " + std::to_string(e.line) + ": no such kerb");
+        }
+        if (!(e.t0 > 0.0 && e.t0 < e.t1 && e.t1 < 1.0) || e.offset == 0.0) {
+            throw std::invalid_argument("map error on kerb line " + std::to_string(e.line) + ": needs 0 < t0 < t1 < 1 and an offset");
+        }
+        const KerbLine orig = truth.kerbLines[static_cast<size_t>(e.line)];
+        const double len = std::hypot(orig.bx - orig.ax, orig.by - orig.ay);
+        const double ux = (orig.bx - orig.ax) / len, uy = (orig.by - orig.ay) / len;
+        const double sg = e.offset > 0.0 ? 1.0 : -1.0;
+        // The steps' normals: into the map's carriageway, along the line (see withMapErrors in localisation.hpp).
+        const double s0x = -ux * sg, s0y = -uy * sg, s1x = ux * sg, s1y = uy * sg;
+        auto mean = [](double ax, double ay, double bx, double by, double& ox, double& oy) {
+            const double l = std::hypot(ax + bx, ay + by);
+            ox = (ax + bx) / l;
+            oy = (ay + by) / l;
+        };
+        const double p0x = orig.ax + (orig.bx - orig.ax) * e.t0, p0y = orig.ay + (orig.by - orig.ay) * e.t0;
+        const double p1x = orig.ax + (orig.bx - orig.ax) * e.t1, p1y = orig.ay + (orig.by - orig.ay) * e.t1;
+        const double q0x = p0x + orig.nx * e.offset, q0y = p0y + orig.ny * e.offset, q1x = p1x + orig.nx * e.offset, q1y = p1y + orig.ny * e.offset;
+        double j0x, j0y, j1x, j1y;  // pseudo-normals at the four new joints: the line's normal and the step's, averaged
+        mean(orig.nx, orig.ny, s0x, s0y, j0x, j0y);
+        mean(orig.nx, orig.ny, s1x, s1y, j1x, j1y);
+        auto line = [&](double ax, double ay, double bx, double by, double nx, double ny, double nax, double nay, double nbx, double nby) {
+            KerbLine k;
+            k.ax = ax;
+            k.ay = ay;
+            k.bx = bx;
+            k.by = by;
+            k.nx = nx;
+            k.ny = ny;
+            k.nax = nax;
+            k.nay = nay;
+            k.nbx = nbx;
+            k.nby = nby;
+            return k;
+        };
+        // The original line keeps its index and its first part; the rest is appended.
+        map.kerbLines[static_cast<size_t>(e.line)] = line(orig.ax, orig.ay, p0x, p0y, orig.nx, orig.ny, orig.nax, orig.nay, j0x, j0y);
+        map.kerbLines.push_back(line(p0x, p0y, q0x, q0y, s0x, s0y, j0x, j0y, j0x, j0y));                      // step out
+        map.kerbLines.push_back(line(q0x, q0y, q1x, q1y, orig.nx, orig.ny, j0x, j0y, j1x, j1y));             // the misplaced part
+        map.kerbLines.push_back(line(q1x, q1y, p1x, p1y, s1x, s1y, j1x, j1y, j1x, j1y));                      // step back
+        map.kerbLines.push_back(line(p1x, p1y, orig.bx, orig.by, orig.nx, orig.ny, j1x, j1y, orig.nbx, orig.nby));
+    }
+    return map;
+}
 
 std::vector<std::string> conditionNames(bool heldOut) {
     std::vector<std::string> base = {"nominal", "gnss_outage", "multipath", "wheel_slip", "imu_bias", "delay_drop"};
@@ -419,9 +496,9 @@ void SensorSimulator::step(double t, double dt, double x, double y, double yaw, 
     const bool mpOn = inMultipath_ && (c_.multipathPeriod <= 0.0 ||
                                        static_cast<long>(std::floor((t - mpSince_) / (0.5 * c_.multipathPeriod))) % 2 == 0);
     // Slow excursion: inside the zone the offset grows at rampRate until rampMax, then decays at the same rate,
-    // also after the zone; it never steps.
+    // also after the zone (or, sustained, holds at rampMax until the zone ends); it never steps.
     if (c_.rampRate > 0.0) {
-        const bool rising = inside(zones_.ramp) && rampInside_ * c_.rampRate < c_.rampMax;
+        const bool rising = inside(zones_.ramp) && (c_.rampSustain || rampInside_ * c_.rampRate < c_.rampMax);
         if (inside(zones_.ramp)) {
             rampInside_ += dt;
         }
