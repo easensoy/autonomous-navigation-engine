@@ -1,0 +1,8 @@
+{
+ "episode": "road_driving\\benchmark\\sf\\examples\\sf-a_gnss_drift_sf_seed8",
+ "outcome": "STOPPED_EN_ROUTE",
+ "min_clearance_body": 3.945,
+ "max_abs_along": 4.116,
+ "max_abs_lateral": 2.255,
+ "outage_windows": []
+}
