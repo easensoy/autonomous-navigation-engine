@@ -836,7 +836,8 @@ DistrictSpec districtKnightsbridge() {
 }
 
 // San Francisco, South of Market (SoMa), by the Caltrain station at 4th and Townsend: the block bounded by
-// Townsend, 5th, Brannan and 4th Streets, with Bluxome Street where it crosses 5th Street. Right-hand traffic.
+// Townsend, 5th, Brannan and 4th Streets, with Bluxome Street where it crosses 5th Street; 5th Street ends at
+// Townsend Street, across from the rail yard. Right-hand traffic.
 // The local frame is the WGS84 tangent plane at (37.7770 N, 122.3950 W): over the 0.83 km between the
 // patch's furthest junctions it reproduces geodesic distances between the mapped nodes to within 4 mm
 // (road_driving/tools/district_extract.py --check SFS). road_driving/viewer/districts/PROVENANCE.md has the
@@ -875,7 +876,7 @@ DistrictSpec districtSanFranciscoSoma() {
     const double l5 = std::hypot(b5.x - t5.x, b5.y - t5.y);
     const Q x5 = along(t5, b5, ((x5node.x - t5.x) * (b5.x - t5.x) + (x5node.y - t5.y) * (b5.y - t5.y)) / l5);
     const Q tne = along(t4, t5, -60.0), tsw = along(t5, t4, -50.0), bne = along(b4, b5, -60.0), bsw = along(b5, b4, -50.0);
-    const Q n4 = along(b4, t4, -50.0), s4 = along(t4, b4, -45.0), s5 = along(t5, b5, -50.0), n5 = along(b5, t5, -50.0);
+    const Q n4 = along(b4, t4, -50.0), s4 = along(t4, b4, -45.0), n5 = along(b5, t5, -50.0);
     const Q xne = along(x5, x4node, 40.0), xsw = along(x5, x4node, -40.0);
     d.junctions = {
         {"T4", t4.x, t4.y, 4.5, -1.0, false,
@@ -883,7 +884,10 @@ DistrictSpec districtSanFranciscoSoma() {
          "centre; traffic signals, not modelled"},
         {"B4", b4.x, b4.y, 4.5, -1.0, false,
          "midpoint of OSM nodes 65315477 and 6329528588 (4th Street x Brannan Street), moved 1.1 m north-east likewise; traffic signals, not modelled"},
-        {"T5", t5.x, t5.y, 4.5, -1.0, false, "OSM node 65325061, 5th Street x Townsend Street; an all-way stop, not modelled"},
+        // 5th Street ends at Townsend Street: beyond it lies the Caltrain rail yard, which OpenStreetMap enters only by an
+        // unnamed service road (way 564080511); 5th Street resumes south of the yard, at King Street, outside the patch.
+        {"T5", t5.x, t5.y, 4.5, -1.0, false,
+         "OSM node 65325061, 5th Street x Townsend Street: a T-junction, 5th Street ending at Townsend Street; an all-way stop, not modelled"},
         // A narrow street meets a wide one: the lanes end 11 m from the junction, so that the near-side turns out
         // of Bluxome Street fit a 5.5 m or larger arc.
         {"X5", x5.x, x5.y, 3.0, 11.0, false, "OSM node 65324087, 5th Street x Bluxome Street, projected 0.5 m onto 5th Street's line"},
@@ -894,7 +898,6 @@ DistrictSpec districtSanFranciscoSoma() {
         {"BSW", bsw.x, bsw.y, 6.0, -1.0, true, "patch edge on Brannan Street, 50 m south-west of 5th Street (towards 6th Street)"},
         {"N4", n4.x, n4.y, 6.0, -1.0, true, "patch edge on 4th Street, 50 m north-west of Brannan Street (towards Bryant Street)"},
         {"S4", s4.x, s4.y, 6.0, -1.0, true, "patch edge on 4th Street, 45 m south-east of Townsend Street (towards King Street)"},
-        {"S5", s5.x, s5.y, 6.0, -1.0, true, "patch edge on 5th Street, 50 m south-east of Townsend Street (towards King Street)"},
         {"N5", n5.x, n5.y, 6.0, -1.0, true, "patch edge on 5th Street, 50 m north-west of Brannan Street (towards Bryant Street)"},
         {"XNE", xne.x, xne.y, 6.0, -1.0, true, "patch edge on Bluxome Street, 40 m north-east of 5th Street (Bluxome Street carries on to 4th Street)"},
         {"XSW", xsw.x, xsw.y, 6.0, -1.0, true, "patch edge on Bluxome Street, 40 m south-west of 5th Street (towards 6th Street)"},
@@ -926,7 +929,6 @@ DistrictSpec districtSanFranciscoSoma() {
         {"Brannan Street", "BSW", "B5", 0, 8.8, 0.0, 1.8, "OSM ways 1120695892, 397127924 (secondary)", br},
         {"Brannan Street", "B5", "B4", 0, 8.8, 0.0, 1.8, "OSM ways 396951398, 396951397, 1120695893 (secondary, lanes=3)", br},
         {"Brannan Street", "B4", "BNE", 0, 8.8, 0.0, 1.8, "OSM ways 396952210, 769990214 (secondary, lanes=3)", br},
-        {"5th Street", "S5", "T5", 0, 8.8, 0.0, 1.65, "OSM 5th Street ways south-east of Townsend Street (tertiary)", ff},
         {"5th Street", "T5", "X5", 0, 8.8, 0.0, 1.65, "OSM ways 1089572944, 1120887426 (tertiary, cycleway=track)", ff},
         {"5th Street", "X5", "B5", 0, 8.8, 0.0, 1.65, "OSM ways 674189179, 1124155909 (tertiary, lanes=3, cycleway=track)", ff},
         {"5th Street", "B5", "N5", 0, 8.8, 0.0, 1.65, "OSM way 1120887425 (tertiary, lanes=4)", ff},
