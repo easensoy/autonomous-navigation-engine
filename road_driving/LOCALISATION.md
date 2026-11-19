@@ -4,7 +4,7 @@ The car can drive on its own state estimate instead of simulator truth. The worl
 
 Labels: **SIMULATED_SENSORS** and **ESTIMATED_POSE**. The kerb scanner is simulated: its ranges are cast from the scanner's true pose to the mapped kerbs, shifted by a modelled deviation of the real kerb from the map. Kerb registration matches those ranges to the map. Nothing here is processed lidar or camera data.
 
-Six evaluations, each predeclared and pushed before its held-out run:
+Seven evaluations, each predeclared before its held-out run:
 
 | Evaluation | Question | Tested | Development | Held out |
 |---|---|---|---|---|
@@ -14,6 +14,7 @@ Six evaluations, each predeclared and pushed before its held-out run:
 | Fourth | does the stack's re-join after pose corrections help on unseen roads, at no cost? | the five filters, each driven with and without the re-join | R3 and R4 | R5 ([protocol](benchmark/PROTOCOL_R5.md), [results](benchmark/heldout-r5)) |
 | Fifth | does re-joining only map-verified corrections keep the gain and remove the cost? | the five filters, each driven with and without the verified re-join | R3 to R5 | R6 ([protocol](benchmark/PROTOCOL_R6.md), [results](benchmark/heldout-r6)) |
 | Sixth | does re-joining only unique kerb matches remove the harm of wrong ones and keep the gain? | the five filters, each driven with and without the unique re-join; the kerb filters also with the R6 version | R3 to R6 | R7 ([protocol](benchmark/PROTOCOL_R7.md), [results](benchmark/heldout-r7)) |
+| Seventh | do the unchanged filters and stack carry over to a right-hand-traffic district, a second vehicle and a misplaced map segment? | every filter open loop; `ekf_kerb2` and `ekf_int2` driven; the I-PACE proxy as the transfer | SF-A, seeds 901 to 905 | SF-B and seeds 1 to 15 on `SF-SOMA` ([protocol](benchmark/PROTOCOL_SF.md), [results](benchmark/sf)) |
 
 ## Frames, units and time
 
@@ -270,7 +271,7 @@ This reruns every estimator from that folder's `sensors.csv` and `truth.csv` and
 
 ## Results
 
-All measured on 17 and 18 November 2026 on one Windows 11 laptop, with seeds 1 to 10.
+All measured on 17 to 19 November 2026 on one Windows 11 laptop, with seeds 1 to 10 (San Francisco: 1 to 15).
 
 | Evaluation | Network | Build | Open loop | Closed loop | Full tables |
 |---|---|---|---|---|---|
@@ -283,8 +284,9 @@ All measured on 17 and 18 November 2026 on one Windows 11 laptop, with seeds 1 t
 | Fourth, held out | R5 | MSVC 19.51 at `2966c0a` | 210 drives, 1,680 runs | 2,840 episodes | [`benchmark/heldout-r5/`](benchmark/heldout-r5) |
 | Fifth, held out | R6 | MSVC 19.51 at `aa20e04` | 210 drives, 1,680 runs | 2,840 episodes | [`benchmark/heldout-r6/`](benchmark/heldout-r6) |
 | Sixth, held out | R7 | MSVC 19.51 at `27a1ec8` | 210 drives, 1,680 runs | 3,400 episodes | [`benchmark/heldout-r7/`](benchmark/heldout-r7) |
+| Seventh | `SF-SOMA` | MSVC 19.51 at `5f2c004` | 120 drives, 960 runs, for each of two vehicles | 270 + 150 episodes | [`benchmark/sf/`](benchmark/sf) |
 
-Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`, [fourth](benchmark/PROTOCOL_R5.md) in `2966c0a`, [fifth](benchmark/PROTOCOL_R6.md) in `aa20e04`, [sixth](benchmark/PROTOCOL_R7.md) in `27a1ec8`. No held-out network was used for tuning. The development reruns of the fifth and sixth evaluations are described in their protocols ([fifth](benchmark/PROTOCOL_R6.md#what-development-did), [sixth](benchmark/PROTOCOL_R7.md#what-development-did)).
+Each protocol was pushed before its held-out run: [first](benchmark/PROTOCOL.md) in `62a742a`, [second](benchmark/PROTOCOL_R3.md) in `9332dd3`, [third](benchmark/PROTOCOL_R4.md) in `87436de`, [fourth](benchmark/PROTOCOL_R5.md) in `2966c0a`, [fifth](benchmark/PROTOCOL_R6.md) in `aa20e04`, [sixth](benchmark/PROTOCOL_R7.md) in `27a1ec8`. The [seventh](benchmark/PROTOCOL_SF.md) was committed in `5f2c004` before its run. No held-out network was used for tuning. The development reruns of the fifth and sixth evaluations are described in their protocols ([fifth](benchmark/PROTOCOL_R6.md#what-development-did), [sixth](benchmark/PROTOCOL_R7.md#what-development-did)).
 
 ### First evaluation: held out on R2
 
@@ -579,6 +581,37 @@ R7's conditions were designed to produce large kerb corrections: correct ones wh
 
 **What this means.** Counting only unambiguous kerb matches did what it was meant to do. On unseen roads the re-join kept its gain where kerbs returned, and where the R6 version followed wrong matches into deeper crossings, it followed nothing. The one criterion it failed was failed by a correct correction. Followed, it let the car drive on with an along-road error the kerbs had not yet seen, and that the filter did not report. Without the re-join, the monitor's fallback stop had halted that car first. A lateral correction after GNSS drift is evidence that the along-road position is also wrong.
 
+### Seventh evaluation: San Francisco, the unchanged filters on a new network
+
+**What changed.** Nothing in the filters or the stack: the five filters, `locpolicy`, `clearpolicy` and the unique re-join are those frozen for R7. What is new is where they run and on what:
+- **A district with right-hand traffic:** SoMa, San Francisco, built from a pinned OpenStreetMap extract (5 junctions, 9 patch edges, 25 lanes; [provenance](viewer/districts/PROVENANCE.md#san-francisco-soma)). Two routes drive its streets in opposite directions: SF-A with near-side right turns, SF-B with left turns across the opposing lane.
+- **A second vehicle profile:** the Cybercab-inspired proxy. The simulated sensors and the estimators' lever arms both use its mounts. The I-PACE proxy drove the same routes, conditions and seeds, as the transfer test.
+- **A map error kept apart from the world:** the vehicle's map, used by the estimator and the stack, can differ from the world's kerb, used by the scanner and the evaluator.
+- **Extended metrics:** along-road and lateral error in the true heading's frame, per-axis consistency, the fault window's timing, and integrity delays.
+
+Development used SF-A with seeds 901 to 905; SF-B and seeds 1 to 15 were held out. A first run was stopped unread when a provenance check found that the network continued 5th Street into the Caltrain rail yard. The network was corrected and the protocol committed again ([details](benchmark/PROTOCOL_SF.md#a-first-run-stopped)).
+
+| # | Criterion | Result | Verdict |
+|---|---|---|---|
+| P1 | `gnss_outage_sf`: `ekf_kerb2`'s error when GNSS returns below dead reckoning's in at least 27 of 30 pairs, its median at most 0.50 m | 30 of 30; median 0.027 m (dead reckoning 4.75 m) | passed |
+| P2 | `nominal_sf`: `ekf_kerb2`'s lateral 95th percentile at most 0.10 m, every run's 95th percentile at most 0.50 m; no EKF run fails; median NEES within 0.5 to 6 | lateral at most 0.051 m; worst run 0.383 m; none failed; NEES 1.15 to 1.40 | passed |
+| P3 | `nominal_sf` and `gnss_outage_sf`, closed loop: `ekf_kerb2` as the reference in at least 29 of 30, with no crossing and no fallback stop | 30 of 30 in each | passed |
+| P4 | `kerb_map_error_sf`: no `ekf_kerb2` episode over a kerb | none; 24 of 30 completed, 6 fallback stops | passed |
+| P5 | Reported: the R7-A seed 7 mechanism | 13 of 30 runs entered the turn with more than 1 m of along-road error and under 0.3 m lateral; 10 of those episodes ended in fallback stops for lateral error; none crossed | mechanism reproduced; no crossing |
+| P6 | `nominal_sf`: no integrity alarm | none | passed |
+| P7 | The I-PACE proxy, on its own logs: P1's test | 30 of 30; median 0.029 m | passed |
+
+**What San Francisco showed.**
+- **Kerbs carried a 190 m outage into a turn.** `ekf_kerb2` held the lateral error and was 0.027 m from the truth when the fixes returned (median). The filters without kerbs were 1.21 m off, and in closed loop `ekf_int2` stopped for localisation inside the outage in all 30 episodes. `ekf_kerb2` completed all 30.
+- **R7's along-road blindness, without a correction.** The drift grew at 0.3 m/s to 4 m along a 231 m straight. The kerbs held its across-road part, and the monitor flagged it. They could not see its along-road part.
+  - In 13 of 30 runs `ekf_kerb2` entered the turn 1.76 to 3.99 m along the road from the truth. Its own 95% interval held only 55 to 71% of its along-road errors over those drives.
+  - Nine of the 13 were flagged inside the drift window, with the error already built up; four only at the turn.
+  - In the turn that error became lateral, and 10 of those 13 closed-loop episodes ended in fallback stops for lateral error. The streets' width left at least 3.94 m of clearance, so the mechanism that crossed a kerb on R7 ended in stops here.
+- **A misplaced map segment was followed.** For 110 m, both kerbs in the vehicle's map were 0.6 m to one side. `ekf_kerb2` followed them (median largest lateral error beside them 0.64 m). It left the outage 1.69 m from the truth, almost all along the road, against 1.21 m without kerbs. In closed loop 6 of 30 episodes ended in fallback stops at the next turn, none over a kerb.
+- **The vehicle transfer held.** On the I-PACE proxy's own logs, with its sensors 0.29 to 0.30 m further forward, every result above had the same shape (closed loop: 30, 30, 20 and 22 of 30 completed).
+
+**What this means.** The filters and the stack transferred to a right-hand-traffic district and a second vehicle without a change: every judged criterion passed, and no episode crossed a kerb. What did not go away is the along-road blindness R7 exposed. On a straight, kerbs cannot see along-road error, and the filter does not report it. In San Francisco a slow GNSS drift produced it, not a correction, and wider streets turned it into fallback stops instead of a crossing. A map whose two kerbs are both misplaced has a similar effect: the scans fit it, so nothing flags it.
+
 ### Failure cases and the next improvement
 
 #### After the second evaluation (R3)
@@ -622,11 +655,12 @@ The third increment answered T1 with a way out of FAULTED, and T8 with kerb re-l
 
 **What the evidence supports now:**
 - **Distrust the along-road position after a large lateral kerb correction.** On R7 the one crossing the re-join caused followed a correct 1.2 m lateral correction after GNSS drift. The same drift had left 2.7 m of along-road error, while the filter reported a sigma under 0.35 m. Inflating the along-road covariance by the size of such a correction would let the localisation policy slow the car until a junction's kerbs fix the along-road position. Claiming it would need a new held-out network, because R7 has now been used.
+- **Distrust the along-road position from a drift's onset once the monitor flags it.** In San Francisco the monitor flagged nine of the 13 along-road drifts inside the window, while `ekf_kerb2` kept the along-road position it had taken from the drifting fixes until then. The protocol did not test this.
 - **Earlier re-localisation for `ekf_kerb2`.** The remaining development crossing (R3-B, seed 2) came from a match found only mid-turn, one return short of the uniqueness margin.
 - **A better fault offset for `ekf_int2`:** remember it from several fixes after the onset, not one.
 
 ## Not done
 
 - **UKF:** not implemented. Every failure above is a model, integrity or stack gap (an unobservable bias, a missing recovery path, a controller's response to a pose jump), not linearisation error, so no question remains that a UKF would answer.
-- **Real sensor data:** none. The kerb scanner is simulated against the same map the filter uses, up to a modelled 0.03 m deviation. One map error was tested on R4 and R7: a kerb section 0.5 m further out than mapped. Roadworks, kerbs moved inwards and lane markings were not.
+- **Real sensor data:** none. The kerb scanner is simulated against the same map the filter uses, up to a modelled 0.03 m deviation. One map error was tested on R4 and R7: a kerb section 0.5 m further out than mapped. San Francisco tested a 110 m segment whose two kerbs are 0.6 m to one side in the vehicle's map. Roadworks and lane markings were not.
 - **Comparison with published results:** none is made. No public localisation result uses this simulator, these sensors and these metrics. Every comparison here is between the estimators run here, on identical inputs.
