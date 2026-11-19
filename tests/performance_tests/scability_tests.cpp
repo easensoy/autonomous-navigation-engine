@@ -21,6 +21,27 @@
 #include <tuple>
 #include <utility>
 
+namespace {
+
+// The engine prints a line for every node and edge it adds and for most search steps: about 3.8
+// million lines here. They are silenced while graphs are built and searched, so the timings measure
+// the searches, not the console.
+class CoutSilencer {
+public:
+    CoutSilencer() : saved(std::cout.rdbuf(nullptr)) {}
+    ~CoutSilencer() {
+        std::cout.rdbuf(saved);
+        std::cout.clear();
+    }
+    CoutSilencer(const CoutSilencer&) = delete;
+    CoutSilencer& operator=(const CoutSilencer&) = delete;
+
+private:
+    std::streambuf* saved;
+};
+
+}  // namespace
+
 /**
  * ScalabilityTester: Comprehensive performance scaling analysis
  * 
@@ -239,7 +260,11 @@ private:
         result.graphSize = graphSize;
         result.graphDensity = density;
         
-        auto graph = graphGenerator(graphSize);
+        std::shared_ptr<Graph> graph;
+        {
+            CoutSilencer quiet;
+            graph = graphGenerator(graphSize);
+        }
         result.edgeCount = graph->getEdgeCount();
         
         auto testPairs = generateTestPairs(graph, pathsPerSize);
@@ -261,6 +286,7 @@ private:
                 if (!graph->hasNode(start) || !graph->hasNode(goal)) continue;
                 
                 try {
+                    CoutSilencer quiet;  // restored before the handler below prints
                     auto algorithm = constructor(graph.get());
                     
                     // Measure execution time and memory
@@ -636,31 +662,36 @@ public:
         for (size_t size : memorySizes) {
             std::cout << "Testing memory usage at " << size << " nodes..." << std::endl;
             
-            // Create graph and measure memory before/after pathfinding
-            auto graph = std::make_shared<Graph>();
-            
-            // Create dense graph for maximum memory pressure
-            for (size_t i = 0; i < size; ++i) {
-                graph->addNode(static_cast<int>(i), "Node_" + std::to_string(i), 
-                              (i % 50) * 10.0, (i / 50) * 10.0);
-            }
-            
-            // Add connections
-            for (size_t i = 0; i < size; ++i) {
-                for (size_t j = i + 1; j < std::min(i + 10, size); ++j) {
-                    graph->addEdge(static_cast<int>(i), static_cast<int>(j), 1.0);
+            std::vector<int> path;
+            {
+                CoutSilencer quiet;
+                
+                // Create graph and measure memory before/after pathfinding
+                auto graph = std::make_shared<Graph>();
+                
+                // Create dense graph for maximum memory pressure
+                for (size_t i = 0; i < size; ++i) {
+                    graph->addNode(static_cast<int>(i), "Node_" + std::to_string(i), 
+                                  (i % 50) * 10.0, (i / 50) * 10.0);
                 }
+                
+                // Add connections
+                for (size_t i = 0; i < size; ++i) {
+                    for (size_t j = i + 1; j < std::min(i + 10, size); ++j) {
+                        graph->addEdge(static_cast<int>(i), static_cast<int>(j), 1.0);
+                    }
+                }
+                
+                // Test A* memory usage
+                AStar astar(graph.get());
+                astar.setHeuristicFunction([graph](int nodeId, int goalId) {
+                    const Node& node = graph->getNode(nodeId);
+                    const Node& goal = graph->getNode(goalId);
+                    return node.euclideanDistance(goal);
+                });
+                
+                path = astar.findPath(0, static_cast<int>(size - 1));
             }
-            
-            // Test A* memory usage
-            AStar astar(graph.get());
-            astar.setHeuristicFunction([graph](int nodeId, int goalId) {
-                const Node& node = graph->getNode(nodeId);
-                const Node& goal = graph->getNode(goalId);
-                return node.euclideanDistance(goal);
-            });
-            
-            auto path = astar.findPath(0, static_cast<int>(size - 1));
             
             if (!path.empty()) {
                 std::cout << "  A* successfully handled " << size 
