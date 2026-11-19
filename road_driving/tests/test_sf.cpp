@@ -77,12 +77,15 @@ void trafficSide() {
     check(sf.spec.penaltyLeft > sf.spec.penaltyRight && ken.spec.penaltyRight > ken.spec.penaltyLeft,
           "the turn across the opposing lane costs the larger penalty: left in San Francisco, right in London",
           "SF left " + num(sf.spec.penaltyLeft, 1) + " s, right " + num(sf.spec.penaltyRight, 1) + " s");
-    // At 5th and Townsend, from Townsend south-west-bound: into 5th north-west-bound is a right turn, towards King
-    // Street a left turn; the right turn keeps to the near side on a tighter arc than the left turn.
-    const int right5 = connectorOf(sf, "T4>T5", "T5>X5"), left5 = connectorOf(sf, "T4>T5", "T5>S5");
+    // 5th Street ends at Townsend Street (a T-junction across from the rail yard). From 5th south-east-bound: onto
+    // Townsend south-west-bound is a right turn, north-east-bound a left turn; the right turn keeps to the near side
+    // on a tighter arc than the left turn, which crosses the opposing carriageway.
+    const int right5 = connectorOf(sf, "X5>T5", "T5>TSW"), left5 = connectorOf(sf, "X5>T5", "T5>T4");
     check(right5 >= 0 && left5 >= 0 && sf.elements[static_cast<size_t>(right5)].turn == Turn::Right &&
               sf.elements[static_cast<size_t>(left5)].turn == Turn::Left,
-          "T5: from Townsend south-west-bound, 5th Street north-west-bound is a right turn and south-east-bound a left turn");
+          "T5: from 5th Street south-east-bound, Townsend south-west-bound is a right turn and north-east-bound a left turn");
+    check(sf.lane("T5>S5") < 0 && sf.lane("S5>T5") < 0 && connectorOf(sf, "T4>T5", "T5>X5") >= 0 && connectorOf(sf, "TSW>T5", "T5>X5") >= 0,
+          "T5 is a T-junction: 5th Street does not continue south-east of Townsend, and both Townsend approaches turn into it");
     auto maxCurv = [&](int e) {
         double k = 0.0;
         for (const PathPoint& p : sf.elements[static_cast<size_t>(e)].pts) k = std::max(k, std::fabs(p.kappa));
@@ -166,7 +169,7 @@ void geometry() {
         const double r = net.rayToKerb(sx, sy, -k.nx, -k.ny, 25.0);
         seen += (r > 0.0 && std::fabs(r - 6.0) < 0.5) ? 1 : 0;
     }
-    check(edges == 10 && seen == 0, "SF-SOMA: its 10 patch edges give the scanner no return");
+    check(edges == 9 && seen == 0, "SF-SOMA: its 9 patch edges give the scanner no return");
 }
 
 void routes() {
