@@ -1,22 +1,23 @@
-// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 to R7, and the
-// localisation benchmark.
+// road_drive: run, list and replay closed-loop episodes on the synthetic networks R1 to R7 and the district
+// networks (London, San Francisco), and the localisation benchmark.
 //
 //   road_drive list
 //   road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]
 //   road_drive replay <episode dir>
 //   road_drive suite [--variant B0|B1] [--seeds N]
 //   road_drive drive <scenario|route> --condition C [--mode ground_truth|estimated] [--estimator NAME] [--feasibility on|off]
-//                    [--rejoin off|on|verified|unique] [--seed N] [--out DIR]
+//                    [--rejoin off|on|verified|unique] [--vehicle PROFILE] [--seed N] [--out DIR]
 //   road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]   (stored sensor log; no world simulation)
-//   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] --out DIR
-//   road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] [--scenario A,B] [--rejoin off|on|verified|unique] --out DIR
-//   road_drive map R1|R2|R3|R4|R5|R6|R7 [--json FILE]
-//   road_drive live [--scenario NAME --condition C --estimator E --seed N --mode M --rejoin R] [--speed X]
+//   road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7|sf-dev|sf|sf-ipace [--seeds N] --out DIR
+//   road_drive bench-closed --split ...same... [--seeds N] [--scenario A,B] [--rejoin off|on|verified|unique] --out DIR
+//   road_drive map R1..R7|KEN|KNB|SF-SOMA [--vehicle PROFILE] [--json FILE] [--scene FILE]
+//   road_drive live [--scenario NAME --condition C --estimator E --seed N --mode M --rejoin R --vehicle PROFILE] [--speed X]
 //                   [--observe-every N] [--paused on] [--replay SESSION] [--script FILE] [--session-out FILE]
 //   road_drive session-replay SESSION
 //
-// Every episode uses synthetic roads and an oracle closure report. Pose is simulator truth unless the
-// mode is "estimated", when the stack drives on the estimator's output.
+// Vehicle profiles: ipace_proxy_v1 (the default) and cybercab_proxy_v1 (vehicle.hpp). Every episode has an
+// oracle closure report and no other traffic. Pose is simulator truth unless the mode is "estimated", when the
+// stack drives on the estimator's output.
 #include "road_driving/benchmark.hpp"
 #include "road_driving/episode.hpp"
 #include "road_driving/live.hpp"
@@ -55,12 +56,13 @@ int usage() {
                  "usage:\n  road_drive list\n  road_drive run <scenario> [--variant B0|B1] [--seed N] [--out DIR]\n"
                  "  road_drive replay <episode dir>\n  road_drive suite [--variant B0|B1] [--seeds N]\n"
                  "  road_drive drive <scenario|route> [--condition C] [--mode ground_truth|estimated] [--estimator NAME]\n"
-                 "                   [--feasibility on|off] [--rejoin off|on|verified|unique] [--seed N] [--out DIR]\n"
+                 "                   [--feasibility on|off] [--rejoin off|on|verified|unique] [--vehicle PROFILE] [--seed N] [--out DIR]\n"
                  "  road_drive localise <episode dir> [--estimators a,b] [--config k=v,...]\n"
-                 "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] --out DIR\n"
-                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7 [--seeds N] [--scenario A,B] [--rejoin off|on|verified|unique] --out DIR\n"
-                 "  road_drive map R1|R2|R3|R4|R5|R6|R7 [--json FILE]\n"
-                 "  road_drive live [--scenario NAME --condition C --estimator E --seed N --mode M --rejoin R] [--speed X]\n"
+                 "  road_drive bench-loc --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7|sf-dev|sf|sf-ipace [--seeds N] --out DIR\n"
+                 "  road_drive bench-closed --split dev|heldout|r2|r3|r3dev|r4|r5|r6|r7|sf-dev|sf|sf-ipace [--seeds N] [--scenario A,B]\n"
+                 "                   [--rejoin off|on|verified|unique] --out DIR\n"
+                 "  road_drive map R1..R7|KEN|KNB|SF-SOMA [--vehicle PROFILE] [--json FILE] [--scene FILE]\n"
+                 "  road_drive live [--scenario NAME --condition C --estimator E --seed N --mode M --rejoin R --vehicle PROFILE] [--speed X]\n"
                  "                  [--observe-every N] [--paused on] [--replay SESSION] [--script FILE] [--session-out FILE]\n"
                  "  road_drive session-replay SESSION\n");
     return 2;
@@ -148,13 +150,22 @@ int drive(const std::string& name, std::map<std::string, std::string>& opt) {
     sc.feasibility = !opt.count("--feasibility") || opt["--feasibility"] != "off";
     if (opt.count("--rejoin") && !parseRejoin(opt["--rejoin"], sc.rejoin)) return usage();
     if (opt.count("--variant") && !parseVariant(opt["--variant"], sc.variant)) return usage();
+    if (opt.count("--vehicle")) {
+        VehicleParams probe;
+        if (!findVehicleProfile(opt["--vehicle"], probe)) {
+            std::fprintf(stderr, "unknown vehicle profile '%s' (known: ipace_proxy_v1, cybercab_proxy_v1)\n", opt["--vehicle"].c_str());
+            return 2;
+        }
+        sc.vehicle = opt["--vehicle"];
+    }
     const EpisodeResult r = runEpisode(sc);
     printSummary(r);
     const Metrics& m = r.metrics;
-    std::printf("  mode=%s estimator=%s feasibility=%s rejoin=%s condition=%s: min clearance %.3f m, body over a kerb in %d samples (deepest %.3f m), "
-                "lane-association errors %d of %d, localisation stops %d, clearance stops %d (unwarranted %d), estimate RMSE %.3f m (p95 %.3f, "
-                "max %.3f), GNSS outages %zu\n",
-                sc.mode.c_str(), sc.estimator.c_str(), sc.feasibility ? "on" : "off", rejoinName(sc.rejoin), sc.condition.c_str(), m.minClearance,
+    std::printf("  vehicle=%s mode=%s estimator=%s feasibility=%s rejoin=%s condition=%s: min clearance %.3f m, body over a kerb in %d samples "
+                "(deepest %.3f m), lane-association errors %d of %d, localisation stops %d, clearance stops %d (unwarranted %d), estimate RMSE %.3f m "
+                "(p95 %.3f, max %.3f), GNSS outages %zu\n",
+                sc.vehicle.c_str(), sc.mode.c_str(), sc.estimator.c_str(), sc.feasibility ? "on" : "off", rejoinName(sc.rejoin), sc.condition.c_str(),
+                m.minClearance,
                 m.clearanceViolations,
                 m.maxCrossing, m.associationErrors, m.associationSamples, m.localisationStops, m.clearanceStops, m.unwarrantedStops, m.estRmse, m.estP95,
                 m.estMax, r.outages.size());
@@ -183,6 +194,7 @@ int live(std::map<std::string, std::string>& opt) {
         };
         lo.initialConfig = "{\"scenario\":\"" + opt["--scenario"] + "\"" + field("condition", "--condition", "nominal") +
                            field("estimator", "--estimator", "ekf") + field("mode", "--mode", "estimated") + field("rejoin", "--rejoin", "unique") +
+                           (opt.count("--vehicle") ? field("vehicle", "--vehicle", "") : std::string()) +
                            ",\"seed\":" + (opt.count("--seed") ? opt["--seed"] : std::string("1")) + "}";
     }
 #ifdef _WIN32
@@ -246,7 +258,19 @@ int localise(const std::string& dir, std::map<std::string, std::string>& opt) {
         std::fprintf(stderr, "localise: %s\n", error.empty() ? "bad truth.csv" : error.c_str());
         return 2;
     }
-    const LaneNetwork net = buildNetwork(kv.count("network_name") ? kv["network_name"] : "R1");
+    const LaneNetwork world = buildNetwork(kv.count("network_name") ? kv["network_name"] : "R1");
+    // The estimators get the map the vehicle used: the world's, or with the recorded map error ("line:offset:t0:t1;...").
+    std::vector<MapKerbError> mapErrors;
+    {
+        std::istringstream in(kv.count("map_errors") ? kv["map_errors"] : std::string());
+        for (std::string item; std::getline(in, item, ';');) {
+            std::istringstream fs(item);
+            std::string f[4];
+            for (std::string& s : f) std::getline(fs, s, ':');
+            if (!f[3].empty()) mapErrors.push_back({std::stoi(f[0]), std::stod(f[1]), std::stod(f[2]), std::stod(f[3])});
+        }
+    }
+    const LaneNetwork net = mapErrors.empty() ? world : withMapErrors(world, mapErrors);
     std::vector<std::vector<StateEstimate>> traces;
     // Development options: --estimators a,b,c and --config key=value,... (defaults: all estimators, the frozen configuration).
     std::vector<std::string> names = estimatorNamesExtended();
@@ -255,7 +279,13 @@ int localise(const std::string& dir, std::map<std::string, std::string>& opt) {
         std::istringstream in(opt["--estimators"]);
         for (std::string n; std::getline(in, n, ',');) names.push_back(n);
     }
-    EstimatorConfig cfg;
+    // The lever arms are the recorded vehicle's (older logs: the I-PACE proxy's, the defaults).
+    VehicleParams vp;
+    if (!findVehicleProfile(kv.count("vehicle_profile") ? kv["vehicle_profile"] : "ipace_proxy_v1", vp)) {
+        std::fprintf(stderr, "localise: unknown vehicle profile %s\n", kv["vehicle_profile"].c_str());
+        return 2;
+    }
+    EstimatorConfig cfg = estimatorConfigFor(vp);
     if (opt.count("--config") && !applyConfigOverrides(opt["--config"], cfg, error)) {
         std::fprintf(stderr, "localise: %s\n", error.c_str());
         return 2;
@@ -287,7 +317,7 @@ int localise(const std::string& dir, std::map<std::string, std::string>& opt) {
 
 int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
     const LaneNetwork net = buildNetwork(name);
-    const VehicleParams vp;
+    const VehicleParams vp = vehicleProfile(opt.count("--vehicle") ? opt["--vehicle"] : "ipace_proxy_v1");
     const auto errs = net.validate();
     int segments = 0, connectors = 0;
     double minClear = 1e9;
@@ -308,10 +338,12 @@ int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
             if (it == byKind.end() || c < it->second.first) byKind[kind] = {c, e.name};
         }
     }
-    std::printf("network %s: %zu junctions, %zu lanes, %d lane segments, %d turning movements, %zu banned turns; validation %s\n", name.c_str(),
-                net.junctions.size(), net.lanes.size(), segments, connectors, net.banned.size(), errs.empty() ? "passes" : errs.front().c_str());
-    std::printf("footprint with mirrors driven exactly along every movement: smallest clearance to a carriageway edge %.3f m at %s\n", minClear,
-                worst.c_str());
+    std::printf("network %s (%s traffic): %zu junctions, %zu lanes, %d lane segments, %d turning movements, %zu banned turns; validation %s\n",
+                name.c_str(), net.spec.rightHand ? "right-hand" : "left-hand", net.junctions.size(), net.lanes.size(), segments, connectors,
+                net.banned.size(), errs.empty() ? "passes" : errs.front().c_str());
+    std::printf("%s footprint with mirrors (%.3f m by %.3f m) driven exactly along every movement: smallest clearance to a carriageway edge %.3f m at "
+                "%s\n",
+                vp.id, vp.length, vp.widthMirrors, minClear, worst.c_str());
     for (const auto& k : byKind) {
         std::printf("  %-14s smallest clearance %7.3f m (%s)\n", k.first.c_str(), k.second.first, k.second.second.c_str());
     }
@@ -367,6 +399,11 @@ int mapCmd(const std::string& name, std::map<std::string, std::string>& opt) {
         }
         o << "]}\n";
         std::printf("wrote %s\n", opt["--json"].c_str());
+    }
+    if (opt.count("--scene")) {  // the map as the live server's scene message carries it: kerb lines and arcs, streets, district
+        std::ofstream o(opt["--scene"], std::ios::binary);
+        o << sceneJson(net) << "\n";
+        std::printf("wrote %s\n", opt["--scene"].c_str());
     }
     return errs.empty() ? 0 : 1;
 }
