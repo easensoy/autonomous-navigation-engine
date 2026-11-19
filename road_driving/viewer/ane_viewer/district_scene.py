@@ -19,7 +19,7 @@ from panda3d.core import LineSegs, NodePath, TextNode, TransparencyAttrib, Vec4
 
 from . import facades as F
 from . import geometry as g
-from .district_layout import STOREY, Kerb, layout, seg_distance, stable_hash  # noqa: F401 - Kerb is re-exported
+from .district_layout import STOREY, Kerb, layout, seg_distance, stable_hash, us_style  # noqa: F401 - Kerb is re-exported
 from .occlusion import point_in_polygon
 from .render_util import Builder, Materials
 
@@ -111,24 +111,32 @@ def build(scene_msg, quality="medium"):
         report["styles"][style] = report["styles"].get(style, 0) + 1
 
     # ---- Trees, railings, street furniture -------------------------------------------------------------
+    us = us_style(info["id"])
     for x, y, src in plan["trees"]:
         _tree(mats, x, y, rng)
     for bar in data["barriers"]:
         if _barrier(mats, bar, kerb):
             report["barriers"] += 1
-    _furniture(mats, m, kerb, footprints, rng, info["id"], occ)
+    if us:
+        _furniture_us(mats, m, kerb, footprints, occ)
+        report["rail"] = _rail(mats, data.get("rail") or [], kerb)
+    else:
+        _furniture(mats, m, kerb, footprints, rng, info["id"], occ)
     mats.attach(decor)
 
     # ---- Markings ----------------------------------------------------------------------------------------
     marks = Builder("markings")
-    _markings(marks, m)
+    (_markings_us if us else _markings)(marks, m)
     decor.attachNewNode(marks.node())
 
     # ---- Signs and name plates (text) -------------------------------------------------------------------
     text_root = root.attachNewNode("signs")  # kept out of the flattened decor: flattening turns text nodes askew
     for (x, y, z, yaw, col, word) in signs[:60]:
         _sign(text_root, x, y, z, yaw, word, col)
-    _name_plates(text_root, m, kerb, footprints)
+    (_street_signs_us if us else _name_plates)(text_root, m, kerb, footprints)
+
+    # ---- A map error: the vehicle's map has a kerb where the world has none ------------------------------
+    _map_errors(root, scene_msg.get("map_errors") or [])
 
     # ---- Zones and sensed objects, as on the grids -------------------------------------------------------
     zones = root.attachNewNode("zones")
@@ -230,7 +238,8 @@ def _kerb_stones(mats, m, kerb):
 
 
 WALLS = {"stucco_terrace": ("stucco", None), "mansion_block": ("brick_red", None), "brick_terrace": ("brick_stock", None),
-         "commercial": (None, None), "harrods": ("terracotta", None), "institutional": (None, None), "church": ("stone", None)}
+         "commercial": (None, None), "harrods": ("terracotta", None), "institutional": (None, None), "church": ("stone", None),
+         "soma_warehouse": ("brick_red", None), "soma_modern": ("concrete", None), "station": ("stone", None)}
 STUCCO_TINTS = [(1.0, 1.0, 1.0, 1.0), (0.98, 0.97, 0.94, 1.0), (1.0, 0.98, 0.93, 1.0), (0.95, 0.95, 0.95, 1.0), (0.99, 0.96, 0.90, 1.0)]
 
 
@@ -241,6 +250,10 @@ def _building(mats, b, ring, style, levels, height, fronts, kerb, rng, quality):
         wall_mat = ("stone", "brick_red", "brick_stock", "stone")[h % 4]
     elif style == "institutional":
         wall_mat = ("concrete", "brick_brown", "concrete")[h % 3]
+    elif style == "soma_warehouse":
+        wall_mat = ("brick_red", "brick_brown", "concrete", "brick_red", "stucco")[h % 5] if b["material"] != "brick" else "brick_red"
+    elif style == "soma_modern":
+        wall_mat = ("concrete", "concrete", "stone")[h % 3]
     tint = STUCCO_TINTS[h % len(STUCCO_TINTS)] if wall_mat == "stucco" else (1.0, 1.0, 1.0, 1.0)
     base, top = H, H + height
     n = len(ring)
@@ -279,6 +292,14 @@ def _building(mats, b, ring, style, levels, height, fronts, kerb, rng, quality):
             F.harrods(wall, storeys, brng, room)
         elif style == "institutional":
             F.institutional(wall, storeys, brng, room, wall_mat)
+        elif style == "soma_warehouse":
+            F.soma_warehouse(wall, storeys, brng, room, wall_mat)
+        elif style == "soma_modern":
+            F.soma_modern(wall, storeys, brng, room, wall_mat)
+        elif style == "station":
+            for uc, z, col, word in F.station_front(wall, storeys, brng, room) or []:
+                x, y, _ = wall.P(uc, 2.85, z)  # on the canopy's edge
+                signs.append((x, y, z, math.atan2(wall.n[1], wall.n[0]), (0.20, 0.22, 0.25, 1.0), word))
         else:
             F.plain(wall, STOREY[style], brng)
     if style == "harrods":
@@ -644,6 +665,220 @@ def _name_plates(parent, m, kerb, footprints):
                 tp.setPos(px + vx * -k, py + vy * -k, H + 1.25)
                 tp.setH(math.degrees(heading) + (180.0 if back else 0.0))
                 tp.setLightOff(1)
+
+
+# ---- San Francisco (United States street furniture and markings; right-hand traffic) ---------------------
+
+GREEN_SIGN = (0.05, 0.36, 0.20, 1.0)
+BIKE_GREEN = (0.30, 0.62, 0.32, 1.0)
+POLE = (0.42, 0.44, 0.46, 1.0)
+RAIL = (0.28, 0.27, 0.26, 1.0)
+MAP_ERROR = (1.00, 0.50, 0.05, 1.0)
+
+
+def _furniture_us(mats, m, kerb, footprints, occ=None):
+    """Street lights on tall poles with an arm over the carriageway, every 34 m along each kerb, 0.6 m back from it
+    (generic; decorative). Each is listed in occ.furniture for the street-level cameras."""
+    spots = occ.furniture if occ is not None else []
+    for i, (ax, ay, bx, by, nx, ny) in enumerate(m["kerb_lines"]):
+        if i in kerb.boundary:
+            continue
+        L = math.hypot(bx - ax, by - ay)
+        if L < 20.0:
+            continue
+        s = 9.0 + (i % 4) * 3.0
+        while s < L - 6.0:
+            x = ax + (bx - ax) * s / L - nx * 0.6
+            y = ay + (by - ay) * s / L - ny * 0.6
+            if _clear_spot(x, y, kerb, footprints):
+                _street_light(mats, x, y, nx, ny)
+                spots.append((x, y, "lamp"))
+            s += 34.0
+
+
+def _street_light(mats, x, y, nx, ny):
+    _drum(mats, "dark", x, y, H, H + 0.6, 0.14, POLE, sides=8)
+    _drum(mats, "dark", x, y, H + 0.6, H + 8.0, 0.08, POLE, sides=8)
+    ex, ey = x + nx * 1.9, y + ny * 1.9  # the arm reaches over the carriageway
+    mats["dark"].box(0.5 * (x + ex), 0.5 * (y + ey), H + 7.85, 1.9, 0.07, 0.07, math.atan2(ny, nx), POLE)
+    mats["dark"].box(ex, ey, H + 7.70, 0.65, 0.28, 0.16, math.atan2(ny, nx), POLE)
+    mats["glass"].box(ex, ey, H + 7.60, 0.55, 0.22, 0.03, math.atan2(ny, nx), (1.0, 0.97, 0.88, 1.0))
+
+
+def _rail(mats, ways, kerb):
+    """The Caltrain yard's tracks and the T Third light-rail tracks as rails, their platforms as low slabs, and the
+    Caltrain catenary masts (from OpenStreetMap's tracks; decorative, nothing here is simulated)."""
+    count = 0
+    for w in ways:
+        pts = w["pts"]
+        if w["railway"] == "platform":
+            if w["closed"] and len(pts) >= 4:
+                ring = pts[:-1] if pts[0] == pts[-1] else pts
+                if any(kerb.on_road(x, y) for x, y in ring):
+                    continue
+                ring = ring if g.signed_area(ring) > 0 else list(reversed(ring))
+                mats["concrete"].hpoly(ring, H + 0.85, (0.92, 0.92, 0.90, 1.0))
+                for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+                    mats["concrete"].wall((ax, ay), (bx, by), H, H + 0.85, (0.85, 0.85, 0.83, 1.0))
+                count += 1
+            continue
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            L = math.hypot(bx - ax, by - ay)
+            if L < 0.05:
+                continue
+            ux, uy = (bx - ax) / L, (by - ay) / L
+            for side in (-0.72, 0.72):  # standard gauge, 1.435 m
+                ox, oy = -uy * side, ux * side
+                z = 0.012 if kerb.on_road(0.5 * (ax + bx) + ox, 0.5 * (ay + by) + oy) else H + 0.012
+                mats["dark"].quad((ax + ox - uy * 0.04, ay + oy + ux * 0.04, z), (bx + ox - uy * 0.04, by + oy + ux * 0.04, z),
+                                  (bx + ox + uy * 0.04, by + oy - ux * 0.04, z), (ax + ox + uy * 0.04, ay + oy - ux * 0.04, z), RAIL)
+        if w["railway"] == "rail" and len(pts) >= 2:
+            run = 0.0
+            for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+                L = math.hypot(bx - ax, by - ay)
+                s = (25.0 - run) % 50.0
+                while s < L:
+                    x, y = ax + (bx - ax) * s / L, ay + (by - ay) * s / L
+                    nx, ny = -(by - ay) / L * 2.6, (bx - ax) / L * 2.6
+                    if not kerb.on_road(x + nx, y + ny) and kerb.distance(x + nx, y + ny) > 1.0:
+                        _drum(mats, "dark", x + nx, y + ny, H, H + 7.2, 0.11, POLE, sides=6)
+                        mats["dark"].box(x + 0.5 * nx, y + 0.5 * ny, H + 6.9, 2.6, 0.08, 0.08, math.atan2(ny, nx), POLE)
+                    s += 50.0
+                run = (run + L) % 50.0
+        count += 1
+    return count
+
+
+def _markings_us(b, m):
+    """United States markings in right-hand traffic: a double yellow centre line on two-way streets, white dashed lane
+    lines on 4th Street's two carriageways, a stop line where each lane meets a junction, continental crosswalks
+    across every street at the modelled junctions, and Townsend Street's green bike lane. Decorative and approximate."""
+    info = m.get("street_info") or []
+    lanes = m["lanes"]
+    for (a, bb, ax, ay, bx, by), si in zip(m["streets"], info):
+        L = math.hypot(bx - ax, by - ay)
+        ux, uy = (bx - ax) / L, (by - ay) / L
+        nx, ny = -uy, ux
+        mine = [ln for ln in lanes if seg_distance(0.5 * (ln["x0"] + ln["x1"]), 0.5 * (ln["y0"] + ln["y1"]), ax, ay, bx, by) < 9.0
+                and abs((ln["x1"] - ln["x0"]) * ux + (ln["y1"] - ln["y0"]) * uy) > 0.9 * math.hypot(ln["x1"] - ln["x0"], ln["y1"] - ln["y0"])]
+        if not mine:
+            continue
+        ss = [(p[0] - ax) * ux + (p[1] - ay) * uy for ln in mine for p in ((ln["x0"], ln["y0"]), (ln["x1"], ln["y1"]))]
+        s0, s1 = max(0.0, min(ss)), min(L, max(ss))
+        wl, wr = si["half_width"], si["half_width_right"]
+        if si["median"] <= 0.0 and len(mine) >= 2:
+            for off in (-0.10, 0.10):
+                _strip(b, ax, ay, ux, uy, nx, ny, s0, s1, off, 0.10, MARK_YELLOW)
+        if si["median"] > 0.0:
+            hm = 0.5 * si["median"]
+            for mid in (0.5 * (hm + wl), -0.5 * (hm + wr)):
+                s = s0
+                while s + 3.0 <= s1:
+                    _strip(b, ax, ay, ux, uy, nx, ny, s, s + 3.0, mid, 0.10, MARK_WHITE)
+                    s += 9.0
+        if si["name"] == "Townsend Street" and si["median"] <= 0.0:
+            _strip(b, ax, ay, ux, uy, nx, ny, s0, s1, 0.5 * (3.3 + 5.0), 1.7, BIKE_GREEN, z=0.004)  # the north-west bike lane
+            for off in (3.3, 5.0):
+                _strip(b, ax, ay, ux, uy, nx, ny, s0, s1, off, 0.10, MARK_WHITE)
+        # Stop lines and crosswalks at the junction ends (not at patch edges).
+        for end, j in ((0, a), (1, bb)):
+            if j < 0:
+                continue
+            ends = [s for s in ss]
+            mouth = min(ends) if end == 0 else L - max(ends)
+            if mouth < 6.0:
+                continue
+            sl = mouth if end == 0 else L - mouth
+            sign = 1.0 if end == 0 else -1.0
+            for ln in mine:
+                lat0 = (ln["x0"] - ax) * nx + (ln["y0"] - ay) * ny
+                # A lane arriving at this end: its end point lies at this end.
+                arrive = ((ln["x1"] - ax) * ux + (ln["y1"] - ay) * uy) * sign < ((ln["x0"] - ax) * ux + (ln["y0"] - ay) * uy) * sign
+                if arrive:
+                    _cross(b, ax, ay, ux, uy, nx, ny, sl - sign * 0.3, lat0 - 1.6, lat0 + 1.6, 0.30, MARK_WHITE)
+            c0 = sl - sign * 1.0
+            lat = -wr + 0.4
+            while lat + 0.6 <= wl - 0.4:
+                if si["median"] <= 0.0 or abs(lat + 0.3) > 0.5 * si["median"]:
+                    lo, hi = sorted((c0, c0 - sign * 3.0))  # wound anticlockwise seen from above, whichever end
+                    p = lambda s_, o: (ax + ux * s_ + nx * o, ay + uy * s_ + ny * o, 0.006)  # noqa: E731
+                    b.quad(p(lo, lat), p(hi, lat), p(hi, lat + 0.6), p(lo, lat + 0.6), MARK_WHITE)
+                lat += 1.2
+
+
+def _street_signs_us(parent, m, kerb, footprints):
+    """A street-name blade on a pole at the corner of each street's end at a modelled junction (white capitals on
+    green, a generic United States pattern; decorative)."""
+    info = m.get("street_info") or []
+    done = set()
+    for j, jn in enumerate(m["junctions"]):
+        for (a, b, ax, ay, bx, by), si in zip(m["streets"], info):
+            if j not in (a, b) or (j, si["name"]) in done:
+                continue
+            ox, oy = (bx, by) if a == j else (ax, ay)
+            L = math.hypot(ox - jn["x"], oy - jn["y"])
+            if L < 25.0:
+                continue
+            ux, uy = (ox - jn["x"]) / L, (oy - jn["y"]) / L
+            lx, ly = -uy, ux
+            w = (si["half_width"] if a == j else si["half_width_right"]) + 1.0
+            for along in (13.0, 15.0, 17.0, 19.0):
+                px, py = jn["x"] + ux * along + lx * w, jn["y"] + uy * along + ly * w
+                if _clear_spot(px, py, kerb, footprints) and kerb.distance(px, py) >= 0.6:
+                    break
+            else:
+                continue
+            done.add((j, si["name"]))
+            pole = Builder("sign_pole")
+            pole.box(px, py, H + 1.6, 0.07, 0.07, 3.2, 0.0, POLE)
+            q = lambda u, z: (px + ux * u, py + uy * u, z)  # noqa: E731
+            pole.quad(q(-0.55, H + 2.95), q(0.55, H + 2.95), q(0.55, H + 3.20), q(-0.55, H + 3.20), GREEN_SIGN)
+            pn = parent.attachNewNode(pole.node())
+            pn.setTwoSided(True)
+            label = si["name"].upper().replace(" STREET", " ST")
+            for back in (False, True):
+                tn = TextNode("street_sign")
+                tn.setText(label)
+                tn.setAlign(TextNode.ACenter)
+                tn.setTextColor(0.97, 0.97, 0.95, 1)
+                tp = parent.attachNewNode(tn)
+                tp.setScale(0.15)
+                k = 0.012 if back else -0.012
+                tp.setPos(px - lx * k, py - ly * k, H + 3.03)
+                tp.setH(math.degrees(math.atan2(uy, ux)) + (180.0 if back else 0.0))
+                tp.setLightOff(1)
+
+
+def _map_errors(root, errors):
+    """Where the vehicle's map puts a kerb that is not there: a translucent orange kerb face at the map's position,
+    joined to the true kerb by its steps, with dashes on the road beside it. The drawn kerb is the world's; this is
+    only what the estimator and the stack believe (scene message "map_errors")."""
+    if not errors:
+        return
+    b = Builder("map_error")
+    for e in errors:
+        ax, ay, bx, by = e["map"]
+        tx, ty, ux_, uy_ = e["true"]
+        L = math.hypot(bx - ax, by - ay)
+        if L < 0.1:
+            continue
+        for (p0, p1) in (((ax, ay), (bx, by)), ((tx, ty), (ax, ay)), ((bx, by), (ux_, uy_))):
+            b.quad((p0[0], p0[1], 0.0), (p1[0], p1[1], 0.0), (p1[0], p1[1], 0.16), (p0[0], p0[1], 0.16), (MAP_ERROR[0], MAP_ERROR[1], MAP_ERROR[2], 0.55))
+            b.quad((p1[0], p1[1], 0.0), (p0[0], p0[1], 0.0), (p0[0], p0[1], 0.16), (p1[0], p1[1], 0.16), (MAP_ERROR[0], MAP_ERROR[1], MAP_ERROR[2], 0.55))
+        dx, dy = (bx - ax) / L, (by - ay) / L
+        s = 0.0
+        while s + 1.5 <= L:
+            p, q = (ax + dx * s, ay + dy * s), (ax + dx * (s + 1.5), ay + dy * (s + 1.5))
+            nx, ny = -dy * 0.06, dx * 0.06
+            b.quad((p[0] - nx, p[1] - ny, 0.02), (q[0] - nx, q[1] - ny, 0.02), (q[0] + nx, q[1] + ny, 0.02), (p[0] + nx, p[1] + ny, 0.02), MAP_ERROR)
+            s += 3.0
+    np_ = root.attachNewNode(b.node())
+    np_.setName("map_error")
+    np_.setTransparency(TransparencyAttrib.MAlpha)
+    np_.setDepthWrite(False)
+    np_.setLightOff(1)
+    np_.setShaderOff(1)
+    np_.setBin("transparent", 6)
 
 
 def _sky(root):
