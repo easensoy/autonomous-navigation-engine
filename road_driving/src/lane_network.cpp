@@ -306,6 +306,9 @@ LaneNetwork buildNetwork(const std::string& name, const NetworkSpec& spec) {
 }
 
 LaneNetwork buildGrid(const GridSpec& grid, const NetworkSpec& baseSpec) {
+    if (baseSpec.rightHand) {
+        throw std::invalid_argument("grid " + grid.name + ": the grids are built for left-hand traffic only");
+    }
     NetworkSpec spec = baseSpec;
     if (grid.mouth > 0.0) spec.mouth = grid.mouth;
     if (grid.rightRadius > 0.0) spec.rightRadius = grid.rightRadius;
@@ -784,9 +787,12 @@ std::vector<std::string> LaneNetwork::validate(double unitsPerMetre) const {
     const double bound = 10000.0 / unitsPerMetre;
     const double kMax = 0.20;  // vehicle planning curvature limit, 1/m
     for (const Lane& l : lanes) {
-        const double side = l.dirX * (l.y0 - l.centreY0) - l.dirY * (l.x0 - l.centreX0);
-        if (side <= 0.0) {
+        const double side = l.dirX * (l.y0 - l.centreY0) - l.dirY * (l.x0 - l.centreX0);  // > 0: left of its direction
+        if (!spec.rightHand && side <= 0.0) {
             err.push_back("lane " + l.name + " is not left of its carriageway centre (not left-hand traffic)");
+        }
+        if (spec.rightHand && side >= 0.0) {
+            err.push_back("lane " + l.name + " is not right of its carriageway centre (not right-hand traffic)");
         }
         if (l.length <= 0.0) {
             err.push_back("lane " + l.name + " has no length");
