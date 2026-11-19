@@ -22,6 +22,27 @@
 #include <unordered_map>
 #include <utility>
 
+namespace {
+
+// The engine prints a line for every node and edge it adds and for most search steps: about 64,000
+// lines here. They are silenced while graphs are built and searched, so the timings measure the
+// searches, not the console.
+class CoutSilencer {
+public:
+    CoutSilencer() : saved(std::cout.rdbuf(nullptr)) {}
+    ~CoutSilencer() {
+        std::cout.rdbuf(saved);
+        std::cout.clear();
+    }
+    CoutSilencer(const CoutSilencer&) = delete;
+    CoutSilencer& operator=(const CoutSilencer&) = delete;
+
+private:
+    std::streambuf* saved;
+};
+
+}  // namespace
+
 /**
  * AlgorithmBenchmarker: Comprehensive Performance Analysis Suite
  * 
@@ -337,7 +358,11 @@ private:
         BenchmarkResult result;
         result.algorithmName = algorithmName;
         
-        auto graph = scenario.graphGenerator();
+        std::shared_ptr<Graph> graph;
+        {
+            CoutSilencer quiet;
+            graph = scenario.graphGenerator();
+        }
         auto testPairs = scenario.testPairs;
         if (testPairs.empty()) {
             // Generate test pairs if not already done
@@ -365,6 +390,7 @@ private:
                 result.totalRuns++;
                 
                 try {
+                    CoutSilencer quiet;  // restored before the handler below prints
                     auto algorithm = constructor(graph.get());
                     
                     // Measure execution time with high precision
@@ -457,7 +483,11 @@ public:
             std::cout << "Description: " << scenario.description << std::endl;
             
             // Generate test pairs for this scenario
-            auto graph = scenario.graphGenerator();
+            std::shared_ptr<Graph> graph;
+            {
+                CoutSilencer quiet;
+                graph = scenario.graphGenerator();
+            }
             generateTestPairs(graph, scenario);
             
             std::cout << "Graph size: " << graph->getNodeCount() << " nodes, " 
