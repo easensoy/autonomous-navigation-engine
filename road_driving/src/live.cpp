@@ -308,6 +308,12 @@ bool scenarioFromJVal(const JVal& c, Scenario& sc, std::string& error) {
         error = "unknown variant '" + c.str("variant") + "'";
         return false;
     }
+    sc.vehicle = c.str("vehicle", "ipace_proxy_v1");  // sessions recorded before profiles existed: the I-PACE proxy
+    VehicleParams profile;
+    if (!findVehicleProfile(sc.vehicle, profile)) {
+        error = "unknown vehicle profile '" + sc.vehicle + "'";
+        return false;
+    }
     if (sc.mode != "estimated" && sc.mode != "ground_truth") {
         error = "unknown mode '" + sc.mode + "'";
         return false;
@@ -333,7 +339,7 @@ std::string configJson(const Scenario& sc, const std::string& name) {
     return "{\"scenario\":" + jstr(name) + ",\"network\":" + jstr(sc.network) + ",\"condition\":" + jstr(sc.condition) +
            ",\"mode\":" + jstr(sc.mode) + ",\"estimator\":" + jstr(sc.estimator) + ",\"seed\":" + std::to_string(sc.seed) +
            ",\"rejoin\":" + jstr(rejoinName(sc.rejoin)) + ",\"variant\":" + jstr(variantName(sc.variant)) +
-           ",\"delay\":" + jexact(sc.departDelay) + ",\"feasibility\":" + (sc.feasibility ? "true" : "false") + "}";
+           ",\"delay\":" + jexact(sc.departDelay) + ",\"feasibility\":" + (sc.feasibility ? "true" : "false") + ",\"vehicle\":" + jstr(sc.vehicle) + "}";
 }
 
 // ---- World commands -----------------------------------------------------------------------------------
@@ -832,7 +838,8 @@ void Server::saveSession(const std::string& path) {
 
 void Server::sendScene(const TickView& v) {
     const VehicleParams& vp = *v.vehicle;
-    const SensorConditions cond = v.scenario->condition.empty() ? SensorConditions{} : sensorConditions(v.scenario->condition);
+    // The sensors as mounted on this vehicle (with no condition, where they would be).
+    const SensorConditions cond = v.scenario->condition.empty() ? sensorConditionsFor("nominal", vp) : sensorConditionsFor(v.scenario->condition, vp);
     std::string zones;
     auto zoneList = [&](const char* name, const std::vector<Zone>& zs) {
         zones += std::string(zones.empty() ? "" : ",") + "\"" + name + "\":[";
@@ -854,6 +861,22 @@ void Server::sendScene(const TickView& v) {
                      fixed3(o.width) + "]";
     }
     obstacles += "]";
+    // A map error: each misplaced kerb part as the vehicle's map has it, and where the world keeps the true kerb
+    // (absent when none).
+    std::string mapErrors;
+    if (!v.zones->mapErrors.empty()) {
+        mapErrors = ",\"map_errors\":[";
+        for (size_t i = 0; i < v.zones->mapErrors.size(); ++i) {
+            const MapKerbError& me = v.zones->mapErrors[i];
+            double ax, ay, bx, by;
+            mapErrorSegment(*v.net, me, ax, ay, bx, by);
+            const KerbLine& k = v.net->kerbLines[static_cast<size_t>(me.line)];
+            mapErrors += (i ? "," : "") + std::string("{\"line\":") + std::to_string(me.line) + ",\"offset\":" + fixed3(me.offset) + ",\"map\":[" +
+                         jnum(ax, 4) + "," + jnum(ay, 4) + "," + jnum(bx, 4) + "," + jnum(by, 4) + "],\"true\":[" + jnum(ax - k.nx * me.offset, 4) + "," +
+                         jnum(ay - k.ny * me.offset, 4) + "," + jnum(bx - k.nx * me.offset, 4) + "," + jnum(by - k.ny * me.offset, 4) + "]}";
+        }
+        mapErrors += "]";
+    }
     emit(headTick("session", v.tick, v.t) + ",\"mode\":" + jstr(mode_) + ",\"config\":" + config_ + ",\"labels\":" +
          jstr(std::string(v.net->general ? "SOURCE_INFORMED_ROADS" : "SYNTHETIC_ROADS") +
               (v.scenario->mode == "estimated" ? ",ESTIMATED_POSE(" + v.scenario->estimator + "),SIMULATED_SENSORS,ORACLE_CLOSURE"
@@ -863,11 +886,13 @@ void Server::sendScene(const TickView& v) {
     emit(head("scene") + ",\"tick\":" + std::to_string(v.tick) + ",\"map\":" + sceneJson(*v.net) + ",\"vehicle\":{\"id\":" + jstr(vp.id) +
          ",\"wheelbase\":" + fixed3(vp.wheelbase) + ",\"length\":" + fixed3(vp.length) + ",\"width\":" + fixed3(vp.width) +
          ",\"width_mirrors\":" + fixed3(vp.widthMirrors) + ",\"front_overhang\":" + fixed3(vp.frontOverhang) + ",\"rear_overhang\":" + fixed3(vp.rearOverhang) +
-         ",\"max_steer\":" + jnum(vp.maxSteer, 3) + "},\"sensors\":{\"kerb\":{\"mount_x\":" + fixed3(cond.kerb.mountX) + ",\"first_bearing\":" +
-         jnum(cond.kerb.firstBearing, 5) + ",\"bearing_step\":" + jnum(cond.kerb.bearingStep, 5) + ",\"beams\":" + std::to_string(cond.kerb.beams) +
-         ",\"min_range\":" + fixed3(cond.kerb.minRange) + ",\"max_range\":" + fixed3(cond.kerb.maxRange) + ",\"rate\":" + jnum(cond.kerb.rate, 1) +
-         "},\"gnss\":{\"antenna_x\":" + fixed3(cond.gnss.antennaX) + ",\"antenna_y\":" + fixed3(cond.gnss.antennaY) + ",\"rate\":" + jnum(cond.gnss.rate, 1) +
-         "},\"imu\":{\"lever_x\":" + fixed3(cond.imu.leverX) + "}},\"zones\":{" + zones + "},\"obstacles\":" + obstacles + "}");
+         ",\"max_steer\":" + jnum(vp.maxSteer, 3) + ",\"description\":" + jstr(vp.description) + ",\"height\":" + fixed3(vp.height) +
+         ",\"wheel_radius\":" + fixed3(vp.wheelRadius) + ",\"track\":" + fixed3(vp.track) + "},\"sensors\":{\"kerb\":{\"mount_x\":" + fixed3(cond.kerb.mountX) +
+         ",\"first_bearing\":" + jnum(cond.kerb.firstBearing, 5) + ",\"bearing_step\":" + jnum(cond.kerb.bearingStep, 5) + ",\"beams\":" +
+         std::to_string(cond.kerb.beams) + ",\"min_range\":" + fixed3(cond.kerb.minRange) + ",\"max_range\":" + fixed3(cond.kerb.maxRange) +
+         ",\"rate\":" + jnum(cond.kerb.rate, 1) + "},\"gnss\":{\"antenna_x\":" + fixed3(cond.gnss.antennaX) + ",\"antenna_y\":" + fixed3(cond.gnss.antennaY) +
+         ",\"rate\":" + jnum(cond.gnss.rate, 1) + "},\"imu\":{\"lever_x\":" + fixed3(cond.imu.leverX) + "}},\"zones\":{" + zones + "},\"obstacles\":" + obstacles +
+         mapErrors + "}");
     sceneSent_ = true;
 }
 
@@ -1266,8 +1291,12 @@ std::string sceneJson(const LaneNetwork& net) {
     if (net.general && findDistrict(net.spec.name, d)) {
         // A district network: its provenance; per street its name, widths and lane offset; and which kerb lines
         // are patch edges (not kerbs). The grids' scene messages are unchanged.
+        // The city, the frame and the traffic side only where a district sets them (the London scene messages are
+        // unchanged: left-hand traffic, their own frame).
+        const std::string more = (d.city.empty() ? std::string() : ",\"city\":" + jstr(d.city)) + (d.frame.empty() ? std::string() : ",\"frame\":" + jstr(d.frame)) +
+                                 (d.rightHand ? std::string(",\"traffic\":\"right\"") : std::string());
         s += ",\"district\":{\"id\":" + jstr(d.id) + ",\"district\":" + jstr(d.district) + ",\"title\":" + jstr(d.title) + ",\"origin\":[" +
-             jnum(d.lat0, 6) + "," + jnum(d.lon0, 6) + "],\"source\":" + jstr(d.source) + ",\"licence\":" + jstr(d.licence) + "}";
+             jnum(d.lat0, 6) + "," + jnum(d.lon0, 6) + "],\"source\":" + jstr(d.source) + ",\"licence\":" + jstr(d.licence) + more + "}";
         s += ",\"street_info\":[";
         for (size_t i = 0; i < net.streets.size(); ++i) {
             const Street& st = net.streets[i];
